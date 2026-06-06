@@ -1,0 +1,77 @@
+/*
+ * Seonix front-end styles for content blocks injected by the plugin.
+ *
+ * Currently scoped to the "Key takeaways" callout. Mirrors the editor
+ * styles in the Seonix dashboard so authors and readers see the same
+ * shape. Themes that want to restyle the block can override these
+ * declarations or override `--seonix-accent` at :root.
+ */
+
+.seonix-key-takeaways {
+	--seonix-accent: #a931fb;
+	margin: 1.5rem 0 2rem;
+	padding: 1rem 1.25rem;
+	border-radius: 0.75rem;
+	border: 1px solid #e2e8f0;
+	border-left: 3px solid var(--seonix-accent);
+	background: #f8fafc;
+	color: #0f172a;
+	font-size: 0.9375rem;
+	line-height: 1.6;
+}
+
+.seonix-key-takeaways__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin: 0 0 0.5rem;
+}
+
+.seonix-key-takeaways__title {
+	margin: 0;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--seonix-accent);
+}
+
+.seonix-key-takeaways__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.seonix-key-takeaways__item {
+	position: relative;
+	margin: 0;
+	padding: 0.25rem 0 0.25rem 1.25rem;
+}
+
+.seonix-key-takeaways__item::before {
+	content: "";
+	position: absolute;
+	left: 0.25rem;
+	top: 0.7rem;
+	width: 0.4rem;
+	height: 0.4rem;
+	border-radius: 9999px;
+	background: var(--seonix-accent);
+}
+
+.seonix-key-takeaways__item + .seonix-key-takeaways__item {
+	border-top: 1px solid #e2e8f0;
+}
+
+@media (prefers-color-scheme: dark) {
+	.seonix-key-takeaways {
+		border-color: #334155;
+		background: #0f172a;
+		color: #e2e8f0;
+	}
+
+	.seonix-key-takeaways__item + .seonix-key-takeaways__item {
+		border-top-color: #334155;
+	}
+}

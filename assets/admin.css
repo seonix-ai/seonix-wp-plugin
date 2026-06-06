@@ -1,0 +1,1702 @@
+/* Seonix — Admin Styles */
+
+/* ── Reset & base ── */
+
+.seonix-wrap {
+  max-width: 1280px;
+  margin: 16px 20px 40px 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+.seonix-wrap *,
+.seonix-wrap *::before,
+.seonix-wrap *::after {
+  box-sizing: border-box;
+}
+
+/* ── Page header ── */
+
+.seonix-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.seonix-header__logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: block;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
+}
+
+.seonix-header__text {
+  min-width: 0;
+}
+
+.seonix-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
+
+.seonix-header p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+
+/* ── Connection bar (slim, full width) ── */
+
+.seonix-connbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
+}
+
+.seonix-connbar--connected {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, #ffffff, #f0fdf4 60%);
+}
+
+.seonix-connbar__info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.seonix-connbar--connected .seonix-connbar__info .seonix-status {
+  margin-bottom: 0;
+}
+
+.seonix-connbar__info h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  padding: 0;
+}
+
+.seonix-connbar__info .seonix-subtitle {
+  margin: 2px 0 0;
+}
+
+.seonix-connbar__project {
+  font-size: 13px;
+  color: #334155;
+}
+
+.seonix-connbar__project strong {
+  color: #0f172a;
+}
+
+.seonix-connbar__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ── Card ── */
+
+.seonix-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
+}
+
+.seonix-card--success {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, #ffffff, #f0fdf4 60%);
+}
+
+.seonix-card h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px;
+  padding: 0;
+}
+
+.seonix-subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+/* ── Status badge ── */
+
+.seonix-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.seonix-status--connected {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.seonix-status__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.seonix-status__dot--green {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+/* ── Info table ── */
+
+.seonix-info-table {
+  width: 100%;
+  margin-bottom: 4px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.seonix-info-table tr:not(:last-child) td,
+.seonix-info-table tr:not(:last-child) th {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.seonix-info-table th,
+.seonix-info-table td {
+  padding: 10px 0;
+  font-size: 13px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.seonix-info-table th {
+  width: 120px;
+  color: #94a3b8;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.seonix-info-table td {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.seonix-info-table td code {
+  font-size: 12px;
+  background: #f8fafc;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #475569;
+}
+
+/* ── API Key display ── */
+
+.seonix-key-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.seonix-key-value {
+  flex: 1;
+  display: block;
+  padding: 10px 14px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: #1e293b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Select dropdown ── */
+
+.seonix-select {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.seonix-select:focus {
+  background: #fff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* ── Form field ── */
+
+.seonix-field {
+  margin-bottom: 4px;
+}
+
+.seonix-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  letter-spacing: 0.01em;
+}
+
+/* ── Actions ── */
+
+.seonix-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Buttons ── */
+
+.seonix-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.seonix-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.seonix-btn--primary {
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.3);
+}
+
+.seonix-btn--primary:hover:not(:disabled) {
+  background: #4338ca;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+}
+
+.seonix-btn--secondary {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.seonix-btn--secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.seonix-btn--danger {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.seonix-btn--danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.seonix-btn--sm {
+  padding: 7px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.seonix-btn--copied {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+/* ── Steps ── */
+
+.seonix-steps {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  counter-reset: step;
+}
+
+.seonix-steps li {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.5;
+  counter-increment: step;
+}
+
+.seonix-steps li + li {
+  border-top: 1px solid #f1f5f9;
+}
+
+.seonix-steps li::before {
+  content: counter(step);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 50%;
+  margin-top: 1px;
+}
+
+/* ── Sync stats grid ── */
+
+.seonix-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.seonix-stat {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.seonix-stat__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.seonix-stat__label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Sync time ── */
+
+.seonix-sync-time {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 12px;
+}
+
+/* "Tasks last updated X" line with a subtle inline Refresh control beside it. */
+.seonix-sync-time--row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.seonix-sync-time__text {
+  min-width: 0;
+}
+
+/* Demoted refresh: a quiet text/icon link, not a button. Replaces the old
+   prominent indigo "Refresh tasks" button. Keeps id="seonix-refresh-tasks-btn"
+   so admin.js's existing handler still binds. */
+.seonix-refresh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: #6366f1;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.seonix-refresh-link:hover:not(:disabled) {
+  color: #4338ca;
+  text-decoration: underline;
+}
+
+.seonix-refresh-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.seonix-refresh-link__icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* The refresh handler swaps in a small spinner; tint it to the link colour. */
+.seonix-refresh-link .ce-spinner {
+  border-color: rgba(99, 102, 241, 0.25);
+  border-top-color: #6366f1;
+}
+
+/* ── Spinner ── */
+
+.ce-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ce-spin 0.6s linear infinite;
+}
+
+.ce-spinner--dark {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: #4f46e5;
+}
+
+@keyframes ce-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Dashboard: Site Health (score ring + category bars) ── */
+
+.seonix-health {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-top: 8px;
+}
+
+.seonix-health__score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.seonix-health__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  text-align: center;
+}
+
+.seonix-health__body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Score ring — conic-gradient driven by the score %, white inner disc. */
+.seonix-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seonix-ring__inner {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.seonix-ring__value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Health stat row reuses .seonix-stat but is left-aligned and snug. */
+.seonix-stats--health {
+  margin-bottom: 18px;
+}
+
+/* ── Dashboard: per-category bars ── */
+
+.seonix-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* Category bar — now a <button> that filters the By-issue task list. Reset the
+   native button chrome so it reads exactly like the old row, then add a pointer
+   + hover wash and an .is-filtering active state (indigo ring + tint). */
+.seonix-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.seonix-bar:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.seonix-bar:focus-visible {
+  outline: none;
+  border-color: #c7d2fe;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* Active filter: indigo ring + tint, mirrors the web app's selected category. */
+.seonix-bar.is-filtering {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  box-shadow: 0 0 0 1px #c7d2fe;
+}
+
+.seonix-bar.is-filtering .seonix-bar__label {
+  color: #4f46e5;
+}
+
+/* ── Category-filter chip (By-issue view) ── */
+
+/* Wrapper is toggled (hidden attr) by JS; the chip itself is the indigo clear
+   pill with an ✕, matching the web app's clear-filter chip. */
+.seonix-catfilter-bar {
+  margin: 0 0 14px;
+}
+
+.seonix-catfilter-bar[hidden] {
+  display: none;
+}
+
+.seonix-catfilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 100px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.seonix-catfilter:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.seonix-catfilter__x {
+  font-size: 15px;
+  line-height: 1;
+  color: #6366f1;
+}
+
+.seonix-bar__label {
+  flex-shrink: 0;
+  width: 92px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.seonix-bar__track {
+  flex: 1;
+  height: 8px;
+  border-radius: 100px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.seonix-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.7s ease;
+}
+
+.seonix-bar__value {
+  flex-shrink: 0;
+  width: 34px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Settings: two-column responsive layout ── */
+
+.seonix-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.seonix-cols__main,
+.seonix-cols__side {
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .seonix-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 782px) {
+  .seonix-health {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+
+  .seonix-health__score {
+    width: auto;
+  }
+}
+
+/* ── Dashboard: task list ── */
+
+.seonix-empty {
+  margin: 0;
+}
+
+/* Task list header row — title/subtitle on the left, the By issue / By page
+   view toggle on the right. Flex, space-between, wraps on narrow screens. */
+.seonix-tasklist__headrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 14px;
+}
+
+/* Task list header — title + subtitle, mirrors the web app's panel header. */
+.seonix-tasklist__head {
+  min-width: 0;
+}
+
+.seonix-tasklist__subtitle {
+  margin: 4px 0 0;
+}
+
+/* ── View toggle (segmented control): By issue / By page ── */
+
+.seonix-viewtoggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.seonix-viewtoggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.seonix-viewtoggle__btn:hover:not(.is-active) {
+  color: #334155;
+}
+
+/* Active pill: white bg + shadow + dark text — like the web app's pill group. */
+.seonix-viewtoggle__btn.is-active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+/* Only the active view is shown; the other is hidden via the [hidden] attr. */
+.seonix-view[hidden] {
+  display: none;
+}
+
+/* ── Lifecycle tabs (pills): Active / Fixed / Came back / All ── */
+
+.seonix-lifetabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.seonix-lifetab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.seonix-lifetab:hover:not(.is-active) {
+  color: #334155;
+}
+
+/* Active pill: dark slate bg + white text — matches the web app. */
+.seonix-lifetab.is-active {
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+}
+
+.seonix-lifetab__count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #94a3b8;
+}
+
+.seonix-lifetab.is-active .seonix-lifetab__count {
+  color: #cbd5e1;
+}
+
+/* ── Task table (Task / Pages / Priority) ── */
+
+.seonix-tasktable {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Small uppercase grey column headers. */
+.seonix-tasktable__head {
+  display: grid;
+  grid-template-columns: 1fr 96px 130px;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.seonix-tasktable__col-pages {
+  text-align: right;
+}
+
+.seonix-task-item + .seonix-task-item .seonix-trow {
+  border-top: 1px solid #f1f5f9;
+}
+
+/* The clickable row itself is a full-width button laid out as a 3-col grid. */
+.seonix-trow {
+  display: grid;
+  grid-template-columns: 1fr 96px 130px;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.seonix-trow:hover {
+  background: #f8fafc;
+}
+
+.seonix-trow__task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Round status dot, coloured by priority (red / amber / blue). */
+.seonix-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.seonix-dot--high {
+  background: #ef4444;
+}
+
+.seonix-dot--medium {
+  background: #f59e0b;
+}
+
+.seonix-dot--low {
+  background: #3b82f6;
+}
+
+.seonix-trow__main {
+  min-width: 0;
+}
+
+.seonix-trow__titleline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seonix-trow__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Already-fixed rows read struck-through + muted. */
+.seonix-trow--solved .seonix-trow__title {
+  color: #64748b;
+  text-decoration: line-through;
+  text-decoration-color: #cbd5e1;
+}
+
+.seonix-trow__desc {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  /* Clamp the one-line description to 2 lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* PAGES cell — right aligned, small grey. */
+.seonix-trow__pages {
+  text-align: right;
+  line-height: 1.2;
+}
+
+.seonix-trow__pages-num {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+}
+
+.seonix-trow__pages-unit {
+  display: block;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+/* PRIORITY cell — the priority pill + a chevron. */
+.seonix-trow__priority {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seonix-trow__chevron {
+  margin-left: auto;
+  font-size: 18px;
+  line-height: 1;
+  color: #cbd5e1;
+  transition: transform 0.15s, color 0.15s;
+}
+
+.seonix-trow:hover .seonix-trow__chevron {
+  color: #94a3b8;
+}
+
+/* ── Task detail block (hidden in the DOM; cloned into the modal body) ──
+   The .seonix-task-detail wrapper itself is never shown inline (it stays
+   `hidden`); only its inner content is cloned into the modal. The modal body
+   provides its own padding/background, so the wrapper carries no chrome here —
+   but the inner desc/rec/pagelist styles below DO render inside the modal. */
+
+.seonix-task-detail__desc {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 10px 0 0;
+}
+
+.seonix-task-detail__rec {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.seonix-task-detail__rec strong {
+  color: #334155;
+}
+
+.seonix-task-detail__meta {
+  font-size: 12px;
+  margin: 8px 0 0;
+  word-break: break-all;
+}
+
+.seonix-task-detail__meta a {
+  color: #6366f1;
+  text-decoration: none;
+}
+
+.seonix-task-detail__meta a:hover {
+  text-decoration: underline;
+}
+
+.seonix-task-detail__count {
+  color: #94a3b8;
+  margin-left: 8px;
+}
+
+/* ── Affected-pages list (inside a task's accordion detail) ── */
+
+.seonix-pagelist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.seonix-pagelist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.seonix-pagelist li a {
+  color: #6366f1;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.seonix-pagelist li a:hover {
+  text-decoration: underline;
+}
+
+.seonix-pagelist__more {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Small status dot used in both the affected-pages list and the page issue
+   rows. Lifecycle tones (open/regressed/solved) + severity tones
+   (error/warning/notice) share the same swatch sizing. */
+.seonix-pagedot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.seonix-pagedot--open {
+  background: #3b82f6;
+}
+
+.seonix-pagedot--regressed {
+  background: #f59e0b;
+}
+
+.seonix-pagedot--solved {
+  background: #22c55e;
+}
+
+.seonix-pagedot--error {
+  background: #ef4444;
+}
+
+.seonix-pagedot--warning {
+  background: #f59e0b;
+}
+
+.seonix-pagedot--notice {
+  background: #94a3b8;
+}
+
+/* Clean page → a small green check disc instead of a flat dot. */
+.seonix-pagedot--clean {
+  position: relative;
+  background: #22c55e;
+}
+
+/* Per-tab empty state inside the table. */
+.seonix-tasktable__empty {
+  margin: 0;
+  padding: 28px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* ── Priority badge (reused as the PRIORITY pill) ── */
+
+.seonix-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.seonix-badge--high {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.seonix-badge--medium {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.seonix-badge--low {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* ── Category badge tones: SEO / Technical / AI Search ── */
+
+.seonix-cat {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+
+/* SEO — blue/indigo tint. */
+.seonix-cat--seo {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+/* Technical — slate/green-ish neutral tint. */
+.seonix-cat--technical {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+/* AI Search — purple tint. */
+.seonix-cat--ai {
+  background: #faf5ff;
+  color: #9333ea;
+  border-color: #e9d5ff;
+}
+
+.seonix-task__info {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* ── By page view: search box ── */
+
+.seonix-pagesearch {
+  margin-bottom: 14px;
+}
+
+/* Search input — consistent with .seonix-select (same fill, border, focus ring). */
+.seonix-pagesearch input[type="search"] {
+  width: 100%;
+  max-width: 360px;
+  padding: 9px 14px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.seonix-pagesearch input[type="search"]::placeholder {
+  color: #94a3b8;
+}
+
+.seonix-pagesearch input[type="search"]:focus {
+  background: #fff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* ── By page view: page table (mirrors .seonix-tasktable) ── */
+
+.seonix-pagetable {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.seonix-pagetable__head {
+  display: grid;
+  grid-template-columns: 1fr 60px 60px 60px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.seonix-pagetable__col-num {
+  text-align: right;
+}
+
+.seonix-page-item + .seonix-page-item .seonix-prow {
+  border-top: 1px solid #f1f5f9;
+}
+
+/* The clickable page row — a full-width button laid out as a 4-col grid. */
+.seonix-prow {
+  display: grid;
+  grid-template-columns: 1fr 60px 60px 60px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.seonix-prow:hover {
+  background: #f8fafc;
+}
+
+.seonix-prow__page {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.seonix-prow__main {
+  min-width: 0;
+}
+
+.seonix-prow__url {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seonix-prow__title {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right-aligned per-severity counts, tabular. Tinted red / amber / slate;
+   the em-dash placeholder (count 0) stays muted. */
+.seonix-prow__num {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #cbd5e1;
+}
+
+.seonix-prow__num--error {
+  color: #dc2626;
+}
+
+.seonix-prow__num--warning {
+  color: #b45309;
+}
+
+.seonix-prow__num--notice {
+  color: #475569;
+  font-weight: 500;
+}
+
+.seonix-prow__chevron {
+  display: none;
+}
+
+/* Page row chevron — reuse the task chevron treatment but place it inline at
+   the row's end. (Kept out of the grid so the count columns stay aligned.) */
+.seonix-prow {
+  position: relative;
+}
+
+.seonix-prow__chevron {
+  display: block;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  line-height: 1;
+  color: #cbd5e1;
+  transition: transform 0.15s, color 0.15s;
+}
+
+.seonix-prow:hover .seonix-prow__chevron {
+  color: #94a3b8;
+}
+
+/* Reserve room on the right so the chevron never overlaps the notice count. */
+.seonix-pagetable__head,
+.seonix-prow {
+  padding-right: 28px;
+}
+
+/* ── By page view: page detail block (hidden; cloned into the modal body) ──
+   Like .seonix-task-detail, the .seonix-page-detail wrapper is never shown
+   inline; only its inner issue list is cloned into the modal. No wrapper chrome
+   needed here — the inner .seonix-issuelist styles below render in the modal. */
+
+.seonix-issuelist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seonix-issuerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.seonix-issuerow__title {
+  color: #334155;
+  font-weight: 500;
+  min-width: 0;
+}
+
+/* Search empty state inside the page table. */
+.seonix-pagetable__empty {
+  margin: 0;
+  padding: 28px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* ── Problem / page detail modal (mirrors the web app's IssueDetailModal) ── */
+
+/* Full-screen overlay: dark translucent + blur, flex-centred. z-index 100000
+   sits above the WP admin chrome (#adminmenu, #wpadminbar). Toggled by the
+   `hidden` attr from JS. */
+.seonix-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.5);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.seonix-modal[hidden] {
+  display: none;
+}
+
+/* The backdrop is a full-bleed click target behind the panel (closes on click). */
+.seonix-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  cursor: default;
+}
+
+/* Centred white card: rounded-2xl, capped width/height, flex column so the
+   header/footer stay put while the body scrolls. */
+.seonix-modal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.4);
+  overflow: hidden;
+}
+
+/* Header: pill + title + code on the left, close on the right. */
+.seonix-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 28px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.seonix-modal__heading {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Status pill — small uppercase rounded pill with tone variants. */
+.seonix-modal__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+
+/* A leading dot inside the pill, coloured per tone. */
+.seonix-modal__pill::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.seonix-modal__pill--open {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.seonix-modal__pill--regressed {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.seonix-modal__pill--solved {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.seonix-modal__pill--page {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.seonix-modal__title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #0f172a;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.seonix-modal__code {
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  font-size: 10px;
+  color: #94a3b8;
+  margin: 6px 0 0;
+  word-break: break-all;
+}
+
+/* Hidden when empty (page rows have no code). */
+.seonix-modal__code:empty {
+  display: none;
+}
+
+/* Icon close button. */
+.seonix-modal__close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.seonix-modal__close:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+/* Scrollable body — the cloned detail content lands here. */
+.seonix-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 28px;
+}
+
+/* The cloned .seonix-task-detail / .seonix-page-detail are plain wrappers (no
+   chrome). Give the first child no top margin so the body padding sets the gap;
+   keep the inner desc/rec/pagelist/issuelist spacing readable in the modal. */
+.seonix-modal__body > * {
+  margin-top: 0;
+}
+
+.seonix-modal__body .seonix-task-detail__desc {
+  margin-top: 0;
+}
+
+.seonix-modal__body .seonix-task-detail__rec {
+  margin-top: 12px;
+}
+
+.seonix-modal__body .seonix-task-detail__meta {
+  margin-top: 12px;
+}
+
+.seonix-modal__body .seonix-pagelist,
+.seonix-modal__body .seonix-issuelist {
+  margin-top: 16px;
+}
+
+/* Footer — right-aligned Close, reusing the secondary button. */
+.seonix-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 28px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+/* Lock background scroll while the modal is open (JS adds this to <body>). */
+body.seonix-modal-open {
+  overflow: hidden;
+}
+
+/* ── Override WP admin notices inside our wrap ── */
+
+.seonix-wrap .notice {
+  border-radius: 10px;
+  margin: 0 0 16px;
+  border-left-width: 0;
+  padding: 12px 16px;
+}
+
+.seonix-wrap .notice-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.seonix-wrap .notice-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+/* ── Task table: responsive (stack on narrow) ── */
+/* Placed last so it wins over the grid layout by source order. The 3-column
+   Task/Pages/Priority grid collapses: the column-header row is hidden (it only
+   reads with the grid), and each row stacks Task on top with Pages + Priority
+   on a second line. */
+@media (max-width: 600px) {
+  .seonix-tasktable__head {
+    display: none;
+  }
+
+  .seonix-trow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .seonix-trow__pages {
+    text-align: left;
+  }
+
+  .seonix-trow__pages-num,
+  .seonix-trow__pages-unit {
+    display: inline;
+  }
+
+  /* Pages + Priority share one line under the task. */
+  .seonix-trow__pages {
+    grid-row: 2;
+  }
+
+  .seonix-trow__priority {
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  /* Page table collapses the same way: hide the grid head; the URL takes the
+     first row full-width and the three severity counts share the second. */
+  .seonix-pagetable__head {
+    display: none;
+  }
+
+  .seonix-prow {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px 12px;
+  }
+
+  .seonix-prow__page {
+    grid-column: 1 / -1;
+  }
+
+  /* Tighter modal padding on narrow screens. */
+  .seonix-modal {
+    padding: 8px;
+  }
+
+  .seonix-modal__head,
+  .seonix-modal__body,
+  .seonix-modal__foot {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}

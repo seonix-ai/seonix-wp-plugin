@@ -1,0 +1,41 @@
+{
+    "name": "seonix-ai/seonix",
+    "description": "Seonix WordPress connector — pairs the site with Seonix backend, ships content updates, and applies SEO auto-fixes.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://seonix.ai",
+    "authors": [
+        {
+            "name": "Seonix",
+            "email": "info@seonix.ai",
+            "homepage": "https://seonix.ai"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/seonix-ai/seonix-wp-plugin/issues",
+        "source": "https://github.com/seonix-ai/seonix-wp-plugin"
+    },
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "brain/monkey": "^2.6",
+        "mockery/mockery": "^1.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Seonix\\Tests\\": "tests/"
+        },
+        "classmap": [
+            "includes/"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite Unit"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

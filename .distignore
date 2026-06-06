@@ -1,0 +1,38 @@
+# Files and directories that must NOT ship in the WordPress.org plugin zip.
+# Used by build.sh (rsync --exclude-from=.distignore) and by `wp dist-archive`.
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build / dev metadata
+.distignore
+.editorconfig
+.phpunit.result.cache
+phpunit.xml.dist
+phpunit.xml
+
+# Composer (dev-only deps: PHPUnit, Brain Monkey, Mockery)
+composer.json
+composer.lock
+vendor/
+
+# Tests
+tests/
+
+# Repo docs (the user-facing readme is readme.txt)
+README.md
+bugfix-report.md
+docs/
+
+# WordPress.org catalog assets (icons / banners / screenshots live in the SVN
+# /assets/ directory, not in the plugin folder)
+.wporg-assets/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~

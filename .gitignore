@@ -1,0 +1,11 @@
+/vendor/
+/composer.lock
+/.phpunit.result.cache
+/dist/
+
+# Local Claude Code config (per-developer launch.json, agent definitions, etc.).
+# Files already tracked inside .claude/ (CLAUDE.md, agents/, etc.) stay tracked.
+.claude/
+
+# macOS metadata
+.DS_Store

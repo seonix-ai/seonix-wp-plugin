@@ -1,0 +1,408 @@
+<?php
+/**
+ * Fix method: broken_link.
+ *
+ * Replaces a broken URL with a working one inside a single post's post_content.
+ * The Seonix backend is responsible for matching broken_url → new_url (via the
+ * deterministic slug-similarity matcher, with optional AI fallback for low-
+ * confidence cases). The plugin just executes the substitution it's told.
+ *
+ * Replacement strategy: plain str_replace on the full URL string. This catches
+ * URLs in href, src, and even plain-text mentions. The dry-run reports the
+ * occurrence count so the user can review before applying.
+ *
+ * Idempotent: if the old_url no longer appears in the post, returns no_op.
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
+
+	private Seonix_SEO_Fix_History $history;
+
+	public function __construct( Seonix_SEO_Fix_History $history ) {
+		$this->history = $history;
+	}
+
+	public function key(): string {
+		return 'broken_link';
+	}
+
+	public function validate_params( array $params ) {
+		if ( empty( $params['post_id'] ) || ! is_numeric( $params['post_id'] ) ) {
+			return new WP_Error( 'missing_post_id', 'post_id is required.', array( 'status' => 400 ) );
+		}
+		if ( empty( $params['old_url'] ) ) {
+			return new WP_Error( 'missing_old_url', 'old_url is required.', array( 'status' => 400 ) );
+		}
+
+		$mode = isset( $params['mode'] ) ? (string) $params['mode'] : 'rewrite';
+		if ( 'rewrite' !== $mode && 'remove_link' !== $mode ) {
+			return new WP_Error( 'invalid_mode', 'mode must be "rewrite" or "remove_link".', array( 'status' => 400 ) );
+		}
+
+		// remove_link skips new_url entirely — when the AI/backend can't find a
+		// confident redirect target the right behaviour is to strip the <a>
+		// wrapper and keep the inner text. Only rewrite mode needs new_url.
+		if ( 'rewrite' === $mode ) {
+			if ( empty( $params['new_url'] ) ) {
+				return new WP_Error( 'missing_new_url', 'new_url is required.', array( 'status' => 400 ) );
+			}
+			if ( $params['old_url'] === $params['new_url'] ) {
+				return new WP_Error( 'noop_params', 'old_url and new_url must differ.', array( 'status' => 400 ) );
+			}
+		}
+		return true;
+	}
+
+	public function dry_run( array $params ) {
+		$post = $this->load_post( (int) $params['post_id'] );
+		if ( $post instanceof WP_Error ) {
+			return $post;
+		}
+		$mode = isset( $params['mode'] ) ? (string) $params['mode'] : 'rewrite';
+		if ( 'remove_link' === $mode ) {
+			return $this->describe_anchor_removal( $post, (string) $params['old_url'] );
+		}
+		return $this->describe_replacement( $post, $params['old_url'], $params['new_url'] );
+	}
+
+	public function apply( array $params ) {
+		$post = $this->load_post( (int) $params['post_id'] );
+		if ( $post instanceof WP_Error ) {
+			return $post;
+		}
+		$mode = isset( $params['mode'] ) ? (string) $params['mode'] : 'rewrite';
+
+		$result = ( 'remove_link' === $mode )
+			? $this->describe_anchor_removal( $post, (string) $params['old_url'] )
+			: $this->describe_replacement( $post, $params['old_url'], $params['new_url'] );
+
+		if ( $result['no_op'] ) {
+			// We may still have deep rewrites in other posts even when the
+			// primary post has nothing to change — fall through to deep mode.
+		} else {
+			$update = wp_update_post( array(
+				'ID'           => (int) $post->ID,
+				'post_content' => $result['after']['post_content'],
+			), true );
+
+			if ( $update instanceof WP_Error || 0 === (int) $update ) {
+				return new WP_Error( 'update_failed', 'wp_update_post returned an error or zero id.', array( 'status' => 500 ) );
+			}
+		}
+
+		// Deep mode: also rewrite/strip the same broken URL in any OTHER post
+		// that references it. Reusable blocks (post_type='wp_block'), template
+		// parts, and other shared content can carry the same broken href and
+		// would keep the page broken on every consumer page until fixed.
+		$deep = ( 'remove_link' === $mode )
+			? $this->deep_remove_other_posts( (int) $post->ID, (string) $params['old_url'] )
+			: $this->deep_rewrite_other_posts( (int) $post->ID, $params['old_url'], $params['new_url'] );
+		if ( ! empty( $deep ) ) {
+			$result['after']['deep_rewrites'] = $deep;
+			// Make sure the controller records this as 'applied' even if the
+			// primary post was already correct (no_op above).
+			$result['no_op'] = false;
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Replace old_url with new_url in every post (other than $skip_post_id)
+	 * whose post_content references old_url. Returns map of post_id →
+	 * replacement count.
+	 *
+	 * Tries the same str_replace variant pairs the per-post path uses
+	 * (absolute + path-only when both URLs share our home host).
+	 *
+	 * @return array<int,int>
+	 */
+	private function deep_rewrite_other_posts( int $skip_post_id, string $old_url, string $new_url ): array {
+		global $wpdb;
+		if ( ! $wpdb || empty( $wpdb->posts ) ) {
+			return array();
+		}
+
+		// Search by the longest stable substring of old_url (path) to keep
+		// the LIKE index-friendly and not blow up on very-long encoded URLs.
+		$path = wp_parse_url( $old_url, PHP_URL_PATH );
+		$needle = is_string( $path ) && '' !== $path ? $path : $old_url;
+		$like = '%' . $wpdb->esc_like( $needle ) . '%';
+
+		// Direct DB query: WP_Query has no efficient LIKE-on-post_content
+		// support, and caching a one-shot deep-rewrite scan would be useless.
+		// {$wpdb->posts} is the standard WordPress posts table identifier.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT ID, post_content FROM {$wpdb->posts}
+			 WHERE post_content LIKE %s AND ID <> %d AND post_status IN ('publish','draft','pending')
+			 LIMIT 200",
+			$like, $skip_post_id
+		) );
+		if ( empty( $rows ) ) {
+			return array();
+		}
+
+		$pairs = $this->url_variant_pairs( $old_url, $new_url );
+		$updates = array();
+		foreach ( $rows as $row ) {
+			$replaced = $row->post_content;
+			$total = 0;
+			foreach ( $pairs as $pair ) {
+				$c = 0;
+				$replaced = str_replace( $pair[0], $pair[1], $replaced, $c );
+				$total += $c;
+			}
+			if ( $total > 0 && $replaced !== $row->post_content ) {
+				$ok = wp_update_post( array(
+					'ID'           => (int) $row->ID,
+					'post_content' => $replaced,
+				), true );
+				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
+					$updates[ (int) $row->ID ] = $total;
+				}
+			}
+		}
+		return $updates;
+	}
+
+	public function rollback( int $history_id ) {
+		$entry = $this->history->get( $history_id );
+		if ( ! $entry ) {
+			return new WP_Error( 'unknown_history_entry', 'No history entry with that id.', array( 'status' => 404 ) );
+		}
+
+		$post_id     = (int) ( $entry['target_id'] ?? 0 );
+		$old_content = $entry['before_state']['post_content'] ?? null;
+
+		if ( $post_id <= 0 || ! is_string( $old_content ) ) {
+			return new WP_Error( 'invalid_history_entry', 'History entry is missing post snapshot.', array( 'status' => 422 ) );
+		}
+
+		$update = wp_update_post( array(
+			'ID'           => $post_id,
+			'post_content' => $old_content,
+		), true );
+
+		if ( $update instanceof WP_Error || 0 === (int) $update ) {
+			return new WP_Error( 'rollback_failed', 'wp_update_post failed during rollback.', array( 'status' => 500 ) );
+		}
+
+		return array(
+			'before' => array( 'post_content' => $entry['after_state']['post_content'] ?? '' ),
+			'after'  => array( 'post_content' => $old_content ),
+		);
+	}
+
+	// ─── Internals ───────────────────────────────────────────────────────
+
+	/**
+	 * @return object|\WP_Error
+	 */
+	private function load_post( int $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return new WP_Error( 'post_not_found', sprintf( 'Post %d not found.', $post_id ), array( 'status' => 404 ) );
+		}
+		return $post;
+	}
+
+	private function describe_replacement( $post, string $old_url, string $new_url ): array {
+		$replaced     = $post->post_content;
+		$total_count  = 0;
+		foreach ( $this->url_variant_pairs( $old_url, $new_url ) as $pair ) {
+			$count    = 0;
+			$replaced = str_replace( $pair[0], $pair[1], $replaced, $count );
+			$total_count += $count;
+		}
+		$is_no_op = 0 === $total_count;
+
+		// `diff` dropped in 2.2.5: controller no longer ships it on the wire
+		// and the backend never read the string. Keeping the sprintf in dry-run
+		// previews was pure waste.
+		return array(
+			'before' => array(
+				'post_content' => $post->post_content,
+			),
+			'after'  => array(
+				'post_content' => $replaced,
+				'replacements' => $total_count,
+			),
+			'no_op'  => $is_no_op,
+			'target' => array(
+				'type' => 'post',
+				'id'   => (int) $post->ID,
+			),
+		);
+	}
+
+	/**
+	 * remove_link mode: strip every `<a ...>TEXT</a>` whose href matches
+	 * old_url (absolute or matching relative form) and keep TEXT in place.
+	 *
+	 * Used when the AI/backend cannot find a confident redirect target — the
+	 * scanner has confirmed the URL is dead, so leaving the anchor would keep
+	 * the same broken-link issue flagged forever. Stripping the anchor leaves
+	 * the surrounding text intact and removes the reported issue.
+	 */
+	private function describe_anchor_removal( $post, string $old_url ): array {
+		$count    = 0;
+		$replaced = $this->strip_anchors( (string) $post->post_content, $old_url, $count );
+		$is_no_op = 0 === $count;
+
+		return array(
+			'before' => array(
+				'post_content' => $post->post_content,
+			),
+			'after'  => array(
+				'post_content' => $replaced,
+				'replacements' => $count,
+			),
+			'no_op'  => $is_no_op,
+			'target' => array(
+				'type' => 'post',
+				'id'   => (int) $post->ID,
+			),
+		);
+	}
+
+	/**
+	 * Replace every `<a href="$url">TEXT</a>` (or any other attribute order
+	 * around href) with its inner TEXT. Matches both the absolute form of
+	 * old_url and the path-only relative form when old_url points at our own
+	 * host. Returns the rewritten HTML and writes the number of stripped
+	 * anchors into &$count.
+	 *
+	 * Regex tradeoff: <a> is HTML so a parser would be more robust, but the
+	 * block editor stores hand-edited HTML in post_content and DOMDocument
+	 * mangles it (UTF-8, self-closing tags, comments). The regex below tolerates
+	 * any attribute order, single or double quoted href values, mixed-case
+	 * tag names, and nested attributes; it gives up only on anchors that contain
+	 * another `<a` inside their text (extremely rare and would be invalid HTML).
+	 */
+	private function strip_anchors( string $html, string $old_url, int &$count ): string {
+		$count = 0;
+		$urls  = array( $old_url );
+
+		// Add the path-only variant when old_url is on our own host so we also
+		// match block-editor relative hrefs.
+		$home_host = function_exists( 'home_url' ) ? wp_parse_url( home_url(), PHP_URL_HOST ) : null;
+		$old_host  = wp_parse_url( $old_url, PHP_URL_HOST );
+		if ( $home_host && $old_host && strcasecmp( $home_host, $old_host ) === 0 ) {
+			$path = (string) wp_parse_url( $old_url, PHP_URL_PATH );
+			if ( '' !== $path && $path !== $old_url && ! in_array( $path, $urls, true ) ) {
+				$urls[] = $path;
+			}
+		}
+
+		$out = $html;
+		foreach ( $urls as $target ) {
+			$quoted = preg_quote( $target, '#' );
+			// Two patterns — one for double-quoted href, one for single-quoted.
+			// Splitting them avoids nested-quote escaping inside the regex string.
+			$patterns = array(
+				'#<a\b([^>]*?\bhref\s*=\s*"' . $quoted . '"[^>]*)>(.*?)</a\s*>#is',
+				'#<a\b([^>]*?\bhref\s*=\s*' . "'" . $quoted . "'" . '[^>]*)>(.*?)</a\s*>#is',
+			);
+			foreach ( $patterns as $pat ) {
+				$out = preg_replace_callback(
+					$pat,
+					function ( $m ) use ( &$count ) {
+						$count++;
+						return isset( $m[2] ) ? $m[2] : '';
+					},
+					$out
+				);
+			}
+		}
+
+		return is_string( $out ) ? $out : $html;
+	}
+
+	/**
+	 * Deep remove_link: walk other posts referencing old_url and strip the
+	 * matching anchors. Returns map of post_id → stripped count.
+	 *
+	 * Same scan strategy as deep_rewrite_other_posts — index-friendly LIKE
+	 * on the URL path.
+	 *
+	 * @return array<int,int>
+	 */
+	private function deep_remove_other_posts( int $skip_post_id, string $old_url ): array {
+		global $wpdb;
+		if ( ! $wpdb || empty( $wpdb->posts ) ) {
+			return array();
+		}
+
+		$path   = wp_parse_url( $old_url, PHP_URL_PATH );
+		$needle = is_string( $path ) && '' !== $path ? $path : $old_url;
+		$like   = '%' . $wpdb->esc_like( $needle ) . '%';
+
+		// Same rationale as deep_rewrite_other_posts(): one-shot LIKE scan,
+		// no caching layer makes sense for an SEO-fix dispatch.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT ID, post_content FROM {$wpdb->posts}
+			 WHERE post_content LIKE %s AND ID <> %d AND post_status IN ('publish','draft','pending')
+			 LIMIT 200",
+			$like, $skip_post_id
+		) );
+		if ( empty( $rows ) ) {
+			return array();
+		}
+
+		$updates = array();
+		foreach ( $rows as $row ) {
+			$count = 0;
+			$replaced = $this->strip_anchors( (string) $row->post_content, $old_url, $count );
+			if ( $count > 0 && $replaced !== $row->post_content ) {
+				$ok = wp_update_post( array(
+					'ID'           => (int) $row->ID,
+					'post_content' => $replaced,
+				), true );
+				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
+					$updates[ (int) $row->ID ] = $count;
+				}
+			}
+		}
+		return $updates;
+	}
+
+	/**
+	 * Returns pairs of (old_variant, new_variant) to feed str_replace, in
+	 * priority order (most specific first). When both URLs point at this site,
+	 * we ALSO try the path-only relative form because WP block editor stores
+	 * internal links as relative href values ("/foo/" not "https://host/foo/").
+	 *
+	 * Each pair preserves the absolute/relative form of the two sides, so we
+	 * never replace an absolute href with a path or vice versa.
+	 *
+	 * @return array<array{0:string,1:string}>
+	 */
+	private function url_variant_pairs( string $old_url, string $new_url ): array {
+		$pairs = array( array( $old_url, $new_url ) );
+
+		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( ! $home_host ) {
+			return $pairs;
+		}
+
+		$same_host = function ( $url ) use ( $home_host ) {
+			$host = wp_parse_url( $url, PHP_URL_HOST );
+			return $host && strcasecmp( $host, $home_host ) === 0;
+		};
+
+		if ( $same_host( $old_url ) && $same_host( $new_url ) ) {
+			$old_path = (string) wp_parse_url( $old_url, PHP_URL_PATH );
+			$new_path = (string) wp_parse_url( $new_url, PHP_URL_PATH );
+			if ( '' !== $old_path && '' !== $new_path && $old_path !== $old_url ) {
+				$pairs[] = array( $old_path, $new_path );
+			}
+		}
+		return $pairs;
+	}
+}
