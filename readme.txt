@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.0
+Stable tag: 2.5.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -69,7 +69,7 @@ Until step 3 succeeds, no outbound calls leave your site.
 * **Site snapshot** (manual "Sync Now" button or weekly cron): for each public page, post, and WooCommerce product — `wp_id`, `content_type`, `title`, `slug`, `url`, `status`, `updated_at`. Post content body is NOT sent.
 * **Per-post events** on save/delete: same shape as above plus an action flag (`created` / `updated` / `deleted`).
 * **Connect handshake**: when Seonix completes the connection it reads your site name and site URL and stores the plugin's API key so it can call your site later.
-* All outbound calls go to the Seonix engine URL you authorized during connection (typically `https://api.seonix.ai`).
+* Outbound calls go only to the Seonix endpoint authorized during connection.
 
 **What data is received**
 
@@ -126,10 +126,13 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 == Screenshots ==
 
-1. **Connect your WordPress site.** In your Seonix dashboard, open Integrations → WordPress and enter your site URL.
-2. **Paste the API key.** Copy the `sx_` key the plugin generated on activation from `Seonix → Settings` and paste it back into the Seonix dashboard to complete the connection.
+1. Your site health score inside WordPress, with SEO, technical, and AI search breakdowns synced from Seonix.
+2. Every issue becomes a task with its category, the pages it affects, and its priority.
 
 == Changelog ==
+
+= 2.5.14 =
+* Fixed the Seonix icon in the WordPress admin menu rendering as a solid white square. The menu now uses the real Seonix favicon, embedded in a form that WordPress core's icon repainting (svg-painter.js) cannot flatten, so the brand mark shows correctly in every menu state.
 
 = 2.5.0 =
 * **One-click connect.** A new top-level **Seonix** admin menu links your WordPress site to Seonix in a single click — it hands off to https://app.seonix.ai/connect, you pick a project, and the connection completes automatically. No API key to copy. The manual key flow still works from Seonix → Settings. The browser handoff carries a single one-time security code in the URL fragment so it never reaches server logs.

@@ -77,32 +77,32 @@ class Seonix_Admin {
 	}
 
 	/**
-	 * Self-contained base64 data-URI for the menu icon: the Seonix brand mark (the
-	 * two-sparkle favicon from seonix.ai) drawn as a crisp VECTOR — a rounded square
-	 * with the dark-top → purple/blue gradient and two white four-point sparkles.
+	 * Base64 data-URI for the menu icon: the REAL Seonix favicon, pixel for pixel.
 	 *
-	 * Vector, not the raster favicon, because the admin menu renders the icon at
-	 * just 20px: a downscaled raster frays at the rounded bottom corners against the
-	 * dark menu, while an SVG stays razor-sharp at any size. WordPress renders an
-	 * SVG-data-URI menu icon in full colour at `background-size: 20px` (it does NOT
-	 * mask/recolour SVG icons — only dashicon fonts). Gradient ids are namespaced
-	 * (sx-*) so they can't collide with another inline SVG on the page. Inlined so
-	 * there's no extra HTTP request and no external asset (WordPress.org friendly).
+	 * assets/menu-icon.png is the brand favicon (frontend favicon-512.png) scaled
+	 * to 64px — enough for the 20px CSS slot at 3x DPR. It is embedded as an
+	 * <image> inside a tiny SVG wrapper rather than passed to add_menu_page()
+	 * directly, for two reasons:
 	 *
-	 * @return string The data URI.
+	 * 1. WordPress only treats `data:image/svg+xml;base64,` icons as inline
+	 *    background images; any other data URI is piped through esc_url(),
+	 *    which strips the `data:` scheme entirely.
+	 * 2. Core's svg-painter.js repaints every base64 SVG menu icon to the admin
+	 *    colour scheme by regex-replacing fill="..." / style="..." attributes —
+	 *    that is what previously flattened the hand-drawn vector version into a
+	 *    solid white square. The <image> wrapper carries no paint attributes at
+	 *    all, so the painter has nothing to repaint and the brand colours
+	 *    survive in every menu state.
+	 *
+	 * @return string The data URI (or a dashicon name if the asset is unreadable).
 	 */
 	private function menu_icon(): string {
-		// One four-point sparkle, unit-sized (centred on 0,0), placed twice.
-		$sp = 'M0,-1C0.11,-0.29 0.29,-0.11 1,0C0.29,0.11 0.11,0.29 0,1C-0.11,0.29 -0.29,0.11 -1,0C-0.29,-0.11 -0.11,-0.29 0,-1Z';
-		$svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 100 100">'
-			. '<defs>'
-			. '<linearGradient id="sx-base" x1="10" y1="90" x2="90" y2="90" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9D33EE"/><stop offset="1" stop-color="#27A8EA"/></linearGradient>'
-			. '<linearGradient id="sx-dark" x1="50" y1="0" x2="50" y2="100" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#120F25"/><stop offset="0.66" stop-color="#120F25" stop-opacity="0"/></linearGradient>'
-			. '</defs>'
-			. '<rect width="100" height="100" rx="24" fill="url(#sx-base)"/>'
-			. '<rect width="100" height="100" rx="24" fill="url(#sx-dark)"/>'
-			. '<path transform="translate(33 48) scale(15.5)" fill="#fff" d="' . $sp . '"/>'
-			. '<path transform="translate(67 48) scale(15.5)" fill="#fff" d="' . $sp . '"/>'
+		$png = file_get_contents( SEONIX_DIR . 'assets/menu-icon.png' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local bundled asset, not a remote request.
+		if ( false === $png ) {
+			return 'dashicons-admin-site-alt3';
+		}
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 64 64">'
+			. '<image width="64" height="64" href="data:image/png;base64,' . base64_encode( $png ) . '"/>'
 			. '</svg>';
 		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
 	}
@@ -1287,21 +1287,15 @@ class Seonix_Admin {
 					</div>
 
 					<div class="seonix-cols__side">
-						<?php if ( $is_connected && ! empty( $engine_url ) ) : ?>
+						<?php if ( $is_connected && ! empty( $project_name ) ) : ?>
 							<!-- Connection card -->
 							<div class="seonix-card">
 								<h2><?php esc_html_e( 'Connection', 'seonix' ); ?></h2>
 								<table class="seonix-info-table">
 									<tr>
-										<th><?php esc_html_e( 'Engine URL', 'seonix' ); ?></th>
-										<td><code><?php echo esc_html( $engine_url ); ?></code></td>
-									</tr>
-									<?php if ( ! empty( $project_name ) ) : ?>
-									<tr>
 										<th><?php esc_html_e( 'Project', 'seonix' ); ?></th>
 										<td><?php echo esc_html( $project_name ); ?></td>
 									</tr>
-									<?php endif; ?>
 								</table>
 							</div>
 						<?php endif; ?>
