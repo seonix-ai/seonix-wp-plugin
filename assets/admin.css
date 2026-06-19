@@ -1,11 +1,55 @@
-/* Seonix — Admin Styles */
+/* Seonix — Admin Styles
+ *
+ * Redesigned to the Seonix design system (brand purple #8B3DFF, Inter Tight /
+ * JetBrains Mono, dark site-health hero, KPI cards, soft-lilac cards).
+ *
+ * IMPORTANT: every class name, id and data-attribute the markup + admin.js rely
+ * on is preserved verbatim — this file only changes how things look, never the
+ * DOM contract. Fonts come from the seonix-admin-fonts enqueue and fall back to
+ * the system stack, so the panel is never blocked on a remote request.
+ */
+
+/* ── Design tokens ── */
+.seonix-wrap {
+  --sx-ink: #0f0a24;
+  --sx-ink-2: #1f1840;
+  --sx-mute: #7a7693;
+  --sx-mute-dim: #b5b2c5;
+
+  --sx-paper: #ffffff;
+  --sx-paper-warm: #f8f7fc;
+  --sx-track: #f0edf7;
+  --sx-border: #e9e5f2;
+  --sx-border-soft: #f0edf7;
+
+  --sx-green: #22c08a;
+  --sx-green-soft: #e5f7ef;
+  --sx-green-ink: #138a5f;
+  --sx-amber: #e89a1c;
+  --sx-amber-soft: #fcefd6;
+  --sx-amber-ink: #9a6a16;
+  --sx-red: #ef4d5e;
+  --sx-red-soft: #fde7e9;
+  --sx-red-ink: #c0303f;
+
+  --sx-ac: #8b3dff;
+  --sx-ac-deep: #6b1fe8;
+  --sx-ac-soft: #f2eaff;
+  --sx-ac-line: #ddc8ff;
+  --sx-ac-grad: linear-gradient(135deg, #8b3dff 0%, #2ba8ff 100%);
+
+  --sx-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --sx-mono: "JetBrains Mono", ui-monospace, "SF Mono", Monaco, Consolas, monospace;
+}
 
 /* ── Reset & base ── */
 
 .seonix-wrap {
   max-width: 1280px;
-  margin: 16px 20px 40px 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  margin: 16px 20px 48px 0;
+  font-family: var(--sx-sans);
+  color: var(--sx-ink);
+  -webkit-font-smoothing: antialiased;
 }
 
 .seonix-wrap *,
@@ -14,22 +58,22 @@
   box-sizing: border-box;
 }
 
-/* ── Page header ── */
+/* ── Page header (brand lockup + version + connection pill) ── */
 
 .seonix-header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 13px;
+  margin: 4px 0 18px;
 }
 
 .seonix-header__logo {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 11px;
   display: block;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
+  box-shadow: 0 4px 14px rgba(139, 61, 255, 0.22);
 }
 
 .seonix-header__text {
@@ -37,9 +81,10 @@
 }
 
 .seonix-header h1 {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 700;
-  color: #0f172a;
+  letter-spacing: -0.5px;
+  color: var(--sx-ink);
   margin: 0;
   padding: 0;
   line-height: 1.2;
@@ -47,9 +92,44 @@
 
 .seonix-header p {
   font-size: 13px;
-  color: #64748b;
+  color: var(--sx-mute);
   margin: 2px 0 0;
   line-height: 1.5;
+  font-weight: 500;
+}
+
+/* version chip beside the brand name */
+.seonix-ver {
+  font-family: var(--sx-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--sx-mute-dim);
+  align-self: flex-start;
+  margin-top: 3px;
+}
+
+/* connection pill pushed to the right of the header */
+.seonix-header__spacer {
+  flex: 1;
+}
+
+.seonix-connpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sx-ink-2);
+  background: var(--sx-paper);
+  border: 1px solid var(--sx-border);
+  border-radius: 99px;
+  padding: 6px 13px 6px 11px;
+  white-space: nowrap;
+}
+
+.seonix-connpill b {
+  font-weight: 700;
 }
 
 /* ── Connection bar (slim, full width) ── */
@@ -60,17 +140,16 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px 24px;
+  background: var(--sx-paper);
+  border: 1px solid var(--sx-border);
+  border-radius: 16px;
+  padding: 18px 24px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
 }
 
 .seonix-connbar--connected {
-  border-color: #bbf7d0;
-  background: linear-gradient(135deg, #ffffff, #f0fdf4 60%);
+  border-color: var(--sx-green-soft);
+  background: linear-gradient(135deg, #ffffff, var(--sx-green-soft) 130%);
 }
 
 .seonix-connbar__info {
@@ -86,24 +165,25 @@
 }
 
 .seonix-connbar__info h2 {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  letter-spacing: -0.2px;
+  color: var(--sx-ink);
   margin: 0;
   padding: 0;
 }
 
 .seonix-connbar__info .seonix-subtitle {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
 }
 
 .seonix-connbar__project {
   font-size: 13px;
-  color: #334155;
+  color: var(--sx-ink-2);
 }
 
 .seonix-connbar__project strong {
-  color: #0f172a;
+  color: var(--sx-ink);
 }
 
 .seonix-connbar__actions {
@@ -116,32 +196,34 @@
 /* ── Card ── */
 
 .seonix-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 24px;
+  background: var(--sx-paper);
+  border: 1px solid var(--sx-border);
+  border-radius: 16px;
+  padding: 22px 24px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
 }
 
 .seonix-card--success {
-  border-color: #bbf7d0;
-  background: linear-gradient(135deg, #ffffff, #f0fdf4 60%);
+  border-color: #bfeBd9;
+  border-color: color-mix(in srgb, var(--sx-green) 30%, #fff);
+  background: linear-gradient(135deg, #ffffff, var(--sx-green-soft) 130%);
 }
 
 .seonix-card h2 {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 700;
-  color: #0f172a;
+  letter-spacing: -0.2px;
+  color: var(--sx-ink);
   margin: 0 0 4px;
   padding: 0;
 }
 
 .seonix-subtitle {
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--sx-mute);
   margin: 0 0 16px;
   line-height: 1.5;
+  font-weight: 500;
 }
 
 /* ── Status badge ── */
@@ -151,15 +233,15 @@
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  border-radius: 100px;
+  border-radius: 99px;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 16px;
 }
 
 .seonix-status--connected {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--sx-green-soft);
+  color: var(--sx-green-ink);
 }
 
 .seonix-status__dot {
@@ -168,11 +250,12 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  background: var(--sx-mute-dim);
 }
 
 .seonix-status__dot--green {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  background: var(--sx-green);
+  box-shadow: 0 0 0 3px rgba(34, 192, 138, 0.18);
 }
 
 /* ── Info table ── */
@@ -186,35 +269,35 @@
 
 .seonix-info-table tr:not(:last-child) td,
 .seonix-info-table tr:not(:last-child) th {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--sx-border-soft);
 }
 
 .seonix-info-table th,
 .seonix-info-table td {
-  padding: 10px 0;
+  padding: 11px 0;
   font-size: 13px;
   text-align: left;
   vertical-align: middle;
 }
 
 .seonix-info-table th {
-  width: 120px;
-  color: #94a3b8;
+  width: 130px;
+  color: var(--sx-mute);
   font-weight: 500;
-  letter-spacing: 0.02em;
 }
 
 .seonix-info-table td {
-  color: #1e293b;
-  font-weight: 500;
+  color: var(--sx-ink-2);
+  font-weight: 600;
 }
 
 .seonix-info-table td code {
+  font-family: var(--sx-mono);
   font-size: 12px;
-  background: #f8fafc;
+  background: var(--sx-paper-warm);
   padding: 2px 6px;
-  border-radius: 4px;
-  color: #475569;
+  border-radius: 5px;
+  color: var(--sx-ink-2);
 }
 
 /* ── API Key display ── */
@@ -228,15 +311,16 @@
 
 .seonix-key-value {
   flex: 1;
-  display: block;
-  padding: 10px 14px;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  padding: 11px 14px;
+  font-family: var(--sx-mono);
+  font-size: 12px;
   letter-spacing: 0.02em;
-  color: #1e293b;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  color: var(--sx-ink-2);
+  background: var(--sx-paper-warm);
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -249,10 +333,10 @@
   max-width: 100%;
   padding: 10px 14px;
   font-size: 14px;
-  color: #1e293b;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  color: var(--sx-ink-2);
+  background: var(--sx-paper-warm);
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
   outline: none;
   font-family: inherit;
@@ -262,8 +346,8 @@
 
 .seonix-select:focus {
   background: #fff;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: var(--sx-ac);
+  box-shadow: 0 0 0 3px rgba(139, 61, 255, 0.12);
 }
 
 /* ── Form field ── */
@@ -277,8 +361,7 @@
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
-  letter-spacing: 0.01em;
+  color: var(--sx-ink-2);
 }
 
 /* ── Actions ── */
@@ -286,7 +369,7 @@
 .seonix-actions {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
   flex-wrap: wrap;
 }
 
@@ -296,18 +379,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  font-size: 14px;
+  gap: 7px;
+  padding: 10px 18px;
+  font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   line-height: 1;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
+  background: var(--sx-paper);
+  color: var(--sx-ink);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, color 0.12s;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.seonix-btn:hover:not(:disabled) {
+  background: var(--sx-paper-warm);
 }
 
 .seonix-btn:disabled {
@@ -316,48 +405,48 @@
 }
 
 .seonix-btn--primary {
-  background: #4f46e5;
+  background: var(--sx-ac);
+  border-color: transparent;
   color: #fff;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 1px 2px rgba(139, 61, 255, 0.28);
 }
 
 .seonix-btn--primary:hover:not(:disabled) {
-  background: #4338ca;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+  background: var(--sx-ac-deep);
 }
 
 .seonix-btn--secondary {
-  background: #f1f5f9;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  background: var(--sx-paper);
+  color: var(--sx-ink);
+  border: 1px solid var(--sx-border);
 }
 
 .seonix-btn--secondary:hover:not(:disabled) {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  background: var(--sx-paper-warm);
+  border-color: var(--sx-ac-line);
 }
 
 .seonix-btn--danger {
-  background: #fff;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: var(--sx-paper);
+  color: var(--sx-red-ink);
+  border: 1px solid var(--sx-red-soft);
 }
 
 .seonix-btn--danger:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fca5a5;
+  background: var(--sx-red-soft);
+  border-color: var(--sx-red);
 }
 
 .seonix-btn--sm {
-  padding: 7px 14px;
-  font-size: 13px;
-  border-radius: 8px;
+  padding: 8px 13px;
+  font-size: 12px;
+  border-radius: 9px;
 }
 
 .seonix-btn--copied {
-  background: #dcfce7;
-  border-color: #bbf7d0;
-  color: #15803d;
+  background: var(--sx-green-soft);
+  border-color: color-mix(in srgb, var(--sx-green) 30%, #fff);
+  color: var(--sx-green-ink);
 }
 
 /* ── Steps ── */
@@ -372,15 +461,16 @@
 .seonix-steps li {
   display: flex;
   gap: 12px;
-  padding: 10px 0;
+  padding: 11px 0;
   font-size: 14px;
-  color: #334155;
+  color: var(--sx-ink-2);
   line-height: 1.5;
+  font-weight: 500;
   counter-increment: step;
 }
 
 .seonix-steps li + li {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--sx-border-soft);
 }
 
 .seonix-steps li::before {
@@ -391,56 +481,58 @@
   flex-shrink: 0;
   width: 24px;
   height: 24px;
-  background: #eef2ff;
-  color: #4f46e5;
+  background: var(--sx-ac-soft);
+  color: var(--sx-ac-deep);
   font-size: 12px;
   font-weight: 700;
-  border-radius: 50%;
+  border-radius: 8px;
   margin-top: 1px;
 }
 
-/* ── Sync stats grid ── */
+/* ── Sync stats grid (Settings → Site Data) ── */
 
 .seonix-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .seonix-stat {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
-  padding: 14px;
+  background: var(--sx-paper-warm);
+  border: 1px solid var(--sx-border-soft);
+  border-radius: 12px;
+  padding: 15px;
   text-align: center;
 }
 
 .seonix-stat__value {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  color: #0f172a;
+  letter-spacing: -0.8px;
+  color: var(--sx-ink);
   line-height: 1;
 }
 
 .seonix-stat__label {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 4px;
-  font-weight: 500;
+  font-family: var(--sx-mono);
+  font-size: 10px;
+  color: var(--sx-mute);
+  margin-top: 6px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 /* ── Sync time ── */
 
 .seonix-sync-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--sx-mute);
   margin: 0 0 12px;
+  font-weight: 500;
 }
 
-/* "Tasks last updated X" line with a subtle inline Refresh control beside it. */
 .seonix-sync-time--row {
   display: flex;
   align-items: center;
@@ -452,28 +544,25 @@
   min-width: 0;
 }
 
-/* Demoted refresh: a quiet text/icon link, not a button. Replaces the old
-   prominent indigo "Refresh tasks" button. Keeps id="seonix-refresh-tasks-btn"
-   so admin.js's existing handler still binds. */
+/* Demoted refresh: a quiet text/icon link, not a button. */
 .seonix-refresh-link {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 0;
   margin: 0;
   border: 0;
   background: none;
-  color: #6366f1;
+  color: var(--sx-ac);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
 }
 
 .seonix-refresh-link:hover:not(:disabled) {
-  color: #4338ca;
-  text-decoration: underline;
+  color: var(--sx-ac-deep);
 }
 
 .seonix-refresh-link:disabled {
@@ -486,10 +575,9 @@
   line-height: 1;
 }
 
-/* The refresh handler swaps in a small spinner; tint it to the link colour. */
 .seonix-refresh-link .ce-spinner {
-  border-color: rgba(99, 102, 241, 0.25);
-  border-top-color: #6366f1;
+  border-color: rgba(139, 61, 255, 0.22);
+  border-top-color: var(--sx-ac);
 }
 
 /* ── Spinner ── */
@@ -505,196 +593,317 @@
 }
 
 .ce-spinner--dark {
-  border-color: rgba(0, 0, 0, 0.1);
-  border-top-color: #4f46e5;
+  border-color: rgba(139, 61, 255, 0.18);
+  border-top-color: var(--sx-ac);
 }
 
 @keyframes ce-spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Dashboard: Site Health (score ring + category bars) ── */
+/* ════════════════════════════════════════════════════════════════
+ * Dashboard — dark site-health hero (ring + pillars)
+ * ════════════════════════════════════════════════════════════════ */
 
-.seonix-health {
+.seonix-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--sx-ink);
+  border-radius: 18px;
+  padding: 26px 28px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
-  gap: 32px;
-  margin-top: 8px;
+  gap: 30px;
+  flex-wrap: wrap;
 }
 
-.seonix-health__score {
+.seonix-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 150% at 90% 130%, rgba(43, 168, 255, 0.26), transparent 55%),
+    radial-gradient(95% 130% at 4% -20%, rgba(139, 61, 255, 0.42), transparent 55%);
+}
+
+/* score ring (inline SVG donut emitted by PHP) */
+.seonix-hero__ring {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.seonix-hero__ring-num {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  width: 200px;
-}
-
-.seonix-health__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-  text-align: center;
-}
-
-.seonix-health__body {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Score ring — conic-gradient driven by the score %, white inner disc. */
-.seonix-ring {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
   justify-content: center;
 }
 
-.seonix-ring__inner {
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
-}
-
-.seonix-ring__value {
-  font-size: 30px;
+.seonix-hero__ring-v {
+  font-family: var(--sx-sans);
+  font-size: 44px;
   font-weight: 700;
+  color: #fff;
   line-height: 1;
+  letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Health stat row reuses .seonix-stat but is left-aligned and snug. */
-.seonix-stats--health {
-  margin-bottom: 18px;
+.seonix-hero__ring-l {
+  font-family: var(--sx-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 5px;
 }
 
-/* ── Dashboard: per-category bars ── */
+.seonix-hero__mid {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+}
+
+.seonix-hero__eyebrow {
+  font-family: var(--sx-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 9px;
+}
+
+.seonix-hero__title {
+  font-weight: 700;
+  font-size: 23px;
+  letter-spacing: -0.5px;
+  color: #fff;
+  margin: 0 0 8px;
+  line-height: 1.12;
+}
+
+.seonix-hero__sub {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+  font-weight: 500;
+  margin: 0 0 16px;
+  max-width: 460px;
+}
+
+.seonix-hero__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+/* refresh control on the dark hero (keeps id=seonix-refresh-tasks-btn) */
+.seonix-hero .seonix-refresh-link {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+.seonix-hero .seonix-refresh-link:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.seonix-hero .seonix-refresh-link .ce-spinner {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+}
+
+/* pillars column on the right of the hero — these ARE the .seonix-bar
+   category-filter buttons, restyled for the dark surface. */
+.seonix-hero__pillars {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 252px;
+  padding-left: 30px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* ── Dashboard: per-category bars (pillars) ── */
 
 .seonix-bars {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 14px;
 }
 
-/* Category bar — now a <button> that filters the By-issue task list. Reset the
-   native button chrome so it reads exactly like the old row, then add a pointer
-   + hover wash and an .is-filtering active state (indigo ring + tint). */
+/* Category bar — a <button> that filters the By-issue task list. On the dark
+   hero it reads as a "pillar": name + value on one row, meter below. */
 .seonix-bar {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 7px;
   width: 100%;
-  margin: 0;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  margin: -6px -9px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 9px;
   background: transparent;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  transition: background 0.14s ease;
 }
 
 .seonix-bar:hover {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .seonix-bar:focus-visible {
   outline: none;
-  border-color: #c7d2fe;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background: rgba(255, 255, 255, 0.09);
 }
 
-/* Active filter: indigo ring + tint, mirrors the web app's selected category. */
+/* Active filter — subtle white wash on the dark hero. */
 .seonix-bar.is-filtering {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  box-shadow: 0 0 0 1px #c7d2fe;
-}
-
-.seonix-bar.is-filtering .seonix-bar__label {
-  color: #4f46e5;
-}
-
-/* ── Category-filter chip (By-issue view) ── */
-
-/* Wrapper is toggled (hidden attr) by JS; the chip itself is the indigo clear
-   pill with an ✕, matching the web app's clear-filter chip. */
-.seonix-catfilter-bar {
-  margin: 0 0 14px;
-}
-
-.seonix-catfilter-bar[hidden] {
-  display: none;
-}
-
-.seonix-catfilter {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid #c7d2fe;
-  border-radius: 100px;
-  background: #eef2ff;
-  color: #4338ca;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-
-.seonix-catfilter:hover {
-  background: #e0e7ff;
-  border-color: #a5b4fc;
-}
-
-.seonix-catfilter__x {
-  font-size: 15px;
-  line-height: 1;
-  color: #6366f1;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .seonix-bar__label {
-  flex-shrink: 0;
-  width: 92px;
-  font-size: 13px;
+  order: 1;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #334155;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.seonix-bar.is-filtering .seonix-bar__label {
+  color: #fff;
+}
+
+/* the value sits at the end of the label row */
+.seonix-bar__value {
+  order: 2;
+  font-family: var(--sx-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .seonix-bar__track {
-  flex: 1;
-  height: 8px;
-  border-radius: 100px;
-  background: #f1f5f9;
+  order: 3;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.13);
   overflow: hidden;
 }
 
 .seonix-bar__fill {
   display: block;
   height: 100%;
-  border-radius: 100px;
-  transition: width 0.7s ease;
+  border-radius: 99px;
+  transition: width 0.5s ease;
 }
 
-.seonix-bar__value {
-  flex-shrink: 0;
-  width: 34px;
-  text-align: right;
-  font-size: 14px;
+/* lay the label + value on a single flex row, meter underneath */
+.seonix-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label value"
+    "track track";
+  align-items: center;
+  column-gap: 8px;
+}
+
+.seonix-bar__label { grid-area: label; }
+.seonix-bar__value { grid-area: value; }
+.seonix-bar__track { grid-area: track; margin-top: 1px; }
+
+/* ════════════════════════════════════════════════════════════════
+ * Dashboard — KPI cards (Open / Resolved / Came back)
+ * ════════════════════════════════════════════════════════════════ */
+
+.seonix-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.seonix-kpi {
+  background: var(--sx-paper);
+  border: 1px solid var(--sx-border);
+  border-radius: 14px;
+  padding: 17px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.seonix-kpi__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.seonix-kpi__v {
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  font-size: 31px;
+  letter-spacing: -1.2px;
+  color: var(--sx-ink);
+  line-height: 1;
+}
+
+.seonix-kpi__ic {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.seonix-kpi__ic svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+
+.seonix-kpi__ic--amb { background: var(--sx-amber-soft); color: var(--sx-amber-ink); }
+.seonix-kpi__ic--grn { background: var(--sx-green-soft); color: var(--sx-green-ink); }
+.seonix-kpi__ic--acc { background: var(--sx-ac-soft); color: var(--sx-ac); }
+
+.seonix-kpi__l {
+  font-family: var(--sx-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sx-mute);
+}
+
+.seonix-kpi__foot {
+  font-size: 11.5px;
+  color: var(--sx-mute-dim);
+  font-weight: 500;
 }
 
 /* ── Settings: two-column responsive layout ── */
@@ -717,42 +926,54 @@
   }
 }
 
-@media (max-width: 782px) {
-  .seonix-health {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 20px;
+@media (max-width: 860px) {
+  .seonix-hero {
+    gap: 24px;
   }
 
-  .seonix-health__score {
-    width: auto;
+  .seonix-hero__pillars {
+    width: 100%;
+    padding-left: 0;
+    padding-top: 22px;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .seonix-kpi-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-/* ── Dashboard: task list ── */
+/* ════════════════════════════════════════════════════════════════
+ * Dashboard — task list ("Issues")
+ * ════════════════════════════════════════════════════════════════ */
 
 .seonix-empty {
   margin: 0;
 }
 
-/* Task list header row — title/subtitle on the left, the By issue / By page
-   view toggle on the right. Flex, space-between, wraps on narrow screens. */
 .seonix-tasklist__headrow {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px 16px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-/* Task list header — title + subtitle, mirrors the web app's panel header. */
 .seonix-tasklist__head {
   min-width: 0;
 }
 
+.seonix-tasklist__head h2 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+
 .seonix-tasklist__subtitle {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
 }
 
 /* ── View toggle (segmented control): By issue / By page ── */
@@ -760,24 +981,23 @@
 .seonix-viewtoggle {
   display: inline-flex;
   flex-shrink: 0;
-  gap: 4px;
-  padding: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  gap: 3px;
+  padding: 3px;
+  background: var(--sx-track);
+  border-radius: 10px;
 }
 
 .seonix-viewtoggle__btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 7px 15px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: #64748b;
+  color: var(--sx-mute);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
@@ -785,94 +1005,131 @@
 }
 
 .seonix-viewtoggle__btn:hover:not(.is-active) {
-  color: #334155;
+  color: var(--sx-ink-2);
 }
 
-/* Active pill: white bg + shadow + dark text — like the web app's pill group. */
 .seonix-viewtoggle__btn.is-active {
-  background: #fff;
-  color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  background: var(--sx-paper);
+  color: var(--sx-ink);
+  box-shadow: 0 1px 2px rgba(15, 10, 36, 0.08);
 }
 
-/* Only the active view is shown; the other is hidden via the [hidden] attr. */
 .seonix-view[hidden] {
   display: none;
 }
 
-/* ── Lifecycle tabs (pills): Active / Fixed / Came back / All ── */
+/* ── Lifecycle tabs (filter pills): Active / Fixed / Came back / All ── */
 
 .seonix-lifetabs {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px;
+  gap: 8px;
   margin-bottom: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
 }
 
 .seonix-lifetab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #64748b;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
+  background: var(--sx-paper);
+  color: var(--sx-mute);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .seonix-lifetab:hover:not(.is-active) {
-  color: #334155;
+  color: var(--sx-ink-2);
+  border-color: var(--sx-ac-line);
 }
 
-/* Active pill: dark slate bg + white text — matches the web app. */
 .seonix-lifetab.is-active {
-  background: #0f172a;
+  background: var(--sx-ink);
   color: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  border-color: var(--sx-ink);
 }
 
 .seonix-lifetab__count {
+  font-family: var(--sx-mono);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: #94a3b8;
+  font-weight: 500;
+  color: var(--sx-mute-dim);
+  background: var(--sx-track);
+  border-radius: 99px;
+  padding: 1px 7px;
 }
 
 .seonix-lifetab.is-active .seonix-lifetab__count {
-  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ── Category-filter chip (By-issue view) ── */
+
+.seonix-catfilter-bar {
+  margin: 0 0 14px;
+}
+
+.seonix-catfilter-bar[hidden] {
+  display: none;
+}
+
+.seonix-catfilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--sx-ac-line);
+  border-radius: 99px;
+  background: var(--sx-ac-soft);
+  color: var(--sx-ac-deep);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.seonix-catfilter:hover {
+  background: #e9dcff;
+  border-color: var(--sx-ac);
+}
+
+.seonix-catfilter__x {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--sx-ac);
 }
 
 /* ── Task table (Task / Pages / Priority) ── */
 
 .seonix-tasktable {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border: 1px solid var(--sx-border);
+  border-radius: 16px;
   overflow: hidden;
 }
 
-/* Small uppercase grey column headers. */
 .seonix-tasktable__head {
   display: grid;
   grid-template-columns: 1fr 96px 130px;
   gap: 16px;
   align-items: center;
-  padding: 10px 18px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 10px;
+  padding: 13px 22px;
+  background: var(--sx-paper-warm);
+  border-bottom: 1px solid var(--sx-border);
+  font-family: var(--sx-mono);
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
+  letter-spacing: 0.08em;
+  color: var(--sx-mute);
 }
 
 .seonix-tasktable__col-pages {
@@ -880,27 +1137,26 @@
 }
 
 .seonix-task-item + .seonix-task-item .seonix-trow {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--sx-border-soft);
 }
 
-/* The clickable row itself is a full-width button laid out as a 3-col grid. */
 .seonix-trow {
   display: grid;
   grid-template-columns: 1fr 96px 130px;
   gap: 16px;
   align-items: center;
   width: 100%;
-  padding: 14px 18px;
+  padding: 16px 22px;
   border: 0;
-  background: #fff;
+  background: var(--sx-paper);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.1s;
 }
 
 .seonix-trow:hover {
-  background: #f8fafc;
+  background: var(--sx-paper-warm);
 }
 
 .seonix-trow__task {
@@ -910,27 +1166,18 @@
   min-width: 0;
 }
 
-/* Round status dot, coloured by priority (red / amber / blue). */
 .seonix-dot {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  margin-top: 6px;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: var(--sx-ac);
 }
 
-.seonix-dot--high {
-  background: #ef4444;
-}
-
-.seonix-dot--medium {
-  background: #f59e0b;
-}
-
-.seonix-dot--low {
-  background: #3b82f6;
-}
+.seonix-dot--high { background: var(--sx-red); }
+.seonix-dot--medium { background: var(--sx-amber); }
+.seonix-dot--low { background: var(--sx-ac); }
 
 .seonix-trow__main {
   min-width: 0;
@@ -944,51 +1191,50 @@
 }
 
 .seonix-trow__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.15px;
+  color: var(--sx-ink);
 }
 
-/* Already-fixed rows read struck-through + muted. */
 .seonix-trow--solved .seonix-trow__title {
-  color: #64748b;
+  color: var(--sx-mute);
   text-decoration: line-through;
-  text-decoration-color: #cbd5e1;
+  text-decoration-color: var(--sx-mute-dim);
 }
 
 .seonix-trow__desc {
-  display: block;
-  margin-top: 3px;
-  font-size: 12px;
-  color: #94a3b8;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--sx-mute);
   line-height: 1.5;
-  /* Clamp the one-line description to 2 lines. */
+  font-weight: 500;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* PAGES cell — right aligned, small grey. */
 .seonix-trow__pages {
   text-align: right;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .seonix-trow__pages-num {
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #475569;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--sx-ink);
 }
 
 .seonix-trow__pages-unit {
   display: block;
-  font-size: 10px;
-  color: #94a3b8;
+  font-size: 11px;
+  color: var(--sx-mute);
+  font-weight: 500;
 }
 
-/* PRIORITY cell — the priority pill + a chevron. */
 .seonix-trow__priority {
   display: flex;
   align-items: center;
@@ -999,36 +1245,34 @@
   margin-left: auto;
   font-size: 18px;
   line-height: 1;
-  color: #cbd5e1;
+  color: var(--sx-mute-dim);
   transition: transform 0.15s, color 0.15s;
 }
 
 .seonix-trow:hover .seonix-trow__chevron {
-  color: #94a3b8;
+  color: var(--sx-ac);
 }
 
-/* ── Task detail block (hidden in the DOM; cloned into the modal body) ──
-   The .seonix-task-detail wrapper itself is never shown inline (it stays
-   `hidden`); only its inner content is cloned into the modal. The modal body
-   provides its own padding/background, so the wrapper carries no chrome here —
-   but the inner desc/rec/pagelist styles below DO render inside the modal. */
+/* ── Task detail block (hidden; cloned into the modal body) ── */
 
 .seonix-task-detail__desc {
-  font-size: 13px;
-  color: #475569;
-  line-height: 1.55;
+  font-size: 13.5px;
+  color: var(--sx-ink-2);
+  line-height: 1.6;
+  font-weight: 500;
   margin: 10px 0 0;
 }
 
 .seonix-task-detail__rec {
-  font-size: 13px;
-  color: #475569;
-  line-height: 1.55;
+  font-size: 13.5px;
+  color: var(--sx-ink-2);
+  line-height: 1.6;
+  font-weight: 500;
   margin: 8px 0 0;
 }
 
 .seonix-task-detail__rec strong {
-  color: #334155;
+  color: var(--sx-ink);
 }
 
 .seonix-task-detail__meta {
@@ -1038,7 +1282,7 @@
 }
 
 .seonix-task-detail__meta a {
-  color: #6366f1;
+  color: var(--sx-ac);
   text-decoration: none;
 }
 
@@ -1047,11 +1291,34 @@
 }
 
 .seonix-task-detail__count {
-  color: #94a3b8;
+  color: var(--sx-mute);
   margin-left: 8px;
 }
 
-/* ── Affected-pages list (inside a task's accordion detail) ── */
+/* section label inside the modal (What it means / How to fix / Affected pages) */
+.seonix-msec-label {
+  font-family: var(--sx-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sx-mute);
+  margin: 0 0 8px;
+}
+
+.seonix-task-detail__sec + .seonix-task-detail__sec {
+  margin-top: 22px;
+}
+
+/* Inside a section the label provides the gap, so the body element sits tight. */
+.seonix-modal__body .seonix-task-detail__sec .seonix-task-detail__desc,
+.seonix-modal__body .seonix-task-detail__sec .seonix-task-detail__rec,
+.seonix-modal__body .seonix-task-detail__sec .seonix-task-detail__meta,
+.seonix-modal__body .seonix-task-detail__sec .seonix-pagelist {
+  margin-top: 0;
+}
+
+/* ── Affected-pages list ── */
 
 .seonix-pagelist {
   list-style: none;
@@ -1066,148 +1333,97 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.4;
   min-width: 0;
 }
 
 .seonix-pagelist li a {
-  color: #6366f1;
+  font-family: var(--sx-mono);
+  font-size: 12px;
+  color: var(--sx-ink-2);
   text-decoration: none;
   word-break: break-all;
 }
 
 .seonix-pagelist li a:hover {
+  color: var(--sx-ac);
   text-decoration: underline;
 }
 
 .seonix-pagelist__more {
-  color: #94a3b8;
+  color: var(--sx-mute);
   font-style: italic;
 }
 
-/* Small status dot used in both the affected-pages list and the page issue
-   rows. Lifecycle tones (open/regressed/solved) + severity tones
-   (error/warning/notice) share the same swatch sizing. */
 .seonix-pagedot {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--sx-mute-dim);
 }
 
-.seonix-pagedot--open {
-  background: #3b82f6;
-}
+.seonix-pagedot--open { background: var(--sx-ac); }
+.seonix-pagedot--regressed { background: var(--sx-amber); }
+.seonix-pagedot--solved { background: var(--sx-green); }
+.seonix-pagedot--error { background: var(--sx-red); }
+.seonix-pagedot--warning { background: var(--sx-amber); }
+.seonix-pagedot--notice { background: var(--sx-mute-dim); }
+.seonix-pagedot--clean { background: var(--sx-green); }
 
-.seonix-pagedot--regressed {
-  background: #f59e0b;
-}
-
-.seonix-pagedot--solved {
-  background: #22c55e;
-}
-
-.seonix-pagedot--error {
-  background: #ef4444;
-}
-
-.seonix-pagedot--warning {
-  background: #f59e0b;
-}
-
-.seonix-pagedot--notice {
-  background: #94a3b8;
-}
-
-/* Clean page → a small green check disc instead of a flat dot. */
-.seonix-pagedot--clean {
-  position: relative;
-  background: #22c55e;
-}
-
-/* Per-tab empty state inside the table. */
 .seonix-tasktable__empty {
   margin: 0;
-  padding: 28px 18px;
+  padding: 32px 22px;
   text-align: center;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--sx-mute);
 }
 
-/* ── Priority badge (reused as the PRIORITY pill) ── */
+/* ── Priority badge (PRIORITY pill) ── */
 
 .seonix-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 100px;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   line-height: 1.6;
 }
 
-.seonix-badge--high {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.seonix-badge--medium {
-  background: #fffbeb;
-  color: #b45309;
-}
-
-.seonix-badge--low {
-  background: #eff6ff;
-  color: #2563eb;
-}
+.seonix-badge--high { background: var(--sx-red-soft); color: var(--sx-red-ink); }
+.seonix-badge--medium { background: var(--sx-amber-soft); color: var(--sx-amber-ink); }
+.seonix-badge--low { background: var(--sx-ac-soft); color: var(--sx-ac-deep); }
 
 /* ── Category badge tones: SEO / Technical / AI Search ── */
 
 .seonix-cat {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 5px;
-  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  line-height: 1.6;
-  border: 1px solid transparent;
+  letter-spacing: 0.05em;
+  line-height: 1.5;
 }
 
-/* SEO — blue/indigo tint. */
-.seonix-cat--seo {
-  background: #eef2ff;
-  color: #4f46e5;
-  border-color: #c7d2fe;
-}
-
-/* Technical — slate/green-ish neutral tint. */
-.seonix-cat--technical {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
-}
-
-/* AI Search — purple tint. */
-.seonix-cat--ai {
-  background: #faf5ff;
-  color: #9333ea;
-  border-color: #e9d5ff;
-}
+.seonix-cat--seo { background: var(--sx-ac-soft); color: var(--sx-ac-deep); }
+.seonix-cat--technical { background: #e4f1ff; color: #1366c8; }
+.seonix-cat--ai { background: var(--sx-green-soft); color: var(--sx-green-ink); }
 
 .seonix-task__info {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #94a3b8;
-  background: #f1f5f9;
-  border-radius: 4px;
-  padding: 1px 6px;
+  color: var(--sx-mute);
+  background: var(--sx-track);
+  border-radius: 5px;
+  padding: 2px 7px;
 }
 
 /* ── By page view: search box ── */
@@ -1216,36 +1432,35 @@
   margin-bottom: 14px;
 }
 
-/* Search input — consistent with .seonix-select (same fill, border, focus ring). */
 .seonix-pagesearch input[type="search"] {
   width: 100%;
   max-width: 360px;
-  padding: 9px 14px;
+  padding: 10px 14px;
   font-size: 14px;
-  color: #1e293b;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  color: var(--sx-ink-2);
+  background: var(--sx-paper-warm);
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
   outline: none;
   font-family: inherit;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .seonix-pagesearch input[type="search"]::placeholder {
-  color: #94a3b8;
+  color: var(--sx-mute-dim);
 }
 
 .seonix-pagesearch input[type="search"]:focus {
   background: #fff;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: var(--sx-ac);
+  box-shadow: 0 0 0 3px rgba(139, 61, 255, 0.12);
 }
 
-/* ── By page view: page table (mirrors .seonix-tasktable) ── */
+/* ── By page view: page table ── */
 
 .seonix-pagetable {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border: 1px solid var(--sx-border);
+  border-radius: 16px;
   overflow: hidden;
 }
 
@@ -1254,14 +1469,15 @@
   grid-template-columns: 1fr 60px 60px 60px;
   gap: 12px;
   align-items: center;
-  padding: 10px 18px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 10px;
+  padding: 13px 22px;
+  background: var(--sx-paper-warm);
+  border-bottom: 1px solid var(--sx-border);
+  font-family: var(--sx-mono);
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
+  letter-spacing: 0.08em;
+  color: var(--sx-mute);
 }
 
 .seonix-pagetable__col-num {
@@ -1269,27 +1485,27 @@
 }
 
 .seonix-page-item + .seonix-page-item .seonix-prow {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--sx-border-soft);
 }
 
-/* The clickable page row — a full-width button laid out as a 4-col grid. */
 .seonix-prow {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 60px 60px 60px;
   gap: 12px;
   align-items: center;
   width: 100%;
-  padding: 14px 18px;
+  padding: 16px 22px;
   border: 0;
-  background: #fff;
+  background: var(--sx-paper);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.1s;
 }
 
 .seonix-prow:hover {
-  background: #f8fafc;
+  background: var(--sx-paper-warm);
 }
 
 .seonix-prow__page {
@@ -1305,9 +1521,10 @@
 
 .seonix-prow__url {
   display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
+  font-family: var(--sx-mono);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sx-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1316,72 +1533,49 @@
 .seonix-prow__title {
   display: block;
   margin-top: 2px;
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--sx-mute);
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Right-aligned per-severity counts, tabular. Tinted red / amber / slate;
-   the em-dash placeholder (count 0) stays muted. */
 .seonix-prow__num {
   text-align: right;
+  font-family: var(--sx-mono);
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #cbd5e1;
+  color: var(--sx-mute-dim);
 }
 
-.seonix-prow__num--error {
-  color: #dc2626;
-}
-
-.seonix-prow__num--warning {
-  color: #b45309;
-}
-
-.seonix-prow__num--notice {
-  color: #475569;
-  font-weight: 500;
-}
-
-.seonix-prow__chevron {
-  display: none;
-}
-
-/* Page row chevron — reuse the task chevron treatment but place it inline at
-   the row's end. (Kept out of the grid so the count columns stay aligned.) */
-.seonix-prow {
-  position: relative;
-}
+.seonix-prow__num--error { color: var(--sx-red-ink); }
+.seonix-prow__num--warning { color: var(--sx-amber-ink); }
+.seonix-prow__num--notice { color: var(--sx-ink-2); font-weight: 500; }
 
 .seonix-prow__chevron {
   display: block;
   position: absolute;
-  right: 6px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 18px;
   line-height: 1;
-  color: #cbd5e1;
+  color: var(--sx-mute-dim);
   transition: transform 0.15s, color 0.15s;
 }
 
 .seonix-prow:hover .seonix-prow__chevron {
-  color: #94a3b8;
+  color: var(--sx-ac);
 }
 
-/* Reserve room on the right so the chevron never overlaps the notice count. */
 .seonix-pagetable__head,
 .seonix-prow {
-  padding-right: 28px;
+  padding-right: 30px;
 }
 
-/* ── By page view: page detail block (hidden; cloned into the modal body) ──
-   Like .seonix-task-detail, the .seonix-page-detail wrapper is never shown
-   inline; only its inner issue list is cloned into the modal. No wrapper chrome
-   needed here — the inner .seonix-issuelist styles below render in the modal. */
+/* ── By page view: page detail block (cloned into the modal body) ── */
 
 .seonix-issuelist {
   list-style: none;
@@ -1402,72 +1596,66 @@
 }
 
 .seonix-issuerow__title {
-  color: #334155;
-  font-weight: 500;
+  color: var(--sx-ink-2);
+  font-weight: 600;
   min-width: 0;
 }
 
-/* Search empty state inside the page table. */
 .seonix-pagetable__empty {
   margin: 0;
-  padding: 28px 18px;
+  padding: 32px 22px;
   text-align: center;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--sx-mute);
 }
 
-/* ── Problem / page detail modal (mirrors the web app's IssueDetailModal) ── */
+/* ════════════════════════════════════════════════════════════════
+ * Problem / page detail modal
+ * ════════════════════════════════════════════════════════════════ */
 
-/* Full-screen overlay: dark translucent + blur, flex-centred. z-index 100000
-   sits above the WP admin chrome (#adminmenu, #wpadminbar). Toggled by the
-   `hidden` attr from JS. */
 .seonix-modal {
   position: fixed;
   inset: 0;
   z-index: 100000;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
-  background: rgba(15, 23, 42, 0.5);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  padding: 48px 20px;
+  overflow-y: auto;
+  background: rgba(15, 10, 36, 0.46);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .seonix-modal[hidden] {
   display: none;
 }
 
-/* The backdrop is a full-bleed click target behind the panel (closes on click). */
 .seonix-modal__backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   cursor: default;
 }
 
-/* Centred white card: rounded-2xl, capped width/height, flex column so the
-   header/footer stay put while the body scrolls. */
 .seonix-modal__panel {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.4);
+  max-width: 680px;
+  background: var(--sx-paper);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 10, 36, 0.32);
   overflow: hidden;
 }
 
-/* Header: pill + title + code on the left, close on the right. */
 .seonix-modal__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 28px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 22px 24px 20px;
+  border-bottom: 1px solid var(--sx-border);
 }
 
 .seonix-modal__heading {
@@ -1475,22 +1663,19 @@
   flex: 1;
 }
 
-/* Status pill — small uppercase rounded pill with tone variants. */
 .seonix-modal__pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 10px;
-  border-radius: 100px;
+  padding: 3px 9px;
+  border-radius: 99px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   line-height: 1.6;
-  border: 1px solid transparent;
 }
 
-/* A leading dot inside the pill, coloured per tone. */
 .seonix-modal__pill::before {
   content: "";
   display: inline-block;
@@ -1500,53 +1685,33 @@
   background: currentColor;
 }
 
-.seonix-modal__pill--open {
-  background: #fef2f2;
-  color: #b91c1c;
-  border-color: #fecaca;
-}
-
-.seonix-modal__pill--regressed {
-  background: #fffbeb;
-  color: #b45309;
-  border-color: #fde68a;
-}
-
-.seonix-modal__pill--solved {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
-
-.seonix-modal__pill--page {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
-}
+.seonix-modal__pill--open { background: var(--sx-ac-soft); color: var(--sx-ac-deep); }
+.seonix-modal__pill--regressed { background: var(--sx-amber-soft); color: var(--sx-amber-ink); }
+.seonix-modal__pill--solved { background: var(--sx-green-soft); color: var(--sx-green-ink); }
+.seonix-modal__pill--page { background: var(--sx-track); color: var(--sx-mute); }
 
 .seonix-modal__title {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 19px;
+  font-weight: 700;
   line-height: 1.25;
-  color: #0f172a;
-  margin: 8px 0 0;
+  letter-spacing: -0.4px;
+  color: var(--sx-ink);
+  margin: 11px 0 0;
   padding: 0;
 }
 
 .seonix-modal__code {
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
-  font-size: 10px;
-  color: #94a3b8;
-  margin: 6px 0 0;
+  font-family: var(--sx-mono);
+  font-size: 11px;
+  color: var(--sx-mute-dim);
+  margin: 7px 0 0;
   word-break: break-all;
 }
 
-/* Hidden when empty (page rows have no code). */
 .seonix-modal__code:empty {
   display: none;
 }
 
-/* Icon close button. */
 .seonix-modal__close {
   flex-shrink: 0;
   display: inline-flex;
@@ -1554,33 +1719,29 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  margin: -4px -8px 0 0;
+  margin: -4px -6px 0 0;
   padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 22px;
+  border: 1px solid var(--sx-border);
+  border-radius: 9px;
+  background: var(--sx-paper);
+  color: var(--sx-mute);
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 
 .seonix-modal__close:hover {
-  background: #f1f5f9;
-  color: #334155;
+  background: var(--sx-paper-warm);
+  color: var(--sx-ink);
 }
 
-/* Scrollable body — the cloned detail content lands here. */
 .seonix-modal__body {
   flex: 1;
   overflow-y: auto;
-  padding: 22px 28px;
+  padding: 22px 24px;
 }
 
-/* The cloned .seonix-task-detail / .seonix-page-detail are plain wrappers (no
-   chrome). Give the first child no top margin so the body padding sets the gap;
-   keep the inner desc/rec/pagelist/issuelist spacing readable in the modal. */
 .seonix-modal__body > * {
   margin-top: 0;
 }
@@ -1599,21 +1760,19 @@
 
 .seonix-modal__body .seonix-pagelist,
 .seonix-modal__body .seonix-issuelist {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
-/* Footer — right-aligned Close, reusing the secondary button. */
 .seonix-modal__foot {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  padding: 14px 28px;
-  border-top: 1px solid #f1f5f9;
-  background: #f8fafc;
+  padding: 16px 24px;
+  border-top: 1px solid var(--sx-border);
+  background: var(--sx-paper-warm);
 }
 
-/* Lock background scroll while the modal is open (JS adds this to <body>). */
 body.seonix-modal-open {
   overflow: hidden;
 }
@@ -1628,22 +1787,34 @@ body.seonix-modal-open {
 }
 
 .seonix-wrap .notice-success {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #15803d;
+  background: var(--sx-green-soft);
+  border: 1px solid color-mix(in srgb, var(--sx-green) 30%, #fff);
+  color: var(--sx-green-ink);
 }
 
 .seonix-wrap .notice-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  background: var(--sx-red-soft);
+  border: 1px solid color-mix(in srgb, var(--sx-red) 30%, #fff);
+  color: var(--sx-red-ink);
+}
+
+/* ── Scrollbars (match the design) ── */
+
+.seonix-wrap ::-webkit-scrollbar,
+.seonix-modal ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.seonix-wrap ::-webkit-scrollbar-thumb,
+.seonix-modal ::-webkit-scrollbar-thumb {
+  background: #dad3e6;
+  border-radius: 99px;
+  border: 3px solid var(--sx-paper-warm);
 }
 
 /* ── Task table: responsive (stack on narrow) ── */
-/* Placed last so it wins over the grid layout by source order. The 3-column
-   Task/Pages/Priority grid collapses: the column-header row is hidden (it only
-   reads with the grid), and each row stacks Task on top with Pages + Priority
-   on a second line. */
+
 @media (max-width: 600px) {
   .seonix-tasktable__head {
     display: none;
@@ -1656,6 +1827,7 @@ body.seonix-modal-open {
 
   .seonix-trow__pages {
     text-align: left;
+    grid-row: 2;
   }
 
   .seonix-trow__pages-num,
@@ -1663,18 +1835,11 @@ body.seonix-modal-open {
     display: inline;
   }
 
-  /* Pages + Priority share one line under the task. */
-  .seonix-trow__pages {
-    grid-row: 2;
-  }
-
   .seonix-trow__priority {
     grid-row: 2;
     justify-self: end;
   }
 
-  /* Page table collapses the same way: hide the grid head; the URL takes the
-     first row full-width and the three severity counts share the second. */
   .seonix-pagetable__head {
     display: none;
   }
@@ -1688,9 +1853,8 @@ body.seonix-modal-open {
     grid-column: 1 / -1;
   }
 
-  /* Tighter modal padding on narrow screens. */
   .seonix-modal {
-    padding: 8px;
+    padding: 12px;
   }
 
   .seonix-modal__head,

@@ -126,10 +126,20 @@ class Seonix_Admin {
 			return;
 		}
 
+		// Brand webfonts (Inter Tight + JetBrains Mono). Admin-only; the CSS
+		// falls back to the system stack if these fail to load, so the panel is
+		// never blocked on a remote request.
+		wp_enqueue_style(
+			'seonix-admin-fonts',
+			'https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap',
+			array(),
+			SEONIX_VERSION
+		);
+
 		wp_enqueue_style(
 			'seonix-admin',
 			SEONIX_URL . 'assets/admin.css',
-			array(),
+			array( 'seonix-admin-fonts' ),
 			SEONIX_VERSION
 		);
 
@@ -383,7 +393,7 @@ class Seonix_Admin {
 	 * the WordPress submenu (Seonix → Problems / Settings already appears in the
 	 * left admin menu), so the tabs were redundant chrome.
 	 */
-	private function render_header() {
+	private function render_header( bool $is_connected = false, string $project_name = '' ) {
 		?>
 		<div class="seonix-header">
 			<img class="seonix-header__logo" src="<?php echo esc_url( plugins_url( 'assets/seonix-logo.png', SEONIX_FILE ) ); ?>" alt="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>" width="40" height="40" />
@@ -391,6 +401,30 @@ class Seonix_Admin {
 				<h1><?php esc_html_e( 'Seonix', 'seonix' ); ?></h1>
 				<p><?php esc_html_e( 'Your site health and SEO tasks, kept in sync with Seonix.', 'seonix' ); ?></p>
 			</div>
+			<span class="seonix-ver"><?php echo esc_html( 'v' . SEONIX_VERSION ); ?></span>
+			<span class="seonix-header__spacer"></span>
+			<?php if ( $is_connected ) : ?>
+				<span class="seonix-connpill">
+					<span class="seonix-status__dot seonix-status__dot--green"></span>
+					<?php
+					if ( '' !== $project_name ) {
+						echo wp_kses(
+							sprintf(
+								/* translators: %s: Seonix project name */
+								__( 'Connected · %s', 'seonix' ),
+								'<b>' . esc_html( $project_name ) . '</b>'
+							),
+							array( 'b' => array() )
+						);
+					} else {
+						esc_html_e( 'Connected', 'seonix' );
+					}
+					?>
+				</span>
+				<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-reconnect-btn">
+					<?php esc_html_e( 'Reconnect', 'seonix' ); ?>
+				</button>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -426,46 +460,17 @@ class Seonix_Admin {
 			'ai'        => __( 'AI Search', 'seonix' ),
 		);
 
-		// Overall score colour zone — mirrors the web app's CircularGauge
-		// thresholds (green >=90, amber >=50, red <50). Drives the ring colour.
-		$ring_color = $score >= 90 ? '#22c55e' : ( $score >= 50 ? '#f59e0b' : '#ef4444' );
-
 		?>
 		<div class="wrap">
 			<div class="seonix-wrap">
-				<?php $this->render_header(); ?>
+				<?php $this->render_header( $is_connected, $project_name ); ?>
 
 				<div id="seonix-notices"></div>
 
-				<!-- Slim connection bar -->
-				<div class="seonix-connbar<?php echo $is_connected ? ' seonix-connbar--connected' : ''; ?>">
-					<?php if ( $is_connected ) : ?>
-						<div class="seonix-connbar__info">
-							<span class="seonix-status seonix-status--connected">
-								<span class="seonix-status__dot seonix-status__dot--green"></span>
-								<?php esc_html_e( 'Connected', 'seonix' ); ?>
-							</span>
-							<?php if ( ! empty( $project_name ) ) : ?>
-								<span class="seonix-connbar__project">
-									<?php
-									echo wp_kses(
-										sprintf(
-											/* translators: %s: Seonix project name */
-											__( 'Linked to project: %s', 'seonix' ),
-											'<strong>' . esc_html( $project_name ) . '</strong>'
-										),
-										array( 'strong' => array() )
-									);
-									?>
-								</span>
-							<?php endif; ?>
-						</div>
-						<div class="seonix-connbar__actions">
-							<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-reconnect-btn">
-								<?php esc_html_e( 'Reconnect', 'seonix' ); ?>
-							</button>
-						</div>
-					<?php else : ?>
+				<?php if ( ! $is_connected ) : ?>
+					<!-- Connect CTA — shown until the site is linked. Once connected
+					     the status pill + Reconnect live in the header (see render_header). -->
+					<div class="seonix-connbar">
 						<div class="seonix-connbar__info">
 							<h2><?php esc_html_e( 'Connect to Seonix', 'seonix' ); ?></h2>
 							<p class="seonix-subtitle"><?php esc_html_e( 'Link this site to Seonix in one click. We will analyze your site and start surfacing SEO tasks here.', 'seonix' ); ?></p>
@@ -475,87 +480,143 @@ class Seonix_Admin {
 								<?php esc_html_e( 'Connect to Seonix', 'seonix' ); ?>
 							</button>
 						</div>
-					<?php endif; ?>
-				</div>
+					</div>
+				<?php endif; ?>
 
 				<?php if ( $is_connected ) : ?>
-					<!-- Site Health: overall score ring + category bars -->
-					<div class="seonix-card">
-						<h2><?php esc_html_e( 'Site Health', 'seonix' ); ?></h2>
-						<div class="seonix-health">
-							<div class="seonix-health__score">
-								<div class="seonix-ring" style="background: conic-gradient(<?php echo esc_attr( $ring_color ); ?> calc(<?php echo esc_attr( (string) $score ); ?> * 1%), #e2e8f0 0);">
-									<div class="seonix-ring__inner">
-										<span class="seonix-ring__value" style="color: <?php echo esc_attr( $ring_color ); ?>;"><?php echo esc_html( $score ); ?></span>
-									</div>
-								</div>
-								<span class="seonix-health__label"><?php esc_html_e( 'Overall site health', 'seonix' ); ?></span>
+					<?php
+					// Dark site-health hero: a gradient score ring on the left, a plain-
+					// language headline + sync line in the middle, and the per-category
+					// "pillars" on the right. The pillars ARE the .seonix-bar category-
+					// filter buttons (data-category + aria-pressed preserved) so clicking
+					// one still narrows the By-issue task list via admin.js — only their
+					// styling changed for the dark surface.
+					$ring_size   = 132;
+					$ring_stroke = 9;
+					$ring_r      = ( $ring_size - 14 ) / 2;
+					$ring_c      = 2 * M_PI * $ring_r;
+					$ring_off    = $ring_c * ( 1 - max( 0, min( 100, $score ) ) / 100 );
+
+					// Plain-language headline + subline, derived from real numbers only.
+					if ( $score >= 90 ) {
+						$hero_title = __( 'Great shape — keep it up', 'seonix' );
+					} elseif ( $score >= 50 ) {
+						$hero_title = __( 'Good shape — room to improve', 'seonix' );
+					} else {
+						$hero_title = __( 'Needs attention', 'seonix' );
+					}
+					if ( $open > 0 ) {
+						$hero_sub = sprintf(
+							/* translators: %s: number of open issues */
+							_n( '%s open issue to clear across your pages.', '%s open issues to clear across your pages.', $open, 'seonix' ),
+							number_format_i18n( $open )
+						);
+					} else {
+						$hero_sub = __( 'No open issues — your site is in great shape.', 'seonix' );
+					}
+					?>
+					<!-- Site Health: dark hero (score ring + pillars) -->
+					<div class="seonix-hero">
+						<div class="seonix-hero__ring" style="width: <?php echo esc_attr( (string) $ring_size ); ?>px; height: <?php echo esc_attr( (string) $ring_size ); ?>px;">
+							<svg width="<?php echo esc_attr( (string) $ring_size ); ?>" height="<?php echo esc_attr( (string) $ring_size ); ?>" viewBox="0 0 <?php echo esc_attr( (string) $ring_size ); ?> <?php echo esc_attr( (string) $ring_size ); ?>" style="transform: rotate(-90deg);" aria-hidden="true">
+								<defs>
+									<linearGradient id="seonixRingGrad" x1="0" y1="0" x2="1" y2="1">
+										<stop offset="0%" stop-color="#A265FF" />
+										<stop offset="100%" stop-color="#5FC2FF" />
+									</linearGradient>
+								</defs>
+								<circle cx="<?php echo esc_attr( (string) ( $ring_size / 2 ) ); ?>" cy="<?php echo esc_attr( (string) ( $ring_size / 2 ) ); ?>" r="<?php echo esc_attr( (string) $ring_r ); ?>" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="<?php echo esc_attr( (string) $ring_stroke ); ?>" />
+								<circle cx="<?php echo esc_attr( (string) ( $ring_size / 2 ) ); ?>" cy="<?php echo esc_attr( (string) ( $ring_size / 2 ) ); ?>" r="<?php echo esc_attr( (string) $ring_r ); ?>" fill="none" stroke="url(#seonixRingGrad)" stroke-width="<?php echo esc_attr( (string) $ring_stroke ); ?>" stroke-linecap="round" stroke-dasharray="<?php echo esc_attr( (string) round( $ring_c, 2 ) ); ?>" stroke-dashoffset="<?php echo esc_attr( (string) round( $ring_off, 2 ) ); ?>" />
+							</svg>
+							<div class="seonix-hero__ring-num">
+								<div class="seonix-hero__ring-v"><?php echo esc_html( $score ); ?></div>
+								<div class="seonix-hero__ring-l"><?php esc_html_e( '/ 100', 'seonix' ); ?></div>
 							</div>
+						</div>
 
-							<div class="seonix-health__body">
-								<div class="seonix-stats seonix-stats--health">
-									<div class="seonix-stat">
-										<div class="seonix-stat__value"><?php echo esc_html( $open ); ?></div>
-										<div class="seonix-stat__label"><?php esc_html_e( 'Open', 'seonix' ); ?></div>
-									</div>
-									<div class="seonix-stat">
-										<div class="seonix-stat__value"><?php echo esc_html( $solved ); ?></div>
-										<div class="seonix-stat__label"><?php esc_html_e( 'Solved', 'seonix' ); ?></div>
-									</div>
-									<div class="seonix-stat">
-										<div class="seonix-stat__value"><?php echo esc_html( $regressed ); ?></div>
-										<div class="seonix-stat__label"><?php esc_html_e( 'Came back', 'seonix' ); ?></div>
-									</div>
-								</div>
-
-								<?php if ( ! empty( $cats ) ) : ?>
-									<!-- Category bars double as a filter for the By-issue task list:
-									     each bar is a button carrying data-category; clicking it (in
-									     admin.js) narrows the issue rows to that Site Health bucket and
-									     flips the lifecycle tab to "All". Mirrors the web app's hero
-									     score bars driving IssueTaskListPanel's category filter. -->
-									<div class="seonix-bars">
-										<?php foreach ( $cats as $cat ) : ?>
-											<?php
-											$cat_key      = isset( $cat['key'] ) ? (string) $cat['key'] : '';
-											if ( ! in_array( $cat_key, array( 'seo', 'technical', 'ai' ), true ) ) {
-												$cat_key = 'seo';
-											}
-											$cat_score    = isset( $cat['score'] ) ? (int) $cat['score'] : 0;
-											$cat_label    = isset( $cat_labels[ $cat_key ] ) ? $cat_labels[ $cat_key ] : $cat_key;
-											$cat_fill_col = $cat_score >= 90 ? '#22c55e' : ( $cat_score >= 50 ? '#f59e0b' : '#ef4444' );
-											?>
-											<button type="button" class="seonix-bar" data-category="<?php echo esc_attr( $cat_key ); ?>" aria-pressed="false">
-												<span class="seonix-bar__label"><?php echo esc_html( $cat_label ); ?></span>
-												<span class="seonix-bar__track">
-													<span class="seonix-bar__fill" style="width: <?php echo esc_attr( (string) $cat_score ); ?>%; background: <?php echo esc_attr( $cat_fill_col ); ?>;"></span>
-												</span>
-												<span class="seonix-bar__value" style="color: <?php echo esc_attr( $cat_fill_col ); ?>;"><?php echo esc_html( $cat_score ); ?></span>
-											</button>
-										<?php endforeach; ?>
-									</div>
-								<?php endif; ?>
-
-								<p class="seonix-sync-time seonix-sync-time--row">
-									<span class="seonix-sync-time__text">
-										<?php if ( $synced_at > 0 ) : ?>
-											<?php
-											printf(
-												/* translators: %s: formatted date/time of last task sync */
-												esc_html__( 'Tasks last updated %s', 'seonix' ),
-												esc_html( wp_date( 'F j, Y \a\t g:i A', $synced_at ) )
-											);
-											?>
-										<?php else : ?>
-											<?php esc_html_e( 'Tasks not synced yet', 'seonix' ); ?>
-										<?php endif; ?>
-									</span>
-									<button type="button" id="seonix-refresh-tasks-btn" class="seonix-refresh-link">
-										<span class="seonix-refresh-link__icon" aria-hidden="true">&#8635;</span>
-										<?php esc_html_e( 'Refresh', 'seonix' ); ?>
-									</button>
-								</p>
+						<div class="seonix-hero__mid">
+							<div class="seonix-hero__eyebrow"><?php esc_html_e( 'Overall site health', 'seonix' ); ?></div>
+							<h2 class="seonix-hero__title"><?php echo esc_html( $hero_title ); ?></h2>
+							<p class="seonix-hero__sub"><?php echo esc_html( $hero_sub ); ?></p>
+							<div class="seonix-hero__meta">
+								<span class="seonix-sync-time__text">
+									<?php if ( $synced_at > 0 ) : ?>
+										<?php
+										printf(
+											/* translators: %s: formatted date/time of last task sync */
+											esc_html__( 'Synced %s', 'seonix' ),
+											esc_html( wp_date( 'F j, Y \a\t g:i A', $synced_at ) )
+										);
+										?>
+									<?php else : ?>
+										<?php esc_html_e( 'Tasks not synced yet', 'seonix' ); ?>
+									<?php endif; ?>
+								</span>
+								<button type="button" id="seonix-refresh-tasks-btn" class="seonix-refresh-link">
+									<span class="seonix-refresh-link__icon" aria-hidden="true">&#8635;</span>
+									<?php esc_html_e( 'Refresh', 'seonix' ); ?>
+								</button>
 							</div>
+						</div>
+
+						<?php if ( ! empty( $cats ) ) : ?>
+							<!-- Pillars = category-filter buttons (data-category preserved). -->
+							<div class="seonix-hero__pillars">
+								<div class="seonix-bars">
+									<?php foreach ( $cats as $cat ) : ?>
+										<?php
+										$cat_key   = isset( $cat['key'] ) ? (string) $cat['key'] : '';
+										if ( ! in_array( $cat_key, array( 'seo', 'technical', 'ai' ), true ) ) {
+											$cat_key = 'seo';
+										}
+										$cat_score    = isset( $cat['score'] ) ? (int) $cat['score'] : 0;
+										$cat_label    = isset( $cat_labels[ $cat_key ] ) ? $cat_labels[ $cat_key ] : $cat_key;
+										$cat_fill_col = $cat_score >= 90 ? '#22C08A' : ( $cat_score >= 50 ? '#E89A1C' : '#EF4D5E' );
+										?>
+										<button type="button" class="seonix-bar" data-category="<?php echo esc_attr( $cat_key ); ?>" aria-pressed="false">
+											<span class="seonix-bar__label"><?php echo esc_html( $cat_label ); ?></span>
+											<span class="seonix-bar__value"><?php echo esc_html( $cat_score ); ?></span>
+											<span class="seonix-bar__track">
+												<span class="seonix-bar__fill" style="width: <?php echo esc_attr( (string) $cat_score ); ?>%; background: <?php echo esc_attr( $cat_fill_col ); ?>;"></span>
+											</span>
+										</button>
+									<?php endforeach; ?>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+
+					<!-- KPI cards: Open issues / Resolved / Came back (real counts only). -->
+					<div class="seonix-kpi-grid">
+						<div class="seonix-kpi">
+							<div class="seonix-kpi__top">
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $open ) ); ?></div>
+								<span class="seonix-kpi__ic seonix-kpi__ic--amb">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".4"/></svg>
+								</span>
+							</div>
+							<div class="seonix-kpi__l"><?php esc_html_e( 'Open issues', 'seonix' ); ?></div>
+							<div class="seonix-kpi__foot"><?php esc_html_e( 'Needs attention', 'seonix' ); ?></div>
+						</div>
+						<div class="seonix-kpi">
+							<div class="seonix-kpi__top">
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $solved ) ); ?></div>
+								<span class="seonix-kpi__ic seonix-kpi__ic--grn">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M8.4 12.2l2.6 2.6 4.6-5.2"/></svg>
+								</span>
+							</div>
+							<div class="seonix-kpi__l"><?php esc_html_e( 'Resolved', 'seonix' ); ?></div>
+							<div class="seonix-kpi__foot"><?php esc_html_e( 'Fixed by Seonix', 'seonix' ); ?></div>
+						</div>
+						<div class="seonix-kpi">
+							<div class="seonix-kpi__top">
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $regressed ) ); ?></div>
+								<span class="seonix-kpi__ic seonix-kpi__ic--acc">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 0 1 14.4-6.1L20.5 8"/><path d="M20.5 3.8V8h-4.2"/><path d="M20.5 12a8.5 8.5 0 0 1-14.4 6.1L3.5 16"/><path d="M3.5 20.2V16h4.2"/></svg>
+								</span>
+							</div>
+							<div class="seonix-kpi__l"><?php esc_html_e( 'Came back', 'seonix' ); ?></div>
+							<div class="seonix-kpi__foot"><?php esc_html_e( 'Re-opened after a fix', 'seonix' ); ?></div>
 						</div>
 					</div>
 
@@ -569,7 +630,7 @@ class Seonix_Admin {
 					<div class="seonix-card">
 						<div class="seonix-tasklist__headrow">
 							<div class="seonix-tasklist__head">
-								<h2><?php esc_html_e( 'Task list', 'seonix' ); ?></h2>
+								<h2><?php esc_html_e( 'Issues', 'seonix' ); ?></h2>
 								<p class="seonix-subtitle seonix-tasklist__subtitle">
 									<?php esc_html_e( 'Each row is one thing to fix. Resolved tasks move to "Fixed"; if a fix breaks again it appears in "Came back".', 'seonix' ); ?>
 								</p>
@@ -937,60 +998,81 @@ class Seonix_Admin {
 
 			<div class="seonix-task-detail" id="<?php echo esc_attr( $panel_id ); ?>" hidden>
 				<?php if ( '' !== $description ) : ?>
-					<p class="seonix-task-detail__desc"><?php echo esc_html( $description ); ?></p>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'What it means', 'seonix' ); ?></div>
+						<p class="seonix-task-detail__desc"><?php echo esc_html( $description ); ?></p>
+					</div>
 				<?php endif; ?>
 				<?php if ( '' !== $recommendation ) : ?>
-					<p class="seonix-task-detail__rec"><strong><?php esc_html_e( 'How to fix:', 'seonix' ); ?></strong> <?php echo esc_html( $recommendation ); ?></p>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'How to fix', 'seonix' ); ?></div>
+						<p class="seonix-task-detail__rec"><?php echo esc_html( $recommendation ); ?></p>
+					</div>
 				<?php endif; ?>
 				<?php
 				// Render the full list of every affected page for this task, decoded
 				// from the affected_pages column. Each entry is a small status dot +
 				// a link showing the page's RELATIVE path (full URL in the title).
 				$pages = Seonix_Tasks::decode_pages( isset( $row['affected_pages'] ) ? $row['affected_pages'] : '' );
-				if ( ! empty( $pages ) ) :
-					$visible_cap = 100;
-					$shown       = array_slice( $pages, 0, $visible_cap );
-					$overflow    = count( $pages ) - count( $shown );
+				if ( ! empty( $pages ) || '' !== $affected_url ) :
 					?>
-					<ul class="seonix-pagelist">
-						<?php foreach ( $shown as $pg ) : ?>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label">
 							<?php
-							$pg_url    = $pg['url'];
-							$pg_status = $pg['status'];
-							$rel       = $this->relative_path( $pg_url );
+							printf(
+								/* translators: %d: number of affected pages */
+								esc_html__( 'Affected pages · %d', 'seonix' ),
+								(int) $affected_count
+							);
 							?>
-							<li>
-								<span class="seonix-pagedot seonix-pagedot--<?php echo esc_attr( $pg_status ); ?>" aria-hidden="true"></span>
-								<a href="<?php echo esc_url( $pg_url ); ?>" target="_blank" rel="noopener" title="<?php echo esc_attr( $pg_url ); ?>"><?php echo esc_html( $rel ); ?></a>
-							</li>
-						<?php endforeach; ?>
-						<?php if ( $overflow > 0 ) : ?>
-							<li class="seonix-pagelist__more">
-								<?php
-								printf(
-									/* translators: %d: number of additional affected pages not shown. */
-									esc_html( _n( '+%d more page', '+%d more pages', $overflow, 'seonix' ) ),
-									(int) $overflow
-								);
-								?>
-							</li>
+						</div>
+						<?php
+						if ( ! empty( $pages ) ) :
+							$visible_cap = 100;
+							$shown       = array_slice( $pages, 0, $visible_cap );
+							$overflow    = count( $pages ) - count( $shown );
+							?>
+							<ul class="seonix-pagelist">
+								<?php foreach ( $shown as $pg ) : ?>
+									<?php
+									$pg_url    = $pg['url'];
+									$pg_status = $pg['status'];
+									$rel       = $this->relative_path( $pg_url );
+									?>
+									<li>
+										<span class="seonix-pagedot seonix-pagedot--<?php echo esc_attr( $pg_status ); ?>" aria-hidden="true"></span>
+										<a href="<?php echo esc_url( $pg_url ); ?>" target="_blank" rel="noopener" title="<?php echo esc_attr( $pg_url ); ?>"><?php echo esc_html( $rel ); ?></a>
+									</li>
+								<?php endforeach; ?>
+								<?php if ( $overflow > 0 ) : ?>
+									<li class="seonix-pagelist__more">
+										<?php
+										printf(
+											/* translators: %d: number of additional affected pages not shown. */
+											esc_html( _n( '+%d more page', '+%d more pages', $overflow, 'seonix' ) ),
+											(int) $overflow
+										);
+										?>
+									</li>
+								<?php endif; ?>
+							</ul>
+						<?php else : ?>
+							<p class="seonix-task-detail__meta">
+								<a href="<?php echo esc_url( $affected_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $affected_url ); ?></a>
+								<?php if ( $affected_count > 1 ) : ?>
+									<span class="seonix-task-detail__count">
+										<?php
+										printf(
+											/* translators: %d: number of affected pages */
+											esc_html( _n( '+%d more page', '+%d more pages', $affected_count - 1, 'seonix' ) ),
+											(int) ( $affected_count - 1 )
+										);
+										?>
+									</span>
+								<?php endif; ?>
+							</p>
 						<?php endif; ?>
-					</ul>
-				<?php elseif ( '' !== $affected_url ) : ?>
-					<p class="seonix-task-detail__meta">
-						<a href="<?php echo esc_url( $affected_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $affected_url ); ?></a>
-						<?php if ( $affected_count > 1 ) : ?>
-							<span class="seonix-task-detail__count">
-								<?php
-								printf(
-									/* translators: %d: number of affected pages */
-									esc_html( _n( '+%d more page', '+%d more pages', $affected_count - 1, 'seonix' ) ),
-									(int) ( $affected_count - 1 )
-								);
-								?>
-							</span>
-						<?php endif; ?>
-					</p>
+					</div>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -1144,7 +1226,7 @@ class Seonix_Admin {
 		?>
 		<div class="wrap">
 			<div class="seonix-wrap">
-				<?php $this->render_header(); ?>
+				<?php $this->render_header( $is_connected, $project_name ); ?>
 
 				<div id="seonix-notices"></div>
 

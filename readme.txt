@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.14
+Stable tag: 2.5.15
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 2. Every issue becomes a task with its category, the pages it affects, and its priority.
 
 == Changelog ==
+
+= 2.5.15 =
+* Redesigned the admin UI to match the Seonix design system: a dark Site Health hero with a gradient score ring and per-category pillars, KPI cards (Open issues / Resolved / Came back), the brand purple palette, and a refreshed Issues list and detail dialog. No behaviour change — the connect flow, task sync, filters, and settings work exactly as before; existing connected sites need no reconfiguration.
 
 = 2.5.14 =
 * Fixed the Seonix icon in the WordPress admin menu rendering as a solid white square. The menu now uses the real Seonix favicon, embedded in a form that WordPress core's icon repainting (svg-painter.js) cannot flatten, so the brand mark shows correctly in every menu state.
