@@ -457,6 +457,7 @@ class Seonix_Admin {
 		$cat_labels = array(
 			'seo'       => __( 'SEO', 'seonix' ),
 			'technical' => __( 'Technical', 'seonix' ),
+			'speed'     => __( 'Speed', 'seonix' ),
 			'ai'        => __( 'AI Search', 'seonix' ),
 		);
 
@@ -566,20 +567,36 @@ class Seonix_Admin {
 									<?php foreach ( $cats as $cat ) : ?>
 										<?php
 										$cat_key   = isset( $cat['key'] ) ? (string) $cat['key'] : '';
-										if ( ! in_array( $cat_key, array( 'seo', 'technical', 'ai' ), true ) ) {
+										if ( ! in_array( $cat_key, array( 'seo', 'technical', 'speed', 'ai' ), true ) ) {
 											$cat_key = 'seo';
 										}
-										$cat_score    = isset( $cat['score'] ) ? (int) $cat['score'] : 0;
-										$cat_label    = isset( $cat_labels[ $cat_key ] ) ? $cat_labels[ $cat_key ] : $cat_key;
-										$cat_fill_col = $cat_score >= 90 ? '#22C08A' : ( $cat_score >= 50 ? '#E89A1C' : '#EF4D5E' );
+										// Speed's score is null until the first per-page speed pass. A null
+										// pillar renders "—" with an empty meter and is NOT a category-filter
+										// button (clicking it would only ever show an empty list) — it is a
+										// read-only "measure me" placeholder.
+										$cat_has_score = array_key_exists( 'score', $cat ) && null !== $cat['score'];
+										$cat_score     = $cat_has_score ? (int) $cat['score'] : null;
+										$cat_label     = isset( $cat_labels[ $cat_key ] ) ? $cat_labels[ $cat_key ] : $cat_key;
+										$cat_fill_col  = null === $cat_score ? 'transparent' : ( $cat_score >= 90 ? '#22C08A' : ( $cat_score >= 50 ? '#E89A1C' : '#EF4D5E' ) );
+										$cat_fill_pct  = null === $cat_score ? 0 : $cat_score;
 										?>
-										<button type="button" class="seonix-bar" data-category="<?php echo esc_attr( $cat_key ); ?>" aria-pressed="false">
-											<span class="seonix-bar__label"><?php echo esc_html( $cat_label ); ?></span>
-											<span class="seonix-bar__value"><?php echo esc_html( $cat_score ); ?></span>
-											<span class="seonix-bar__track">
-												<span class="seonix-bar__fill" style="width: <?php echo esc_attr( (string) $cat_score ); ?>%; background: <?php echo esc_attr( $cat_fill_col ); ?>;"></span>
-											</span>
-										</button>
+										<?php if ( null === $cat_score ) : ?>
+											<div class="seonix-bar seonix-bar--static" data-category-display="<?php echo esc_attr( $cat_key ); ?>">
+												<span class="seonix-bar__label"><?php echo esc_html( $cat_label ); ?></span>
+												<span class="seonix-bar__value seonix-bar__value--empty">&mdash;</span>
+												<span class="seonix-bar__track">
+													<span class="seonix-bar__fill" style="width: 0%;"></span>
+												</span>
+											</div>
+										<?php else : ?>
+											<button type="button" class="seonix-bar" data-category="<?php echo esc_attr( $cat_key ); ?>" aria-pressed="false">
+												<span class="seonix-bar__label"><?php echo esc_html( $cat_label ); ?></span>
+												<span class="seonix-bar__value"><?php echo esc_html( (string) $cat_score ); ?></span>
+												<span class="seonix-bar__track">
+													<span class="seonix-bar__fill" style="width: <?php echo esc_attr( (string) $cat_fill_pct ); ?>%; background: <?php echo esc_attr( $cat_fill_col ); ?>;"></span>
+												</span>
+											</button>
+										<?php endif; ?>
 									<?php endforeach; ?>
 								</div>
 							</div>
@@ -714,6 +731,7 @@ class Seonix_Admin {
 									class="seonix-catfilter-bar"
 									data-label-seo="<?php echo esc_attr( $cat_labels['seo'] ); ?>"
 									data-label-technical="<?php echo esc_attr( $cat_labels['technical'] ); ?>"
+									data-label-speed="<?php echo esc_attr( $cat_labels['speed'] ); ?>"
 									data-label-ai="<?php echo esc_attr( $cat_labels['ai'] ); ?>"
 									hidden
 								>
@@ -749,7 +767,7 @@ class Seonix_Admin {
 							foreach ( $rows as $row ) {
 								$r_title    = isset( $row['title'] ) ? (string) $row['title'] : '';
 								$r_category = isset( $row['category'] ) ? (string) $row['category'] : 'seo';
-								if ( ! in_array( $r_category, array( 'seo', 'technical', 'ai' ), true ) ) {
+								if ( ! in_array( $r_category, array( 'seo', 'technical', 'speed', 'ai' ), true ) ) {
 									$r_category = 'seo';
 								}
 								$r_severity = isset( $row['severity'] ) ? (string) $row['severity'] : 'notice';
@@ -916,7 +934,7 @@ class Seonix_Admin {
 		if ( ! in_array( $status, array( 'open', 'solved', 'regressed' ), true ) ) {
 			$status = 'open';
 		}
-		if ( ! in_array( $category, array( 'seo', 'technical', 'ai' ), true ) ) {
+		if ( ! in_array( $category, array( 'seo', 'technical', 'speed', 'ai' ), true ) ) {
 			$category = 'seo';
 		}
 
@@ -935,6 +953,7 @@ class Seonix_Admin {
 		$category_label = array(
 			'seo'       => __( 'SEO', 'seonix' ),
 			'technical' => __( 'Technical', 'seonix' ),
+			'speed'     => __( 'Speed', 'seonix' ),
 			'ai'        => __( 'AI Search', 'seonix' ),
 		);
 		$category_class = 'seonix-cat--' . $category;
@@ -1137,6 +1156,7 @@ class Seonix_Admin {
 		$category_label = array(
 			'seo'       => __( 'SEO', 'seonix' ),
 			'technical' => __( 'Technical', 'seonix' ),
+			'speed'     => __( 'Speed', 'seonix' ),
 			'ai'        => __( 'AI Search', 'seonix' ),
 		);
 
@@ -1177,7 +1197,7 @@ class Seonix_Admin {
 							$i_severity = 'notice';
 						}
 						$i_category = isset( $issue['category'] ) ? (string) $issue['category'] : 'seo';
-						if ( ! in_array( $i_category, array( 'seo', 'technical', 'ai' ), true ) ) {
+						if ( ! in_array( $i_category, array( 'seo', 'technical', 'speed', 'ai' ), true ) ) {
 							$i_category = 'seo';
 						}
 						?>

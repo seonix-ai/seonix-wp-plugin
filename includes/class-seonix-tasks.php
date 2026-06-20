@@ -34,8 +34,13 @@ class Seonix_Tasks {
 	 * Highest TaskView schema_version this plugin understands. A payload whose
 	 * schema_version exceeds this is rejected so a future breaking backend
 	 * change can't silently corrupt the local store.
+	 *
+	 * v2 adds the fourth "speed" category pillar (median per-page PageSpeed
+	 * score) and a NULLABLE category `score` — null until the first speed pass,
+	 * rendered "—" and excluded from the overall mean. Mirrors the frontend
+	 * Site Health page's four-pillar model.
 	 */
-	const SUPPORTED_SCHEMA_VERSION = 1;
+	const SUPPORTED_SCHEMA_VERSION = 2;
 
 	/** Option holding the JSON summary (open/solved/regressed/score + categories). */
 	const OPTION_SUMMARY = 'seonix_tasks_summary';
@@ -181,7 +186,7 @@ class Seonix_Tasks {
 					'recommendation'   => $this->str( $task, 'recommendation' ),
 					'severity'         => $this->enum( $task, 'severity', array( 'error', 'warning', 'notice' ), 'notice' ),
 					'priority'         => $this->enum( $task, 'priority', array( 'high', 'medium', 'low' ), 'low' ),
-					'category'         => $this->enum( $task, 'category', array( 'seo', 'technical', 'ai' ), 'seo' ),
+					'category'         => $this->enum( $task, 'category', array( 'seo', 'technical', 'speed', 'ai' ), 'seo' ),
 					'status'           => $this->enum( $task, 'status', array( 'open', 'solved', 'regressed' ), 'open' ),
 					'affected_url'     => $this->url( $task, 'affected_url' ),
 					'affected_count'   => max( 1, $this->int( $task, 'affected_count' ) ),
@@ -234,9 +239,17 @@ class Seonix_Tasks {
 			if ( ! is_array( $cat ) ) {
 				continue;
 			}
+			// The speed pillar's score is null until the first per-page speed
+			// pass measures it. Preserve that null (the Dashboard renders "—" and
+			// the backend already excludes it from the overall mean) instead of
+			// coercing it to 0, which would read as a real zero score.
+			$cat_score = null;
+			if ( array_key_exists( 'score', $cat ) && null !== $cat['score'] ) {
+				$cat_score = (int) $cat['score'];
+			}
 			$stored_summary['categories'][] = array(
-				'key'   => $this->enum( $cat, 'key', array( 'seo', 'technical', 'ai' ), 'seo' ),
-				'score' => isset( $cat['score'] ) ? (int) $cat['score'] : 0,
+				'key'   => $this->enum( $cat, 'key', array( 'seo', 'technical', 'speed', 'ai' ), 'seo' ),
+				'score' => $cat_score,
 				'open'  => isset( $cat['open'] ) ? (int) $cat['open'] : 0,
 			);
 		}

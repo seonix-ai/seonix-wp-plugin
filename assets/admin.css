@@ -727,15 +727,20 @@
   border-top-color: #fff;
 }
 
-/* pillars column on the right of the hero — these ARE the .seonix-bar
-   category-filter buttons, restyled for the dark surface. */
+/* pillars column on the right of the hero — mirrors the design's
+   .hero-pillars / .pillar-row: a clean bordered column, one row per category
+   (name + value on top, meter below). Each MEASURED pillar is also the
+   .seonix-bar category-filter button (data-category preserved for admin.js);
+   the unmeasured speed pillar is a read-only .seonix-bar--static placeholder.
+   No chip/box at rest — the rows read as plain indicators, flush with the
+   30px column inset. */
 .seonix-hero__pillars {
   position: relative;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 252px;
+  gap: 14px;
+  width: 248px;
   padding-left: 30px;
   border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
@@ -745,59 +750,59 @@
 .seonix-bars {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
-/* Category bar — a <button> that filters the By-issue task list. On the dark
-   hero it reads as a "pillar": name + value on one row, meter below. */
+/* One pillar row: name + value on top (single flex row), meter beneath. */
 .seonix-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label value"
+    "track track";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 7px;
   width: 100%;
-  margin: -6px -9px;
-  padding: 6px 9px;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 9px;
   background: transparent;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.14s ease;
 }
 
-.seonix-bar:hover {
-  background: rgba(255, 255, 255, 0.06);
+/* The unmeasured speed pillar is display-only (no filtering, no pointer). */
+.seonix-bar--static {
+  cursor: default;
 }
 
 .seonix-bar:focus-visible {
-  outline: none;
-  background: rgba(255, 255, 255, 0.09);
-}
-
-/* Active filter — subtle white wash on the dark hero. */
-.seonix-bar.is-filtering {
-  background: rgba(255, 255, 255, 0.12);
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 
 .seonix-bar__label {
-  order: 1;
+  grid-area: label;
   font-size: 12.5px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.82);
   white-space: nowrap;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  transition: color 0.12s ease;
+}
+
+.seonix-bar:not(.seonix-bar--static):hover .seonix-bar__label {
+  color: rgba(255, 255, 255, 0.96);
 }
 
 .seonix-bar.is-filtering .seonix-bar__label {
   color: #fff;
 }
 
-/* the value sits at the end of the label row */
 .seonix-bar__value {
-  order: 2;
+  grid-area: value;
   font-family: var(--sx-mono);
   font-size: 13px;
   font-weight: 700;
@@ -806,8 +811,13 @@
   text-align: right;
 }
 
+/* Unmeasured pillar value ("—") — dimmed so it reads as "not yet measured". */
+.seonix-bar__value--empty {
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .seonix-bar__track {
-  order: 3;
+  grid-area: track;
   height: 6px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.13);
@@ -821,20 +831,14 @@
   transition: width 0.5s ease;
 }
 
-/* lay the label + value on a single flex row, meter underneath */
-.seonix-bar {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "label value"
-    "track track";
-  align-items: center;
-  column-gap: 8px;
+/* Active category filter — a subtle white outline on the selected row (a
+   deliberate "selected" affordance, only while filtering; no box at rest). */
+.seonix-bar.is-filtering {
+  margin: -7px -10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
-
-.seonix-bar__label { grid-area: label; }
-.seonix-bar__value { grid-area: value; }
-.seonix-bar__track { grid-area: track; margin-top: 1px; }
 
 /* ════════════════════════════════════════════════════════════════
  * Dashboard — KPI cards (Open / Resolved / Came back)
@@ -1413,6 +1417,7 @@
 
 .seonix-cat--seo { background: var(--sx-ac-soft); color: var(--sx-ac-deep); }
 .seonix-cat--technical { background: #e4f1ff; color: #1366c8; }
+.seonix-cat--speed { background: var(--sx-amber-soft); color: var(--sx-amber-ink); }
 .seonix-cat--ai { background: var(--sx-green-soft); color: var(--sx-green-ink); }
 
 .seonix-task__info {
