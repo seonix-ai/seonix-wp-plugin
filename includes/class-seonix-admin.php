@@ -386,47 +386,101 @@ class Seonix_Admin {
 	// ─── Render: shared header ───────────────────────────────────
 
 	/**
-	 * Render the shared page header (logo + title). Both render methods call
-	 * this so the chrome stays identical across the two pages.
+	 * Render the shared chrome: a white top bar (brand lockup + version on the
+	 * left, connection pill on the right) and a white nav row with Site Health /
+	 * Settings tabs — mirroring the Seonix app shell ("Seonix SEO.html"). The
+	 * tabs link to the two WordPress admin screens (Problems / Settings); the
+	 * active one is underlined in brand purple. Both render methods call this so
+	 * the chrome is identical across pages.
 	 *
-	 * The in-page nav-tab bar that used to live here was removed: it duplicated
-	 * the WordPress submenu (Seonix → Problems / Settings already appears in the
-	 * left admin menu), so the tabs were redundant chrome.
+	 * @param string $active       Which tab is active: 'dashboard' | 'settings'.
+	 * @param bool   $is_connected Whether the site is linked to Seonix.
+	 * @param string $project_name Linked project name (for the connection pill).
 	 */
-	private function render_header( bool $is_connected = false, string $project_name = '' ) {
+	private function render_header( string $active = 'dashboard', bool $is_connected = false, string $project_name = '' ) {
+		$tabs = array(
+			'dashboard' => array(
+				'label' => __( 'Site Health', 'seonix' ),
+				'url'   => admin_url( 'admin.php?page=' . self::MENU_SLUG ),
+				'icon'  => 'grid',
+			),
+			'settings'  => array(
+				'label' => __( 'Settings', 'seonix' ),
+				'url'   => admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ),
+				'icon'  => 'sliders',
+			),
+		);
 		?>
-		<div class="seonix-header">
-			<img class="seonix-header__logo" src="<?php echo esc_url( plugins_url( 'assets/seonix-logo.png', SEONIX_FILE ) ); ?>" alt="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>" width="40" height="40" />
-			<div class="seonix-header__text">
-				<h1><?php esc_html_e( 'Seonix', 'seonix' ); ?></h1>
-				<p><?php esc_html_e( 'Your site health and SEO tasks, kept in sync with Seonix.', 'seonix' ); ?></p>
-			</div>
-			<span class="seonix-ver"><?php echo esc_html( 'v' . SEONIX_VERSION ); ?></span>
-			<span class="seonix-header__spacer"></span>
-			<?php if ( $is_connected ) : ?>
-				<span class="seonix-connpill">
-					<span class="seonix-status__dot seonix-status__dot--green"></span>
-					<?php
-					if ( '' !== $project_name ) {
-						echo wp_kses(
-							sprintf(
-								/* translators: %s: Seonix project name */
-								__( 'Connected · %s', 'seonix' ),
-								'<b>' . esc_html( $project_name ) . '</b>'
-							),
-							array( 'b' => array() )
-						);
-					} else {
-						esc_html_e( 'Connected', 'seonix' );
-					}
-					?>
-				</span>
-				<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-reconnect-btn">
-					<?php esc_html_e( 'Reconnect', 'seonix' ); ?>
-				</button>
-			<?php endif; ?>
-		</div>
+		<div class="seonix-app">
+			<header class="seonix-topbar">
+				<div class="seonix-shellbar seonix-topbar__inner">
+					<div class="seonix-brandlock">
+						<img class="seonix-brandlock__logo" src="<?php echo esc_url( plugins_url( 'assets/seonix-logo.png', SEONIX_FILE ) ); ?>" alt="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>" width="34" height="34" />
+						<span class="seonix-brandtext"><?php esc_html_e( 'Seonix', 'seonix' ); ?></span>
+						<span class="seonix-ver"><?php echo esc_html( 'v' . SEONIX_VERSION ); ?></span>
+					</div>
+					<?php if ( $is_connected ) : ?>
+						<span class="seonix-connpill">
+							<span class="seonix-status__dot seonix-status__dot--green"></span>
+							<?php
+							if ( '' !== $project_name ) {
+								echo wp_kses(
+									sprintf(
+										/* translators: %s: Seonix project name */
+										__( 'Connected · %s', 'seonix' ),
+										'<b>' . esc_html( $project_name ) . '</b>'
+									),
+									array( 'b' => array() )
+								);
+							} else {
+								esc_html_e( 'Connected', 'seonix' );
+							}
+							?>
+						</span>
+					<?php endif; ?>
+				</div>
+			</header>
+			<nav class="seonix-navrow" aria-label="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>">
+				<div class="seonix-shellbar seonix-navrow__inner">
+					<?php foreach ( $tabs as $key => $tab ) : ?>
+						<a class="seonix-navtab<?php echo $key === $active ? ' is-active' : ''; ?>"
+							href="<?php echo esc_url( $tab['url'] ); ?>"
+							<?php echo $key === $active ? 'aria-current="page"' : ''; ?>>
+							<?php $this->nav_icon( $tab['icon'] ); ?>
+							<span><?php echo esc_html( $tab['label'] ); ?></span>
+						</a>
+					<?php endforeach; ?>
+				</div>
+			</nav>
+			<div class="seonix-content">
+				<div id="seonix-notices"></div>
 		<?php
+	}
+
+	/**
+	 * Close the app shell opened by render_header() (the .seonix-content and
+	 * .seonix-app wrappers). Every render method pairs render_header() with this.
+	 */
+	private function render_footer(): void {
+		?>
+			</div><!-- .seonix-content -->
+		</div><!-- .seonix-app -->
+		<?php
+	}
+
+	/**
+	 * Echo a small inline nav-tab icon (trusted static SVG, no user data).
+	 *
+	 * @param string $name Icon key: 'grid' | 'sliders'.
+	 */
+	private function nav_icon( string $name ): void {
+		$paths = array(
+			'grid'    => '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>',
+			'sliders' => '<path d="M4 8h9"/><path d="M17 8h3"/><circle cx="15" cy="8" r="2.2"/><path d="M4 16h3"/><path d="M11 16h9"/><circle cx="9" cy="16" r="2.2"/>',
+		);
+		$inner = isset( $paths[ $name ] ) ? $paths[ $name ] : '';
+		// Static, developer-authored SVG — safe to emit verbatim.
+		echo '<svg class="seonix-navtab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' . $inner . '</svg>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted static markup.
 	}
 
 	// ─── Render: Dashboard ───────────────────────────────────────
@@ -462,11 +516,7 @@ class Seonix_Admin {
 		);
 
 		?>
-		<div class="wrap">
-			<div class="seonix-wrap">
-				<?php $this->render_header( $is_connected, $project_name ); ?>
-
-				<div id="seonix-notices"></div>
+		<?php $this->render_header( 'dashboard', $is_connected, $project_name ); ?>
 
 				<?php if ( ! $is_connected ) : ?>
 					<!-- Connect CTA — shown until the site is linked. Once connected
@@ -887,8 +937,7 @@ class Seonix_Admin {
 						</div>
 					</div>
 				<?php endif; ?>
-			</div>
-		</div>
+		<?php $this->render_footer(); ?>
 		<?php
 	}
 
@@ -1244,18 +1293,19 @@ class Seonix_Admin {
 		) );
 
 		?>
-		<div class="wrap">
-			<div class="seonix-wrap">
-				<?php $this->render_header( $is_connected, $project_name ); ?>
-
-				<div id="seonix-notices"></div>
+		<?php $this->render_header( 'settings', $is_connected, $project_name ); ?>
 
 				<?php if ( $is_connected ) : ?>
 					<!-- Status card -->
 					<div class="seonix-card seonix-card--success">
-						<div class="seonix-status seonix-status--connected">
-							<span class="seonix-status__dot seonix-status__dot--green"></span>
-							<?php esc_html_e( 'Connected', 'seonix' ); ?>
+						<div class="seonix-statusrow">
+							<div class="seonix-status seonix-status--connected">
+								<span class="seonix-status__dot seonix-status__dot--green"></span>
+								<?php esc_html_e( 'Connected', 'seonix' ); ?>
+							</div>
+							<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-reconnect-btn">
+								<?php esc_html_e( 'Reconnect', 'seonix' ); ?>
+							</button>
 						</div>
 
 						<table class="seonix-info-table">
@@ -1415,8 +1465,7 @@ class Seonix_Admin {
 						</div>
 					</div>
 				</div>
-			</div>
-		</div>
+		<?php $this->render_footer(); ?>
 		<?php
 	}
 }

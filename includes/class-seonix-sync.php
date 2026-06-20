@@ -212,6 +212,11 @@ class Seonix_Sync {
 
 		$action = $update ? 'updated' : 'created';
 		$this->push_content_event( $action, $post );
+
+		// Ping IndexNow (Bing/Yandex) so they re-crawl the changed URL within
+		// minutes. Independent of the Seonix backend connection — it's a pure
+		// SEO benefit gated only by the auto-IndexNow option. Non-blocking.
+		Seonix_IndexNow::submit_post( $post );
 	}
 
 	/**

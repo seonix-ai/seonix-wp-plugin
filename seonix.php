@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: Real-time AI Agent for Technical SEO, AI Content & Autonomous Growth. Grow your SEO with real-time site audits, AI-written articles, and one-click technical fixes — an autonomous AI agent publishes on autopilot.
- * Version:     2.5.15
+ * Version:     2.5.23
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,17 +17,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.5.15' );
+define( 'SEONIX_VERSION', '2.5.23' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
 
 require_once SEONIX_DIR . 'includes/class-seonix-compat.php';
 require_once SEONIX_DIR . 'includes/class-seonix-auth.php';
+require_once SEONIX_DIR . 'includes/class-seonix-indexnow.php';
 require_once SEONIX_DIR . 'includes/class-seonix-sync.php';
 require_once SEONIX_DIR . 'includes/class-seonix-tasks.php';
 require_once SEONIX_DIR . 'includes/class-seonix-rest-api.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin.php';
+require_once SEONIX_DIR . 'includes/class-seonix-metabox.php';
 require_once SEONIX_DIR . 'includes/class-seonix-llmtxt.php';
 require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
 
@@ -67,6 +69,7 @@ function seonix_init() {
 	$tasks    = new Seonix_Tasks();
 	$rest_api = new Seonix_REST_API( $sync, $tasks );
 	$admin    = new Seonix_Admin( $sync, $tasks );
+	$metabox  = new Seonix_Metabox( $tasks );
 	$schema   = new Seonix_Schema();
 
 	// Version-gated DB upgrade: when the stored db version differs from the
@@ -111,6 +114,9 @@ function seonix_init() {
 	add_action( 'admin_menu', array( $admin, 'add_menu_page' ) );
 	add_action( 'admin_enqueue_scripts', array( $admin, 'enqueue_assets' ) );
 
+	// Per-page audit meta box in the post editor (Yoast-style).
+	$metabox->register();
+
 	// Front-end stylesheet for content blocks injected by the plugin
 	// (currently the key-takeaways callout). Loaded on singular post pages
 	// only — themes that override `the_content` for other surfaces can
@@ -134,6 +140,9 @@ function seonix_init() {
 	// Content sync hooks.
 	add_action( 'save_post', array( $sync, 'on_save_post' ), 10, 3 );
 	add_action( 'before_delete_post', array( $sync, 'on_delete_post' ) );
+
+	// Serve the IndexNow verification key at its root URL (/{key}.txt).
+	add_action( 'template_redirect', array( 'Seonix_IndexNow', 'serve_key' ) );
 
 	// Weekly full sync via WP cron.
 	add_action( 'seonix_weekly_sync', array( $sync, 'push_full_sync' ) );
@@ -304,6 +313,8 @@ function seonix_uninstall() {
 		'seonix_sync_posts',
 		'seonix_sync_products',
 		'seonix_indexnow_key',
+		'seonix_indexnow_auto',
+		'seonix_indexnow_last',
 		'seonix_version',
 		'seonix_db_version',
 		'seonix_llmstxt_last_generated',

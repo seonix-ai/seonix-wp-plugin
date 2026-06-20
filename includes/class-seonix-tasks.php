@@ -340,6 +340,111 @@ class Seonix_Tasks {
 	}
 
 	/**
+	 * Normalize a URL for tolerant page matching: lowercase host without a
+	 * leading "www.", path with no trailing slash, no scheme / query / fragment.
+	 * So "https://www.Example.com/About/?x=1" and "http://example.com/about"
+	 * compare equal. Static so the meta box can call it without an instance.
+	 *
+	 * @param string $url Any absolute or relative URL.
+	 * @return string Normalized "host/path" (or "" for an empty input).
+	 */
+	public static function normalize_url( string $url ): string {
+		$url = trim( $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) ) {
+			return strtolower( rtrim( $url, '/' ) );
+		}
+		$host = isset( $parts['host'] ) ? strtolower( $parts['host'] ) : '';
+		$host = preg_replace( '/^www\./', '', $host );
+		$path = isset( $parts['path'] ) ? rtrim( $parts['path'], '/' ) : '';
+		if ( '' === $path ) {
+			$path = '/';
+		}
+		return $host . $path;
+	}
+
+	/**
+	 * Return the ACTIVE (open/regressed) issues recorded against one page URL,
+	 * sorted error→warning→notice then high→low priority. Used by the per-page
+	 * editor meta box to show "what's wrong with THIS page" from the last scan.
+	 * Matching is tolerant (see normalize_url) so the WP permalink lines up with
+	 * the canonical crawl URL despite www / trailing-slash / scheme differences.
+	 *
+	 * @param string $url The page URL (typically get_permalink()).
+	 * @return array<int,array<string,mixed>> Indexed issue rows for that URL.
+	 */
+	public function issues_for_url( string $url ): array {
+		$target = self::normalize_url( $url );
+		if ( '' === $target ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( $this->all() as $row ) {
+			// Find this URL's status within the task's affected-pages list; fall
+			// back to the single affected_url + the row's own status.
+			$page_status = null;
+			foreach ( self::decode_pages( isset( $row['affected_pages'] ) ? $row['affected_pages'] : '' ) as $pg ) {
+				if ( self::normalize_url( $pg['url'] ) === $target ) {
+					$page_status = $pg['status'];
+					break;
+				}
+			}
+			if ( null === $page_status ) {
+				$affected_url = isset( $row['affected_url'] ) ? (string) $row['affected_url'] : '';
+				if ( '' !== $affected_url && self::normalize_url( $affected_url ) === $target ) {
+					$page_status = isset( $row['status'] ) ? (string) $row['status'] : 'open';
+				}
+			}
+			// Not on this page, or already solved on it → not an active page issue.
+			if ( null === $page_status || 'solved' === $page_status ) {
+				continue;
+			}
+
+			$category = isset( $row['category'] ) ? (string) $row['category'] : 'seo';
+			if ( ! in_array( $category, array( 'seo', 'technical', 'ai' ), true ) ) {
+				$category = 'seo';
+			}
+			$severity = isset( $row['severity'] ) ? (string) $row['severity'] : 'notice';
+			if ( ! in_array( $severity, array( 'error', 'warning', 'notice' ), true ) ) {
+				$severity = 'notice';
+			}
+			$priority = isset( $row['priority'] ) ? (string) $row['priority'] : 'low';
+			if ( ! in_array( $priority, array( 'high', 'medium', 'low' ), true ) ) {
+				$priority = 'low';
+			}
+
+			$out[] = array(
+				'title'          => isset( $row['title'] ) ? (string) $row['title'] : '',
+				'description'    => isset( $row['description'] ) ? (string) $row['description'] : '',
+				'recommendation' => isset( $row['recommendation'] ) ? (string) $row['recommendation'] : '',
+				'category'       => $category,
+				'severity'       => $severity,
+				'priority'       => $priority,
+				'code'           => isset( $row['code'] ) ? (string) $row['code'] : '',
+				'informational'  => ! empty( $row['informational'] ),
+				'status'         => $page_status,
+			);
+		}
+
+		$sev_rank  = array( 'error' => 0, 'warning' => 1, 'notice' => 2 );
+		$prio_rank = array( 'high' => 0, 'medium' => 1, 'low' => 2 );
+		usort(
+			$out,
+			static function ( $a, $b ) use ( $sev_rank, $prio_rank ) {
+				if ( $sev_rank[ $a['severity'] ] !== $sev_rank[ $b['severity'] ] ) {
+					return $sev_rank[ $a['severity'] ] - $sev_rank[ $b['severity'] ];
+				}
+				return $prio_rank[ $a['priority'] ] - $prio_rank[ $b['priority'] ];
+			}
+		);
+		return $out;
+	}
+
+	/**
 	 * Pull the latest TaskView from the connected Seonix backend and store it.
 	 *
 	 * Server-side GET {engine}/api/plugin/tasks with the plugin's own Bearer

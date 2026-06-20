@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.15
+Stable tag: 2.5.23
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,22 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 2. Every issue becomes a task with its category, the pages it affects, and its priority.
 
 == Changelog ==
+
+= 2.5.22 =
+* Fixed the top bar / nav alignment: the brand and tabs are now centered with the page content (a class name collided with the hero pillar style and pushed them to the left edge).
+
+= 2.5.21 =
+* Admin screens now paint the full warm app-shell background, so the white top bar and cards read with proper depth (matches the Seonix Optimizer look).
+
+= 2.5.20 =
+* Per-page audit now appears in the block-editor document sidebar (like Yoast), not just at the bottom. Pages added or changed after the last scan are clearly marked "Not scanned yet" instead of showing a misleading "all clear".
+
+= 2.5.18 =
+* Admin shell now matches the Seonix app: a flush full-width white top bar (brand + version + connection status) and a Site Health / Settings nav-tab row with the active tab underlined in brand purple. Reconnect moved into Settings. No behaviour change.
+
+= 2.5.16 =
+* **Per-page audit in the editor.** A new "Seonix — Page audit" box on the post/page editor shows that page's issues from the last Seonix scan — a traffic light, the SEO / Technical / AI-Search breakdown, and each issue's recommendation — so you can see what to fix without leaving the editor. Read-only (the analysis runs on the Seonix platform); it links straight to the full issue list.
+* **IndexNow auto-submit.** Publishing or updating a public post or page now automatically pings IndexNow, so Bing and Yandex re-crawl the changed URL within minutes instead of waiting for a scheduled crawl. The verification key is generated and installed automatically on the first submission — no setup step needed. Drafts, private/non-public content, and pages marked noindex (Yoast, Rank Math, SEOPress) are skipped, and the same URL is not re-submitted more than once per 10 minutes. On by default. Note: Google does not participate in IndexNow.
 
 = 2.5.15 =
 * Redesigned the admin UI to match the Seonix design system: a dark Site Health hero with a gradient score ring and per-category pillars, KPI cards (Open issues / Resolved / Came back), the brand purple palette, and a refreshed Issues list and detail dialog. No behaviour change — the connect flow, task sync, filters, and settings work exactly as before; existing connected sites need no reconfiguration.

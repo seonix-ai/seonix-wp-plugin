@@ -10,7 +10,8 @@
  */
 
 /* ── Design tokens ── */
-.seonix-wrap {
+.seonix-app,
+.seonix-metabox {
   --sx-ink: #0f0a24;
   --sx-ink-2: #1f1840;
   --sx-mute: #7a7693;
@@ -42,60 +43,127 @@
   --sx-mono: "JetBrains Mono", ui-monospace, "SF Mono", Monaco, Consolas, monospace;
 }
 
-/* ── Reset & base ── */
+/* ── App shell base ──
+   The whole admin screen is one app shell: full-width white top bar + nav
+   row + a centered content column. Mirrors the Seonix Optimizer plugin. */
 
-.seonix-wrap {
-  max-width: 1280px;
-  margin: 16px 20px 48px 0;
+.seonix-app {
+  margin: 0;
+  background: transparent;
   font-family: var(--sx-sans);
   color: var(--sx-ink);
   -webkit-font-smoothing: antialiased;
 }
 
-.seonix-wrap *,
-.seonix-wrap *::before,
-.seonix-wrap *::after {
+.seonix-app *,
+.seonix-app *::before,
+.seonix-app *::after {
   box-sizing: border-box;
 }
 
-/* ── Page header (brand lockup + version + connection pill) ── */
+.seonix-app a { text-decoration: none; }
 
-.seonix-header {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  margin: 4px 0 18px;
+/* WordPress chrome overrides — scoped to the Seonix admin screens ONLY (by
+   body class) so the post editor (which also loads this stylesheet for the
+   meta box) is never touched. Drop #wpcontent's left padding so the bands sit
+   flush to the admin menu, and paint the whole area the warm surface so the
+   full-width bands read as an app header. */
+/* Paint the whole admin content area the warm surface so the white bands +
+   cards read as an app shell. LITERAL hex (not var(--sx-paper-warm)) — the
+   tokens live on .seonix-app, which is a DESCENDANT of these wrappers, so the
+   variable doesn't reach body/#wpcontent. !important beats the active admin
+   colour-scheme stylesheet. */
+body.toplevel_page_seonix,
+body.seonix_page_seonix-settings,
+body.toplevel_page_seonix #wpwrap,
+body.toplevel_page_seonix #wpbody,
+body.toplevel_page_seonix #wpbody-content,
+body.toplevel_page_seonix #wpcontent,
+body.seonix_page_seonix-settings #wpwrap,
+body.seonix_page_seonix-settings #wpbody,
+body.seonix_page_seonix-settings #wpbody-content,
+body.seonix_page_seonix-settings #wpcontent {
+  background: #f8f7fc !important;
 }
 
-.seonix-header__logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+body.toplevel_page_seonix #wpcontent,
+body.seonix_page_seonix-settings #wpcontent {
+  padding-left: 0;
+}
+
+body.toplevel_page_seonix #wpbody-content,
+body.seonix_page_seonix-settings #wpbody-content {
+  padding-bottom: 0;
+}
+
+/* WordPress admin notices keep a tidy inset that lines up with the bands. */
+body.toplevel_page_seonix #wpbody-content > .notice,
+body.toplevel_page_seonix #wpbody-content > .update-nag,
+body.seonix_page_seonix-settings #wpbody-content > .notice,
+body.seonix_page_seonix-settings #wpbody-content > .update-nag {
+  margin: 14px 32px 0;
+  border-radius: 10px;
+}
+
+/* shared centered band — caps the top bar / nav content width and centers it.
+   NB: named .seonix-shellbar, NOT .seonix-bar — the latter is the hero pillar
+   button (display:grid, negative margins) and would override this, pushing the
+   brand/tabs out of alignment with the centered content. */
+.seonix-shellbar {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* centered content column under the bands */
+.seonix-content {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 24px 32px 64px;
+}
+
+/* ── App shell: full-width white top bar + nav-tab row ──
+   The .seonix-topbar / .seonix-navrow are full-width white bands (border-bottom
+   only). Their inner row also carries .seonix-bar, so the brand/tabs are capped
+   at 1280px and centered — lined up with the centered .seonix-content below. */
+
+.seonix-topbar {
+  background: var(--sx-paper);
+  border-bottom: 1px solid var(--sx-border);
+}
+
+.seonix-topbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 32px;
+  flex-wrap: wrap;
+}
+
+.seonix-brandlock {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.seonix-brandlock__logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: block;
   flex-shrink: 0;
   box-shadow: 0 4px 14px rgba(139, 61, 255, 0.22);
 }
 
-.seonix-header__text {
-  min-width: 0;
-}
-
-.seonix-header h1 {
-  font-size: 21px;
+.seonix-brandtext {
   font-weight: 700;
   letter-spacing: -0.5px;
+  font-size: 21px;
   color: var(--sx-ink);
-  margin: 0;
-  padding: 0;
-  line-height: 1.2;
-}
-
-.seonix-header p {
-  font-size: 13px;
-  color: var(--sx-mute);
-  margin: 2px 0 0;
-  line-height: 1.5;
-  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* version chip beside the brand name */
@@ -106,12 +174,51 @@
   letter-spacing: 0.3px;
   color: var(--sx-mute-dim);
   align-self: flex-start;
-  margin-top: 3px;
+  padding-top: 3px;
 }
 
-/* connection pill pushed to the right of the header */
-.seonix-header__spacer {
-  flex: 1;
+.seonix-navrow {
+  background: var(--sx-paper);
+  border-bottom: 1px solid var(--sx-border);
+}
+
+.seonix-navrow__inner {
+  display: flex;
+  gap: 2px;
+  padding: 0 30px;
+}
+
+.seonix-navtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 13px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--sx-mute);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s;
+  white-space: nowrap;
+}
+
+.seonix-navtab:hover {
+  color: var(--sx-ink-2);
+}
+
+.seonix-navtab:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.seonix-navtab.is-active {
+  color: var(--sx-ac);
+  border-bottom-color: var(--sx-ac);
+}
+
+.seonix-navtab__icon {
+  flex-shrink: 0;
 }
 
 .seonix-connpill {
@@ -130,6 +237,20 @@
 
 .seonix-connpill b {
   font-weight: 700;
+}
+
+/* Settings status card: connected pill on the left, Reconnect on the right. */
+.seonix-statusrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.seonix-statusrow .seonix-status {
+  margin-bottom: 0;
 }
 
 /* ── Connection bar (slim, full width) ── */
@@ -1784,20 +1905,20 @@ body.seonix-modal-open {
 
 /* ── Override WP admin notices inside our wrap ── */
 
-.seonix-wrap .notice {
+.seonix-app .notice {
   border-radius: 10px;
   margin: 0 0 16px;
   border-left-width: 0;
   padding: 12px 16px;
 }
 
-.seonix-wrap .notice-success {
+.seonix-app .notice-success {
   background: var(--sx-green-soft);
   border: 1px solid color-mix(in srgb, var(--sx-green) 30%, #fff);
   color: var(--sx-green-ink);
 }
 
-.seonix-wrap .notice-error {
+.seonix-app .notice-error {
   background: var(--sx-red-soft);
   border: 1px solid color-mix(in srgb, var(--sx-red) 30%, #fff);
   color: var(--sx-red-ink);
@@ -1805,17 +1926,172 @@ body.seonix-modal-open {
 
 /* ── Scrollbars (match the design) ── */
 
-.seonix-wrap ::-webkit-scrollbar,
+.seonix-app ::-webkit-scrollbar,
 .seonix-modal ::-webkit-scrollbar {
   width: 11px;
   height: 11px;
 }
 
-.seonix-wrap ::-webkit-scrollbar-thumb,
+.seonix-app ::-webkit-scrollbar-thumb,
 .seonix-modal ::-webkit-scrollbar-thumb {
   background: #dad3e6;
   border-radius: 99px;
   border: 3px solid var(--sx-paper-warm);
+}
+
+/* ════════════════════════════════════════════════════════════════
+ * Editor meta box — per-page audit (Yoast-style)
+ * Lives outside .seonix-wrap, so it carries its own token scope (set
+ * with .seonix-wrap at the top) and base font. Bleeds to the meta box
+ * edges so the header/footer bands span full width.
+ * ════════════════════════════════════════════════════════════════ */
+
+.seonix-metabox {
+  font-family: var(--sx-sans);
+  color: var(--sx-ink);
+  -webkit-font-smoothing: antialiased;
+  margin: 0 -12px -12px;
+}
+
+.seonix-metabox *,
+.seonix-metabox *::before,
+.seonix-metabox *::after {
+  box-sizing: border-box;
+}
+
+.seonix-mb-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border-bottom: 1px solid var(--sx-border-soft);
+}
+
+.seonix-mb-light {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.seonix-mb-light--red { background: var(--sx-red); box-shadow: 0 0 0 3px var(--sx-red-soft); }
+.seonix-mb-light--amber { background: var(--sx-amber); box-shadow: 0 0 0 3px var(--sx-amber-soft); }
+.seonix-mb-light--blue { background: var(--sx-ac); box-shadow: 0 0 0 3px var(--sx-ac-soft); }
+.seonix-mb-light--green { background: var(--sx-green); box-shadow: 0 0 0 3px var(--sx-green-soft); }
+.seonix-mb-light--mute { background: var(--sx-mute-dim); box-shadow: 0 0 0 3px var(--sx-track); }
+
+/* Sidebar-panel variant: it sits inside Gutenberg's own padded panel, so drop
+   the meta-box edge bleed. */
+.seonix-metabox--panel { margin: 0; }
+.seonix-metabox--panel .seonix-mb-head { padding: 12px 0 14px; }
+.seonix-metabox--panel .seonix-mb-group { padding: 12px 0; }
+.seonix-metabox--panel .seonix-mb-foot { margin: 0 -16px -16px; padding: 12px 16px; }
+
+.seonix-mb-headtext {
+  min-width: 0;
+}
+
+.seonix-mb-verdict {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--sx-ink);
+  line-height: 1.3;
+}
+
+.seonix-mb-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sx-mute);
+  margin-top: 3px;
+}
+
+.seonix-mb-group {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--sx-border-soft);
+}
+
+.seonix-mb-group:last-child {
+  border-bottom: none;
+}
+
+.seonix-mb-grouphead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.seonix-mb-groupcount {
+  font-family: var(--sx-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sx-mute-dim);
+}
+
+.seonix-mb-issue {
+  display: flex;
+  gap: 8px;
+  padding: 7px 0;
+}
+
+.seonix-mb-issue .seonix-pagedot {
+  margin-top: 5px;
+}
+
+.seonix-mb-issuebody {
+  min-width: 0;
+}
+
+.seonix-mb-issuetitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sx-ink);
+  line-height: 1.4;
+}
+
+.seonix-mb-issuerec {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sx-mute);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.seonix-mb-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--sx-border-soft);
+  background: var(--sx-paper-warm);
+}
+
+.seonix-mb-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sx-ac);
+  text-decoration: none;
+}
+
+.seonix-mb-link:hover {
+  color: var(--sx-ac-deep);
+}
+
+.seonix-mb-synced {
+  font-family: var(--sx-mono);
+  font-size: 11px;
+  color: var(--sx-mute-dim);
+}
+
+.seonix-mb-note {
+  padding: 16px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--sx-mute);
 }
 
 /* ── Task table: responsive (stack on narrow) ── */
