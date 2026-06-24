@@ -96,7 +96,7 @@ class Seonix_Metabox {
 
 		wp_enqueue_style(
 			'seonix-admin-fonts',
-			'https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap',
+			SEONIX_URL . 'assets/fonts/fonts.css',
 			array(),
 			SEONIX_VERSION
 		);
@@ -155,6 +155,7 @@ class Seonix_Metabox {
 			'i18n'    => array(
 				'viewAll'  => __( 'View all issues', 'seonix' ),
 				'optional' => __( 'Optional', 'seonix' ),
+				/* translators: %s: human-readable age, e.g. "2 hours" — how long ago the page was last scanned. */
 				'scanned'  => __( 'scanned %s ago', 'seonix' ),
 			),
 			'groups'  => array(),
@@ -215,10 +216,18 @@ class Seonix_Metabox {
 				$notices++;
 			}
 			$grouped[ $iss['category'] ][] = array(
-				'title'          => $iss['title'],
-				'severity'       => $iss['severity'],
-				'recommendation' => $iss['recommendation'],
-				'informational'  => ! empty( $iss['informational'] ),
+				'title'                => $iss['title'],
+				'severity'             => $iss['severity'],
+				'recommendation'       => $iss['recommendation'],
+				'informational'        => ! empty( $iss['informational'] ),
+				'description'          => isset( $iss['description'] ) ? $iss['description'] : '',
+				'why_it_matters'       => isset( $iss['why_it_matters'] ) ? $iss['why_it_matters'] : '',
+				'how_to_fix_steps'     => isset( $iss['how_to_fix_steps'] ) && is_array( $iss['how_to_fix_steps'] ) ? $iss['how_to_fix_steps'] : array(),
+				'bad_example_code'     => isset( $iss['bad_example_code'] ) ? $iss['bad_example_code'] : '',
+				'bad_example_caption'  => isset( $iss['bad_example_caption'] ) ? $iss['bad_example_caption'] : '',
+				'good_example_code'    => isset( $iss['good_example_code'] ) ? $iss['good_example_code'] : '',
+				'good_example_caption' => isset( $iss['good_example_caption'] ) ? $iss['good_example_caption'] : '',
+				'warnings'             => isset( $iss['warnings'] ) && is_array( $iss['warnings'] ) ? $iss['warnings'] : array(),
 			);
 		}
 		$total = count( $issues );

@@ -198,7 +198,7 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 		// [^{}]*? regex over the enclosing braces never matches. Instead we
 		// walk every "alt":"" occurrence and check a window around it for the
 		// matching basename URL — same outcome, no nested-brace headaches.
-		$alt_json_inner = trim( json_encode( $alt, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ), '"' );
+		$alt_json_inner = trim( (string) wp_json_encode( $alt, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ), '"' );
 		$replacement    = '"alt":"' . $alt_json_inner . '"';
 		$base_re        = '~' . $base . '~i';
 

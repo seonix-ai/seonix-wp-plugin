@@ -226,35 +226,14 @@ class Seonix_Fix_Term_Meta_Description implements Seonix_Fix_Method {
 	// ─── SEO-engine detection + read/write ───────────────────────────────
 
 	/**
-	 * Detect the active SEO plugin in priority order.
+	 * Detect the active SEO plugin in priority order. Delegates to the shared
+	 * Seonix_SEO_Engine so post-meta and term-meta fixes agree on which plugin
+	 * owns the site's SEO fields.
+	 *
 	 * @return 'yoast'|'rankmath'|'aioseo'|null
 	 */
 	private function detect_active_engine(): ?string {
-		$is_active = function ( string $plugin ): bool {
-			if ( function_exists( 'is_plugin_active' ) ) {
-				return (bool) call_user_func( 'is_plugin_active', $plugin );
-			}
-			$active = function_exists( 'get_option' ) ? (array) get_option( 'active_plugins', array() ) : array();
-			return in_array( $plugin, $active, true );
-		};
-
-		// Detection also accepts presence of the WPSEO class so the
-		// premium-only file path doesn't matter.
-		if ( $is_active( 'wordpress-seo/wp-seo.php' )
-			|| $is_active( 'wordpress-seo-premium/wp-seo-premium.php' )
-			|| class_exists( 'WPSEO_Options' )
-			|| class_exists( 'WPSEO_Taxonomy_Meta' ) ) {
-			return 'yoast';
-		}
-		if ( $is_active( 'seo-by-rank-math/rank-math.php' ) || defined( 'RANK_MATH_VERSION' ) ) {
-			return 'rankmath';
-		}
-		if ( $is_active( 'all-in-one-seo-pack/all_in_one_seo_pack.php' )
-			|| $is_active( 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php' )
-			|| defined( 'AIOSEO_VERSION' ) ) {
-			return 'aioseo';
-		}
-		return null;
+		return Seonix_SEO_Engine::detect();
 	}
 
 	/**

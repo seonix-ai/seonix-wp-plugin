@@ -1,0 +1,13 @@
+/*
+ * Self-hosted webfonts for the Seonix admin UI.
+ * Inter Tight + JetBrains Mono — SIL Open Font License 1.1 (see LICENSE.txt).
+ * Bundled locally (NOT loaded from a third-party CDN) per WordPress.org plugin
+ * guidelines. Subsets: latin, latin-ext.
+ */
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:400;font-display:swap;src:url('inter-tight-400.woff2') format('woff2');}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:500;font-display:swap;src:url('inter-tight-500.woff2') format('woff2');}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:600;font-display:swap;src:url('inter-tight-600.woff2') format('woff2');}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:700;font-display:swap;src:url('inter-tight-700.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('jetbrains-mono-400.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('jetbrains-mono-500.woff2') format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:700;font-display:swap;src:url('jetbrains-mono-700.woff2') format('woff2');}

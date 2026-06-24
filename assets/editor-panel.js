@@ -16,14 +16,27 @@
 	var registerPlugin = wp.plugins.registerPlugin;
 	var el = wp.element.createElement;
 	var Fragment = wp.element.Fragment;
+	var useState = wp.element.useState;
 
-	// PluginDocumentSettingPanel moved from wp.editPost to wp.editor in WP 6.6.
+	// PluginDocumentSettingPanel / PluginSidebar / PluginSidebarMoreMenuItem all
+	// moved from wp.editPost to wp.editor in WP 6.6, so look in both namespaces.
 	var Panel =
 		( wp.editor && wp.editor.PluginDocumentSettingPanel ) ||
 		( wp.editPost && wp.editPost.PluginDocumentSettingPanel ) ||
 		null;
+	var Sidebar =
+		( wp.editor && wp.editor.PluginSidebar ) ||
+		( wp.editPost && wp.editPost.PluginSidebar ) ||
+		null;
+	var SidebarMoreMenuItem =
+		( wp.editor && wp.editor.PluginSidebarMoreMenuItem ) ||
+		( wp.editPost && wp.editPost.PluginSidebarMoreMenuItem ) ||
+		null;
 
-	if ( ! registerPlugin || ! Panel ) {
+	// Need at least one render target. The Sidebar is the primary, discoverable
+	// entry point (its icon sits in the top toolbar, Yoast-style); the document
+	// Panel is the fallback / secondary location.
+	if ( ! registerPlugin || ( ! Sidebar && ! Panel ) ) {
 		return;
 	}
 
@@ -32,55 +45,146 @@
 		return;
 	}
 
-	function head() {
+	// Brand header: the Seonix mark + wordmark + one-line verdict. Mirrors the
+	// "Yoast SEO" header row at the top of Yoast's panel.
+	function brandHeader() {
 		return el(
 			'div',
-			{ className: 'seonix-mb-head' },
-			el( 'span', { className: 'seonix-mb-light seonix-mb-light--' + ( data.light || 'mute' ) } ),
+			{ className: 'sx-ph-head' },
+			el( 'span', { className: 'sx-ph-logo' }, makeIcon() ),
 			el(
 				'div',
-				{ className: 'seonix-mb-headtext' },
-				el( 'div', { className: 'seonix-mb-verdict' }, data.verdict || '' ),
-				data.sub ? el( 'div', { className: 'seonix-mb-sub' }, data.sub ) : null
+				{ className: 'sx-ph-headtext' },
+				el( 'div', { className: 'sx-ph-brand' }, 'Seonix' ),
+				data.verdict ? el( 'div', { className: 'sx-ph-sub' }, data.verdict ) : null
 			)
 		);
 	}
 
-	function issue( iss, key ) {
+	// A single Seonix "eye" (one sparkle on the dark face) tinted to the track's
+	// status colour — this replaces Yoast's smiley as the section indicator.
+	function eyeGlyph( color ) {
 		return el(
-			'div',
-			{ className: 'seonix-mb-issue', key: key },
+			'svg',
+			{ className: 'sx-acc-eye', width: 20, height: 20, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+			el( 'rect', { width: 24, height: 24, rx: 6, fill: '#191530' } ),
+			el( 'path', { d: 'M12 3.4L13.7 10.3L20.6 12L13.7 13.7L12 20.6L10.3 13.7L3.4 12L10.3 10.3Z', fill: color } )
+		);
+	}
+
+	// Avoid → Better code snippets (mirrors the dashboard issue modal).
+	function exampleBlock( iss ) {
+		var rows = [];
+		if ( iss.bad_example_code ) {
+			rows.push( el( 'div', { className: 'sx-ex sx-ex--bad', key: 'bad' },
+				el( 'div', { className: 'sx-ex-cap' }, iss.bad_example_caption || ( ( data.i18n && data.i18n.avoid ) || 'Avoid' ) ),
+				el( 'pre', { className: 'sx-ex-code' }, iss.bad_example_code )
+			) );
+		}
+		if ( iss.good_example_code ) {
+			rows.push( el( 'div', { className: 'sx-ex sx-ex--good', key: 'good' },
+				el( 'div', { className: 'sx-ex-cap' }, iss.good_example_caption || ( ( data.i18n && data.i18n.better ) || 'Better' ) ),
+				el( 'pre', { className: 'sx-ex-code' }, iss.good_example_code )
+			) );
+		}
+		return rows.length ? el( 'div', { className: 'sx-ex-wrap' }, rows ) : null;
+	}
+
+	// One issue: a clickable title row that expands to the full per-issue detail
+	// (what / why it matters / avoid-vs-better example / how to fix / warnings) —
+	// the same drill-down the dashboard shows in its issue modal.
+	function Issue( props ) {
+		var iss = props.iss;
+		var steps = ( iss.how_to_fix_steps && iss.how_to_fix_steps.length ) ? iss.how_to_fix_steps : [];
+		var warns = ( iss.warnings && iss.warnings.length ) ? iss.warnings : [];
+		var hasDetail = !! ( iss.description || iss.why_it_matters || iss.recommendation || iss.bad_example_code || iss.good_example_code || steps.length || warns.length );
+		var st = useState( false );
+		var open = st[0];
+		var setOpen = st[1];
+		var head = el(
+			'button',
+			{
+				type: 'button',
+				className: 'sx-iss-head' + ( open ? ' is-open' : '' ),
+				'aria-expanded': open ? 'true' : 'false',
+				disabled: ! hasDetail,
+				onClick: function () { if ( hasDetail ) { setOpen( ! open ); } }
+			},
 			el( 'span', { className: 'seonix-pagedot seonix-pagedot--' + iss.severity, 'aria-hidden': 'true' } ),
 			el(
-				'div',
-				{ className: 'seonix-mb-issuebody' },
-				el(
-					'div',
-					{ className: 'seonix-mb-issuetitle' },
-					iss.title,
-					iss.informational
-						? el( 'span', { className: 'seonix-task__info', style: { marginLeft: '6px' } }, ( data.i18n && data.i18n.optional ) || 'Optional' )
-						: null
-				),
-				iss.recommendation ? el( 'div', { className: 'seonix-mb-issuerec' }, iss.recommendation ) : null
-			)
+				'span',
+				{ className: 'sx-iss-title' },
+				iss.title,
+				iss.informational ? el( 'span', { className: 'seonix-task__info', style: { marginLeft: '6px' } }, ( data.i18n && data.i18n.optional ) || 'Optional' ) : null
+			),
+			hasDetail
+				? el( 'svg', { className: 'sx-iss-chev' + ( open ? ' is-open' : '' ), width: 14, height: 14, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, el( 'path', { d: 'M7 10l5 5 5-5', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' } ) )
+				: null
 		);
+		if ( ! open || ! hasDetail ) {
+			return el( 'div', { className: 'sx-iss' }, head );
+		}
+		var detail = [];
+		var lead = iss.description || iss.recommendation;
+		if ( lead ) { detail.push( el( 'p', { className: 'sx-iss-lead', key: 'lead' }, lead ) ); }
+		if ( iss.why_it_matters ) {
+			detail.push( el( 'div', { className: 'sx-iss-sec', key: 'why' },
+				el( 'div', { className: 'sx-iss-h' }, ( data.i18n && data.i18n.why ) || 'Why it matters' ),
+				el( 'p', null, iss.why_it_matters )
+			) );
+		}
+		var ex = exampleBlock( iss );
+		if ( ex ) { detail.push( el( 'div', { key: 'ex' }, ex ) ); }
+		if ( steps.length ) {
+			detail.push( el( 'div', { className: 'sx-iss-sec', key: 'how' },
+				el( 'div', { className: 'sx-iss-h' }, ( data.i18n && data.i18n.howToFix ) || 'How to fix' ),
+				el( 'ol', { className: 'sx-iss-steps' }, steps.map( function ( s, i ) { return el( 'li', { key: i }, s ); } ) )
+			) );
+		}
+		if ( warns.length ) {
+			detail.push( el( 'div', { className: 'sx-iss-warn', key: 'warn' },
+				warns.map( function ( w, i ) { return el( 'div', { className: 'sx-iss-warn-row', key: i }, '⚠ ' + w ); } )
+			) );
+		}
+		return el( 'div', { className: 'sx-iss is-open' }, head, el( 'div', { className: 'sx-iss-detail' }, detail ) );
 	}
 
-	function group( g, gi ) {
-		var items = ( g.items || [] ).map( function ( iss, i ) {
-			return issue( iss, 'i' + gi + '-' + i );
-		} );
+	// Collapsible analysis section (Yoast-style). Header = coloured Seonix eye +
+	// label + count + chevron; body (when open) = the track's issue rows.
+	function Section( props ) {
+		var st = useState( false );
+		var open = st[0];
+		var setOpen = st[1];
+		var items = props.items || [];
 		return el(
 			'div',
-			{ className: 'seonix-mb-group', key: 'g' + gi },
+			{ className: 'sx-acc' },
 			el(
-				'div',
-				{ className: 'seonix-mb-grouphead' },
-				el( 'span', { className: 'seonix-cat seonix-cat--' + g.key }, g.label ),
-				el( 'span', { className: 'seonix-mb-groupcount' }, String( ( g.items || [] ).length ) )
+				'button',
+				{
+					type: 'button',
+					className: 'sx-acc-head',
+					'aria-expanded': open ? 'true' : 'false',
+					onClick: function () { setOpen( ! open ); }
+				},
+				eyeGlyph( props.color ),
+				el( 'span', { className: 'sx-acc-label' }, props.label ),
+				el( 'span', { className: 'sx-acc-count' }, String( items.length ) ),
+				el(
+					'svg',
+					{ className: 'sx-acc-chev' + ( open ? ' is-open' : '' ), width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+					el( 'path', { d: 'M7 10l5 5 5-5', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' } )
+				)
 			),
-			items
+			open
+				? el(
+					'div',
+					{ className: 'sx-acc-body' },
+					items.length
+						? items.map( function ( iss, i ) { return el( Issue, { iss: iss, key: 'r' + i } ); } )
+						: el( 'div', { className: 'sx-acc-empty' }, ( data.i18n && data.i18n.noIssues ) || 'No issues found' )
+				)
+				: null
 		);
 	}
 
@@ -94,38 +198,155 @@
 	}
 
 	function body() {
-		var children = [ head() ];
-		( data.groups || [] ).forEach( function ( g, gi ) {
-			children.push( group( g, gi ) );
+		// Split this page's issues into the two tracks shown as sections.
+		var seoItems = [];
+		var contentItems = [];
+		( data.groups || [] ).forEach( function ( g ) {
+			var bucket = ( 'content' === g.key ) ? contentItems : seoItems;
+			( g.items || [] ).forEach( function ( it ) { bucket.push( it ); } );
 		} );
-		children.push( foot() );
-		return el( 'div', { className: 'seonix-metabox seonix-metabox--panel' }, children );
+		var seoLabel = ( data.i18n && data.i18n.seoLabel ) || 'SEO';
+		var rdLabel = ( data.i18n && data.i18n.readabilityLabel ) || 'Readability';
+		return el(
+			'div',
+			{ className: 'seonix-metabox seonix-metabox--panel' },
+			brandHeader(),
+			el( Section, { key: 'seo', label: seoLabel, color: seoEye, items: seoItems } ),
+			el( Section, { key: 'rd', label: rdLabel, color: contentEye, items: contentItems } ),
+			foot()
+		);
 	}
 
-	var brandIcon = el(
-		'svg',
-		{ width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none' },
-		el( 'path', {
-			d: 'M12 3.2 19 6v5.2c0 4.2-3 7.4-7 9.2-4-1.8-7-5-7-9.2V6z',
-			fill: 'none',
-			stroke: '#8B3DFF',
-			strokeWidth: '1.7',
-			strokeLinejoin: 'round',
-		} ),
-		el( 'path', { d: 'M9 12l2 2 4-4.4', fill: 'none', stroke: '#8B3DFF', strokeWidth: '1.7', strokeLinecap: 'round', strokeLinejoin: 'round' } )
-	);
+	// --- The two "eyes" of the Seonix mark = two Yoast-style tracks ----------
+	// Left eye  = SEO track        (seo + technical + ai + speed)
+	// Right eye = Readability track (content)
+	// Each eye takes the colour of the WORST severity in its track, on the
+	// Yoast-style 3-light model: green = clean, amber = needs work (warning OR
+	// notice/improvement), red = errors, grey = not published / not scanned.
+	// Computed here in JS from data.groups, so no backend change is needed.
+	var EYE_RED = '#FF5468';
+	var EYE_AMBER = '#FBB024';
+	var EYE_GREEN = '#27D49A';
+	var EYE_MUTE = '#9A9AB2';
 
-	function SeonixAuditPanel() {
+	function worstColor( severities ) {
+		if ( severities.indexOf( 'error' ) !== -1 ) { return EYE_RED; }
+		if ( severities.indexOf( 'warning' ) !== -1 || severities.indexOf( 'notice' ) !== -1 ) { return EYE_AMBER; }
+		return EYE_GREEN;
+	}
+
+	// Split this page's issues into the two tracks. Everything that is not in
+	// the "content" group counts towards SEO (seo / technical / ai / speed).
+	var seoSev = [];
+	var contentSev = [];
+	( data.groups || [] ).forEach( function ( g ) {
+		var bucket = ( 'content' === g.key ) ? contentSev : seoSev;
+		( g.items || [] ).forEach( function ( it ) { bucket.push( it.severity ); } );
+	} );
+
+	var noData = ( 'unpublished' === data.state || 'unscanned' === data.state );
+	var seoEye = noData ? EYE_MUTE : worstColor( seoSev );
+	var contentEye = noData ? EYE_MUTE : worstColor( contentSev );
+
+	// The two sparkle "eyes" — same paths as the dashboard logo (viewBox 0 0 50).
+	var EYE_LEFT = 'M13.6719 17.0898L15.3866 22.0738C15.5823 22.6427 16.0292 23.0896 16.598 23.2853L21.582 25L16.598 26.7147C16.0292 26.9104 15.5823 27.3573 15.3866 27.9262L13.6719 32.9102L11.9572 27.9262C11.7615 27.3573 11.3146 26.9104 10.7457 26.7147L5.76172 25L10.7457 23.2853C11.3146 23.0896 11.7615 22.6427 11.9572 22.0738L13.6719 17.0898Z';
+	var EYE_RIGHT = 'M36.3281 17.0898L38.0428 22.0738C38.2385 22.6427 38.6854 23.0896 39.2543 23.2853L44.2383 25L39.2543 26.7147C38.6854 26.9104 38.2385 27.3573 38.0428 27.9262L36.3281 32.9102L34.6134 27.9262C34.4177 27.3573 33.9708 26.9104 33.402 26.7147L28.418 25L33.402 23.2853C33.9708 23.0896 34.4177 22.6427 34.6134 22.0738L36.3281 17.0898Z';
+
+	// Build a fresh icon element that reproduces the Seonix favicon: a dark
+	// rounded face with a deep, SATURATED purple→blue mesh anchored to the bottom
+	// corners (vivid purple bottom-left, vivid blue bottom-right) fading up into
+	// the dark navy at the top — exactly the favicon's gradient. On top sit the
+	// two sparkle eyes, each tinted by its track's status (left = SEO, right =
+	// Readability) on the green/amber/red traffic-light, with a soft dark halo so
+	// the colour reads on the bright mesh. Each call mints its own ids so the
+	// clip/filters keep working with several icon copies on screen at once.
+	var iconSeq = 0;
+	function makeIcon() {
+		var n = ++iconSeq;
+		var cid = 'sx-clip-' + n;
+		var mid = 'sx-mesh-' + n;
+		var gid = 'sx-glow-' + n;
 		return el(
-			Fragment,
-			null,
+			'svg',
+			{ width: 24, height: 24, viewBox: '0 0 50 50', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' },
 			el(
-				Panel,
-				{ name: 'seonix-page-audit', title: data.title || 'Seonix — Page audit', className: 'seonix-audit-panel' },
-				body()
+				'defs',
+				null,
+				el( 'clipPath', { id: cid }, el( 'rect', { width: 50, height: 50, rx: 11.7188 } ) ),
+				// Generous filter region so the blur isn't clipped at the edges.
+				el( 'filter', { id: mid, x: '-60%', y: '-60%', width: '220%', height: '220%' }, el( 'feGaussianBlur', { stdDeviation: '8' } ) ),
+				el( 'filter', { id: gid, x: '-50%', y: '-50%', width: '200%', height: '200%' }, el( 'feGaussianBlur', { stdDeviation: '1' } ) )
+			),
+			el(
+				'g',
+				{ clipPath: 'url(#' + cid + ')' },
+				el( 'rect', { width: 50, height: 50, fill: '#191530' } ),
+				el(
+					'g',
+					{ filter: 'url(#' + mid + ')' },
+					el( 'ellipse', { cx: '2', cy: '52', rx: '30', ry: '40', fill: '#A931FB' } ),
+					el( 'ellipse', { cx: '8', cy: '56', rx: '22', ry: '26', fill: '#C24DFF' } ),
+					el( 'ellipse', { cx: '50', cy: '50', rx: '30', ry: '38', fill: '#27B5FA' } ),
+					el( 'ellipse', { cx: '46', cy: '56', rx: '22', ry: '24', fill: '#46C5FF' } )
+				),
+				el(
+					'g',
+					null,
+					el( 'g', { filter: 'url(#' + gid + ')', fill: '#0d0a1f', fillOpacity: '0.45' },
+						el( 'path', { d: EYE_LEFT } ),
+						el( 'path', { d: EYE_RIGHT } )
+					),
+					el( 'path', { d: EYE_LEFT, fill: seoEye } ),
+					el( 'path', { d: EYE_RIGHT, fill: contentEye } )
+				)
 			)
 		);
 	}
 
-	registerPlugin( 'seonix-page-audit', { render: SeonixAuditPanel, icon: brandIcon } );
+	var panelTitle = data.title || 'Seonix — Page audit';
+
+	// The sidebar header bar is narrow — a long "Seonix — 6 issues · 3 warnings ·
+	// 3 notices" string wrapped to three clipped lines. Keep the header/tooltip to
+	// just the brand (like Yoast's "Yoast SEO"); the count lives in the body header.
+	var tipText = 'Seonix';
+
+	function SeonixAuditPanel() {
+		var children = [];
+
+		// Primary entry point: a dedicated, pinnable sidebar whose icon sits in the
+		// top editor toolbar (exactly like Yoast / Rank Math), plus its entry in the
+		// editor's "Options → Plugins" menu. This is what makes the audit visible —
+		// without it the panel only lived inside the (often closed) Document
+		// settings sidebar, with no toolbar icon, so users never found it.
+		if ( Sidebar ) {
+			if ( SidebarMoreMenuItem ) {
+				children.push(
+					el( SidebarMoreMenuItem, { key: 'more', target: 'seonix-page-audit', icon: makeIcon() }, panelTitle )
+				);
+			}
+			children.push(
+				el(
+					Sidebar,
+					{ key: 'sidebar', name: 'seonix-page-audit', title: tipText, icon: makeIcon(), className: 'seonix-audit-panel' },
+					body()
+				)
+			);
+		}
+
+		// Secondary location: the same audit inside the Document settings sidebar,
+		// so it is also discoverable next to the other post settings.
+		if ( Panel ) {
+			children.push(
+				el(
+					Panel,
+					{ key: 'panel', name: 'seonix-page-audit-doc', title: panelTitle, className: 'seonix-audit-panel' },
+					body()
+				)
+			);
+		}
+
+		return el( Fragment, null, children );
+	}
+
+	registerPlugin( 'seonix-page-audit', { render: SeonixAuditPanel, icon: makeIcon() } );
 } )( window.wp );

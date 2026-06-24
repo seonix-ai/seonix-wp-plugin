@@ -96,7 +96,7 @@ class Seonix_IndexNow {
 			return;
 		}
 		$req_path = isset( $_SERVER['REQUEST_URI'] )
-			? trim( (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ), '/' )
+			? trim( (string) wp_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH ), '/' )
 			: '';
 		if ( '' === $req_path ) {
 			return;

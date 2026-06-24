@@ -1,0 +1,18 @@
+Bundled webfonts — license & attribution
+=========================================
+
+These fonts are self-hosted (bundled in the plugin) instead of being loaded
+from a third-party CDN, per the WordPress.org Plugin Directory guidelines.
+
+Inter Tight
+  Copyright (c) The Inter Project Authors (https://github.com/rsms/inter)
+  Licensed under the SIL Open Font License, Version 1.1.
+
+JetBrains Mono
+  Copyright (c) JetBrains s.r.o. (https://www.jetbrains.com/lp/mono/)
+  Licensed under the SIL Open Font License, Version 1.1.
+
+SIL Open Font License 1.1: https://scripts.sil.org/OFL_web
+The OFL is GPL-compatible for distribution within a GPL-licensed plugin.
+
+Only the latin + latin-ext subsets are bundled (woff2).

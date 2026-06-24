@@ -8,10 +8,13 @@
  *
  * Anti-duplication: when a dedicated SEO plugin (Yoast / Rank Math / AIOSEO) is
  * active it already emits Article/WebPage/BreadcrumbList JSON-LD from the meta
- * keys Seonix writes (focus keyword, meta description). In the default "auto"
- * mode we stay silent in that case to avoid two competing graphs of the same
- * @type — which makes Google ignore both. Operators can force output with mode
- * "on" or disable it entirely with "off".
+ * keys Seonix writes (focus keyword, meta description). Emitting our own copy of
+ * those @types would create two competing graphs — which makes Google ignore
+ * both. So in the default "auto" mode, when an engine is detected, Seonix emits
+ * ONLY the supplemental @types that engine does not produce — FAQPage / QAPage —
+ * which add an AI-citation signal (AI Overviews, ChatGPT, Perplexity) without
+ * duplicating the core graph. When no engine is active we emit the full @graph.
+ * Operators can force the full graph with mode "on" or disable output with "off".
  *
  * @package Seonix
  */
@@ -33,6 +36,31 @@ class Seonix_Schema {
 	 * is generous and caps a malformed / hostile payload.
 	 */
 	const MAX_BYTES = 100000;
+
+	/**
+	 * @types Seonix may emit alongside a dedicated SEO engine. These add an
+	 * AI-citation signal (FAQ/Q&A) that Yoast / Rank Math / AIOSEO do not
+	 * produce from headings, so they never collide with the engine's graph.
+	 */
+	const SUPPLEMENTAL_TYPES = array( 'FAQPage', 'QAPage' );
+
+	/**
+	 * @types a dedicated SEO engine owns. A node carrying any of these is
+	 * dropped from the supplemental graph even if it is also tagged with a
+	 * supplemental type, so a multi-typed core node can never reintroduce a
+	 * duplicate Article / WebPage / Breadcrumb.
+	 */
+	const ENGINE_OWNED_TYPES = array(
+		'Article',
+		'NewsArticle',
+		'BlogPosting',
+		'WebPage',
+		'WebSite',
+		'BreadcrumbList',
+		'Organization',
+		'Person',
+		'ImageObject',
+	);
 
 	/**
 	 * Validate and normalize a raw JSON-LD string from the publish payload.
@@ -141,9 +169,60 @@ class Seonix_Schema {
 	}
 
 	/**
-	 * wp_head hook: print the stored JSON-LD for a singular post when output is
-	 * enabled. No-op on archives, when disabled, or when the post has no stored
-	 * schema.
+	 * Reduce a stored @graph to only the supplemental nodes (FAQPage / QAPage)
+	 * that a dedicated SEO engine does not emit. Nodes carrying an
+	 * engine-owned @type are dropped even when also tagged supplemental, so the
+	 * result can never duplicate the engine's Article / WebPage / Breadcrumb.
+	 *
+	 * Returns a re-encoded, slash-escaped JSON document wrapped in a fresh
+	 * @graph envelope, or null when the payload has nothing supplemental.
+	 *
+	 * @param string $jsonld Stored, already-sanitized JSON-LD string.
+	 * @return string|null Safe JSON string, or null when there is nothing to emit.
+	 */
+	public static function supplemental_only( string $jsonld ): ?string {
+		$decoded = json_decode( $jsonld, true );
+		if ( ! is_array( $decoded ) ) {
+			return null;
+		}
+		// Normalize to a flat list of nodes: an @graph envelope, or a single node.
+		$nodes = ( isset( $decoded['@graph'] ) && is_array( $decoded['@graph'] ) )
+			? $decoded['@graph']
+			: array( $decoded );
+
+		$kept = array();
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) || ! isset( $node['@type'] ) ) {
+				continue;
+			}
+			$types       = is_array( $node['@type'] ) ? $node['@type'] : array( $node['@type'] );
+			$is_supp     = array_intersect( $types, self::SUPPLEMENTAL_TYPES );
+			$is_engine   = array_intersect( $types, self::ENGINE_OWNED_TYPES );
+			if ( $is_supp && ! $is_engine ) {
+				unset( $node['@context'] ); // context lives on the envelope, not per-node.
+				$kept[] = $node;
+			}
+		}
+		if ( empty( $kept ) ) {
+			return null;
+		}
+
+		$envelope = array(
+			'@context' => 'https://schema.org',
+			'@graph'   => array_values( $kept ),
+		);
+		$encoded = wp_json_encode( $envelope );
+		return false === $encoded ? null : $encoded;
+	}
+
+	/**
+	 * wp_head hook: print the stored JSON-LD for a singular post.
+	 *
+	 * When no dedicated SEO engine is active (or mode is "on") the full stored
+	 * @graph is emitted. When an engine owns the core graph (auto mode) only the
+	 * supplemental FAQ/QA nodes are emitted, so we add an AI-citation signal
+	 * without duplicating Article / WebPage / Breadcrumb. No-op on archives, when
+	 * disabled, or when the post has no stored schema.
 	 *
 	 * @return void
 	 */
@@ -151,7 +230,7 @@ class Seonix_Schema {
 		if ( ! is_singular() ) {
 			return;
 		}
-		if ( ! self::should_output() ) {
+		if ( 'off' === self::mode() ) {
 			return;
 		}
 		$post_id = get_queried_object_id();
@@ -162,9 +241,21 @@ class Seonix_Schema {
 		if ( ! is_string( $jsonld ) || '' === trim( $jsonld ) ) {
 			return;
 		}
-		// The value was re-encoded via wp_json_encode at store time (slashes
-		// escaped), so "</script>" cannot appear. Echo verbatim — esc_* helpers
-		// would corrupt the JSON.
-		echo "\n<script type=\"application/ld+json\">" . $jsonld . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON-LD validated and slash-escaped at store time; esc_* would break the JSON.
+
+		// should_output() is true when no engine owns the graph (or mode "on") —
+		// emit everything. Otherwise emit only the supplemental FAQ/QA nodes.
+		if ( self::should_output() ) {
+			$emit = $jsonld;
+		} else {
+			$emit = self::supplemental_only( $jsonld );
+			if ( null === $emit ) {
+				return;
+			}
+		}
+
+		// The value was re-encoded via wp_json_encode (slashes escaped), so
+		// "</script>" cannot appear. Echo verbatim — esc_* helpers would corrupt
+		// the JSON.
+		echo "\n<script type=\"application/ld+json\">" . $emit . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON-LD validated and slash-escaped at store/build time; esc_* would break the JSON.
 	}
 }

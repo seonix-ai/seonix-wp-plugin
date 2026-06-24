@@ -58,8 +58,24 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 	}
 
 	public function dry_run( array $params ) {
+		if ( ! $this->is_target_seo_plugin_active() ) {
+			return new WP_Error(
+				'seo_plugin_inactive',
+				'This fix requires the Yoast SEO plugin to be active (it edits a Yoast-owned option / indexable row).',
+				array( 'status' => 412 )
+			);
+		}
 		$current = $this->read_setting();
 		return $this->describe_result( $current, true );
+	}
+
+	/**
+	 * Advertised to the /capabilities handshake: only offer this fix when Yoast
+	 * (whose option it writes) is active, so the dashboard never surfaces a fix
+	 * that apply()/dry_run() would refuse with 412.
+	 */
+	public function is_available(): bool {
+		return $this->is_target_seo_plugin_active();
 	}
 
 	public function apply( array $params ) {

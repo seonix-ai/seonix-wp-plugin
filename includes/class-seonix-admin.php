@@ -101,10 +101,15 @@ class Seonix_Admin {
 		if ( false === $png ) {
 			return 'dashicons-admin-site-alt3';
 		}
+		// base64 here assembles a data: URI for the bundled admin-menu icon
+		// (a PNG embedded in an SVG wrapper) — not code obfuscation.
+		// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
 		$svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 64 64">'
 			. '<image width="64" height="64" href="data:image/png;base64,' . base64_encode( $png ) . '"/>'
 			. '</svg>';
-		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+		$data_uri = 'data:image/svg+xml;base64,' . base64_encode( $svg );
+		// phpcs:enable WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+		return $data_uri;
 	}
 
 	/**
@@ -131,7 +136,7 @@ class Seonix_Admin {
 		// never blocked on a remote request.
 		wp_enqueue_style(
 			'seonix-admin-fonts',
-			'https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap',
+			SEONIX_URL . 'assets/fonts/fonts.css',
 			array(),
 			SEONIX_VERSION
 		);
@@ -156,6 +161,7 @@ class Seonix_Admin {
 			'nonce'         => wp_create_nonce( 'seonix' ),
 			'refreshNonce'  => wp_create_nonce( 'seonix_refresh_tasks' ),
 			'connectNonce'  => wp_create_nonce( 'seonix_connect' ),
+			'accountNonce'  => wp_create_nonce( 'seonix_account' ),
 			'i18n'          => array(
 				'refreshing'     => __( 'Refreshing…', 'seonix' ),
 				'tasksRefreshed' => __( 'Tasks refreshed.', 'seonix' ),
@@ -169,6 +175,11 @@ class Seonix_Admin {
 				'cameBack'       => __( 'Came back', 'seonix' ),
 				'fixed'          => __( 'Fixed', 'seonix' ),
 				'pageLabel'      => __( 'Page', 'seonix' ),
+				// Plan card (filled from GET /api/plugin/account).
+				'planActiveSub'  => __( 'AI features are active — generate, refine and auto-publish from Seonix or right here.', 'seonix' ),
+				'planFreeSub'    => __( 'This project is on the Free plan. Upgrade to unlock AI generation, refinement and one-click SEO fixes.', 'seonix' ),
+				'planError'      => __( 'Could not load your plan.', 'seonix' ),
+				'planFree'       => __( 'Free', 'seonix' ),
 			),
 		) );
 	}
@@ -385,6 +396,107 @@ class Seonix_Admin {
 
 	// ─── Render: shared header ───────────────────────────────────
 
+	// ─── Deep links into the Seonix app + plan ───────────────────
+
+	/**
+	 * Base origin of the Seonix dashboard SPA (e.g. https://app.seonix.ai).
+	 * The account endpoint records the exact origin in `seonix_app_url`; until
+	 * then we fall back to the production app (the origin the connect handoff
+	 * also targets). A filter lets self-hosted installs override it.
+	 */
+	private function app_base_url(): string {
+		$saved = get_option( 'seonix_app_url', '' );
+		$base  = ! empty( $saved ) ? $saved : 'https://app.seonix.ai';
+		$base  = apply_filters( 'seonix_app_base_url', $base );
+		return untrailingslashit( $base );
+	}
+
+	/** Deep link to this project's overview in the Seonix dashboard. */
+	private function dashboard_url(): string {
+		$pid = get_option( 'seonix_project_id', '' );
+		if ( '' === $pid ) {
+			return $this->app_base_url();
+		}
+		return $this->app_base_url() . '/projects/' . rawurlencode( (string) $pid ) . '/overview';
+	}
+
+	/** Deep link to this project's billing/upgrade page. */
+	private function billing_url(): string {
+		$pid = get_option( 'seonix_project_id', '' );
+		if ( '' === $pid ) {
+			return $this->app_base_url();
+		}
+		return $this->app_base_url() . '/projects/' . rawurlencode( (string) $pid ) . '/billing';
+	}
+
+	/** Scheme+host(+port) of a URL, or '' when it can't be parsed. */
+	private function origin_of( string $url ): string {
+		$p = wp_parse_url( $url );
+		if ( empty( $p['scheme'] ) || empty( $p['host'] ) ) {
+			return '';
+		}
+		$origin = $p['scheme'] . '://' . $p['host'];
+		if ( ! empty( $p['port'] ) ) {
+			$origin .= ':' . (int) $p['port'];
+		}
+		return $origin;
+	}
+
+	/**
+	 * AJAX: Pull the connected project's plan + deep links from the Seonix
+	 * backend (GET /api/plugin/account). Server-side so the plugin Bearer key
+	 * never reaches the browser. Self-contained (only depends on Seonix_Auth)
+	 * so it works regardless of which optional subsystems the build ships.
+	 */
+	public function ajax_account(): void {
+		check_ajax_referer( 'seonix_account', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'seonix' ) ), 403 );
+		}
+
+		$engine_url = get_option( 'seonix_engine_url', '' );
+		$api_key    = Seonix_Auth::get_key();
+		if ( empty( $engine_url ) || empty( $api_key ) ) {
+			wp_send_json_error( array( 'message' => __( 'Connect this site to Seonix first.', 'seonix' ) ), 400 );
+		}
+		if ( ! Seonix_Auth::is_safe_url( $engine_url ) ) {
+			wp_send_json_error( array( 'message' => __( 'Configured engine URL is not allowed.', 'seonix' ) ), 400 );
+		}
+
+		$response = wp_remote_get(
+			trailingslashit( $engine_url ) . 'api/plugin/account',
+			array(
+				'timeout' => 15,
+				'headers' => array(
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . $api_key,
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			wp_send_json_error( array( 'message' => $response->get_error_message() ), 502 );
+		}
+
+		$status  = (int) wp_remote_retrieve_response_code( $response );
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		$data    = ( is_array( $decoded ) && isset( $decoded['data'] ) && is_array( $decoded['data'] ) ) ? $decoded['data'] : array();
+		if ( $status < 200 || $status >= 300 ) {
+			$http = ( $status >= 400 && $status < 600 ) ? $status : 502;
+			wp_send_json_error( array( 'message' => sprintf( /* translators: %d: HTTP status */ __( 'Seonix returned HTTP %d.', 'seonix' ), $status ) ), $http );
+		}
+
+		// Cache the SPA origin so server-side links are correct on the next
+		// page view (matters for dev / self-hosted origins).
+		if ( isset( $data['dashboard_url'] ) ) {
+			$origin = $this->origin_of( (string) $data['dashboard_url'] );
+			if ( '' !== $origin && $origin !== get_option( 'seonix_app_url', '' ) ) {
+				update_option( 'seonix_app_url', $origin, false );
+			}
+		}
+
+		wp_send_json_success( $data );
+	}
+
 	/**
 	 * Render the shared chrome: a white top bar (brand lockup + version on the
 	 * left, connection pill on the right) and a white nav row with Site Health /
@@ -420,23 +532,34 @@ class Seonix_Admin {
 						<span class="seonix-ver"><?php echo esc_html( 'v' . SEONIX_VERSION ); ?></span>
 					</div>
 					<?php if ( $is_connected ) : ?>
-						<span class="seonix-connpill">
-							<span class="seonix-status__dot seonix-status__dot--green"></span>
-							<?php
-							if ( '' !== $project_name ) {
-								echo wp_kses(
-									sprintf(
-										/* translators: %s: Seonix project name */
-										__( 'Connected · %s', 'seonix' ),
-										'<b>' . esc_html( $project_name ) . '</b>'
-									),
-									array( 'b' => array() )
-								);
-							} else {
-								esc_html_e( 'Connected', 'seonix' );
-							}
-							?>
-						</span>
+						<div class="seonix-topbar__right">
+							<span class="seonix-connpill">
+								<span class="seonix-status__dot seonix-status__dot--green"></span>
+								<?php
+								if ( '' !== $project_name ) {
+									echo wp_kses(
+										sprintf(
+											/* translators: %s: Seonix project name */
+											__( 'Connected · %s', 'seonix' ),
+											'<b>' . esc_html( $project_name ) . '</b>'
+										),
+										array( 'b' => array() )
+									);
+								} else {
+									esc_html_e( 'Connected', 'seonix' );
+								}
+								?>
+							</span>
+							<!-- Jump into the Seonix dashboard for this project. PHP-side
+							     fallback href; admin.js swaps it for the exact backend URL. -->
+							<a class="seonix-btn seonix-btn--brand seonix-btn--sm seonix-openapp"
+								id="seonix-open-app"
+								href="<?php echo esc_url( $this->dashboard_url() ); ?>"
+								target="_blank" rel="noopener">
+								<span><?php esc_html_e( 'Open in Seonix', 'seonix' ); ?></span>
+								<span class="seonix-openapp__ico" aria-hidden="true">&#8599;</span>
+							</a>
+						</div>
 					<?php endif; ?>
 				</div>
 			</header>
@@ -508,6 +631,33 @@ class Seonix_Admin {
 		$score     = isset( $summary['score'] ) ? (int) $summary['score'] : 0;
 		$cats      = isset( $summary['categories'] ) && is_array( $summary['categories'] ) ? $summary['categories'] : array();
 
+		// "Active issues" headline — matches the dashboard's activeProblemPageTotal:
+		// affected pages across ACTIVE issue rows (open|regressed) whose severity is
+		// error/warning. Notice-level findings are "Recommendations" and are
+		// excluded from the headline — that exclusion is the ONLY reason the old
+		// plugin "open issues" number (raw open threads from the synced summary)
+		// differed from the dashboard's "active issues". Fixed / Came back / All
+		// keep using the synced lifecycle summary, which already matches the app.
+		$active_issues = 0;
+		foreach ( $rows as $r ) {
+			$st = isset( $r['status'] ) ? (string) $r['status'] : 'open';
+			if ( 'solved' === $st ) {
+				continue;
+			}
+			$sev = isset( $r['severity'] ) ? (string) $r['severity'] : 'notice';
+			if ( 'error' !== $sev && 'warning' !== $sev ) {
+				continue;
+			}
+			$active_issues += isset( $r['affected_count'] ) ? (int) $r['affected_count'] : 0;
+		}
+		// Backend is the single source of truth: when it sends summary.active (the
+		// app's canonical activeProblemPageTotal), render it verbatim so the
+		// plugin's "Active issues" ALWAYS equals the dashboard's. The loop above is
+		// only a fallback for an older backend (-1 = field absent).
+		if ( isset( $summary['active'] ) && (int) $summary['active'] >= 0 ) {
+			$active_issues = (int) $summary['active'];
+		}
+
 		$cat_labels = array(
 			'seo'       => __( 'SEO', 'seonix' ),
 			'technical' => __( 'Technical', 'seonix' ),
@@ -556,14 +706,14 @@ class Seonix_Admin {
 					} else {
 						$hero_title = __( 'Needs attention', 'seonix' );
 					}
-					if ( $open > 0 ) {
+					if ( $active_issues > 0 ) {
 						$hero_sub = sprintf(
-							/* translators: %s: number of open issues */
-							_n( '%s open issue to clear across your pages.', '%s open issues to clear across your pages.', $open, 'seonix' ),
-							number_format_i18n( $open )
+							/* translators: %s: number of active issues */
+							_n( '%s active issue to clear across your pages.', '%s active issues to clear across your pages.', $active_issues, 'seonix' ),
+							number_format_i18n( $active_issues )
 						);
 					} else {
-						$hero_sub = __( 'No open issues — your site is in great shape.', 'seonix' );
+						$hero_sub = __( 'No active issues — your site is in great shape.', 'seonix' );
 					}
 					?>
 					<!-- Site Health: dark hero (score ring + pillars) -->
@@ -657,12 +807,12 @@ class Seonix_Admin {
 					<div class="seonix-kpi-grid">
 						<div class="seonix-kpi">
 							<div class="seonix-kpi__top">
-								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $open ) ); ?></div>
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $active_issues ) ); ?></div>
 								<span class="seonix-kpi__ic seonix-kpi__ic--amb">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".4"/></svg>
 								</span>
 							</div>
-							<div class="seonix-kpi__l"><?php esc_html_e( 'Open issues', 'seonix' ); ?></div>
+							<div class="seonix-kpi__l"><?php esc_html_e( 'Active issues', 'seonix' ); ?></div>
 							<div class="seonix-kpi__foot"><?php esc_html_e( 'Needs attention', 'seonix' ); ?></div>
 						</div>
 						<div class="seonix-kpi">
@@ -726,25 +876,16 @@ class Seonix_Admin {
 							// affected-page total, not the number of rows. Active = open +
 							// regressed, Fixed = solved, Came back = regressed, All =
 							// everything. Mirrors the web app's tab badge math.
-							$count_open      = 0;
-							$count_solved    = 0;
-							$count_regressed = 0;
-							foreach ( $rows as $r ) {
-								$st       = isset( $r['status'] ) ? (string) $r['status'] : 'open';
-								$affected = isset( $r['affected_count'] ) ? (int) $r['affected_count'] : 0;
-								if ( 'solved' === $st ) {
-									$count_solved += $affected;
-								} elseif ( 'regressed' === $st ) {
-									$count_regressed += $affected;
-								} else {
-									$count_open += $affected;
-								}
-							}
+							// Tab badges mirror the dashboard's numbers exactly: Active =
+							// $active_issues (error/warning affected pages, notices excluded),
+							// while Fixed / Came back / All come from the synced lifecycle
+							// summary (the same source the dashboard uses), so the plugin's
+							// badges equal the web app's instead of summing affected pages.
 							$tab_counts = array(
-								'active' => $count_open + $count_regressed,
-								'solved' => $count_solved,
-								'regressed' => $count_regressed,
-								'all'    => $count_open + $count_solved + $count_regressed,
+								'active'    => $active_issues,
+								'solved'    => $solved,
+								'regressed' => $regressed,
+								'all'       => $open + $solved + $regressed,
 							);
 							$tab_labels = array(
 								'active'    => __( 'Active issues', 'seonix' ),
@@ -966,6 +1107,22 @@ class Seonix_Admin {
 		$title          = isset( $row['title'] ) ? (string) $row['title'] : '';
 		$description    = isset( $row['description'] ) ? (string) $row['description'] : '';
 		$recommendation = isset( $row['recommendation'] ) ? (string) $row['recommendation'] : '';
+		// Rich remediation detail mirrored from the dashboard (synced from the
+		// backend TaskView). Shown when present; otherwise the description /
+		// recommendation above remain the fallback.
+		$why_it_matters = isset( $row['why_it_matters'] ) ? (string) $row['why_it_matters'] : '';
+		$bad_code       = isset( $row['bad_example_code'] ) ? (string) $row['bad_example_code'] : '';
+		$bad_caption    = isset( $row['bad_example_caption'] ) ? (string) $row['bad_example_caption'] : '';
+		$good_code      = isset( $row['good_example_code'] ) ? (string) $row['good_example_code'] : '';
+		$good_caption   = isset( $row['good_example_caption'] ) ? (string) $row['good_example_caption'] : '';
+		$fix_steps      = json_decode( (string) ( isset( $row['how_to_fix_steps'] ) ? $row['how_to_fix_steps'] : '' ), true );
+		if ( ! is_array( $fix_steps ) ) {
+			$fix_steps = array();
+		}
+		$warns = json_decode( (string) ( isset( $row['warnings'] ) ? $row['warnings'] : '' ), true );
+		if ( ! is_array( $warns ) ) {
+			$warns = array();
+		}
 		$affected_url   = isset( $row['affected_url'] ) ? (string) $row['affected_url'] : '';
 		$code           = isset( $row['code'] ) ? (string) $row['code'] : '';
 		$priority       = isset( $row['priority'] ) ? (string) $row['priority'] : 'low';
@@ -1065,16 +1222,59 @@ class Seonix_Admin {
 			</button>
 
 			<div class="seonix-task-detail" id="<?php echo esc_attr( $panel_id ); ?>" hidden>
-				<?php if ( '' !== $description ) : ?>
+				<?php if ( '' !== $why_it_matters ) : ?>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'Why this matters', 'seonix' ); ?></div>
+						<p class="seonix-task-detail__desc"><?php echo esc_html( $why_it_matters ); ?></p>
+					</div>
+				<?php elseif ( '' !== $description ) : ?>
 					<div class="seonix-task-detail__sec">
 						<div class="seonix-msec-label"><?php esc_html_e( 'What it means', 'seonix' ); ?></div>
 						<p class="seonix-task-detail__desc"><?php echo esc_html( $description ); ?></p>
 					</div>
 				<?php endif; ?>
-				<?php if ( '' !== $recommendation ) : ?>
+				<?php if ( '' !== $bad_code && '' !== $good_code ) : ?>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'Bad vs good', 'seonix' ); ?></div>
+						<div class="seonix-bg-grid">
+							<div class="seonix-bg-col seonix-bg-bad">
+								<div class="seonix-bg-tag"><?php esc_html_e( 'Now', 'seonix' ); ?></div>
+								<pre class="seonix-bg-code"><code><?php echo esc_html( $bad_code ); ?></code></pre>
+								<?php if ( '' !== $bad_caption ) : ?>
+									<div class="seonix-bg-cap"><?php echo esc_html( $bad_caption ); ?></div>
+								<?php endif; ?>
+							</div>
+							<div class="seonix-bg-col seonix-bg-good">
+								<div class="seonix-bg-tag"><?php esc_html_e( 'How it should be', 'seonix' ); ?></div>
+								<pre class="seonix-bg-code"><code><?php echo esc_html( $good_code ); ?></code></pre>
+								<?php if ( '' !== $good_caption ) : ?>
+									<div class="seonix-bg-cap"><?php echo esc_html( $good_caption ); ?></div>
+								<?php endif; ?>
+							</div>
+						</div>
+					</div>
+				<?php endif; ?>
+				<?php if ( ! empty( $fix_steps ) ) : ?>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'How to fix', 'seonix' ); ?></div>
+						<ol class="seonix-fix-steps">
+							<?php foreach ( $fix_steps as $step ) : ?>
+								<li><?php echo esc_html( (string) $step ); ?></li>
+							<?php endforeach; ?>
+						</ol>
+					</div>
+				<?php elseif ( '' !== $recommendation ) : ?>
 					<div class="seonix-task-detail__sec">
 						<div class="seonix-msec-label"><?php esc_html_e( 'How to fix', 'seonix' ); ?></div>
 						<p class="seonix-task-detail__rec"><?php echo esc_html( $recommendation ); ?></p>
+					</div>
+				<?php endif; ?>
+				<?php if ( ! empty( $warns ) ) : ?>
+					<div class="seonix-task-detail__sec">
+						<div class="seonix-msec-label"><?php esc_html_e( 'Heads up', 'seonix' ); ?></div>
+						<?php foreach ( $warns as $w ) : ?>
+							<div class="seonix-task-warn"><?php echo esc_html( (string) $w ); ?></div>
+						<?php endforeach; ?>
 					</div>
 				<?php endif; ?>
 				<?php
@@ -1439,6 +1639,78 @@ class Seonix_Admin {
 					</div>
 
 					<div class="seonix-cols__side">
+						<?php if ( $is_connected ) : ?>
+							<!-- Plan & AI features card. Filled by admin.js from
+							     GET /api/plugin/account. Badge starts neutral; the
+							     buttons carry PHP-side fallback hrefs. -->
+							<div class="seonix-card seonix-plancard" id="seonix-plan-card">
+								<div class="seonix-plancard__head">
+									<h2><?php esc_html_e( 'Your plan', 'seonix' ); ?></h2>
+									<span class="seonix-planbadge" id="seonix-plan-badge" data-tier="">
+										<span class="seonix-planbadge__txt">&hellip;</span>
+									</span>
+								</div>
+								<p class="seonix-subtitle" id="seonix-plan-sub"><?php esc_html_e( 'Checking your plan&hellip;', 'seonix' ); ?></p>
+
+								<div class="seonix-aifeat">
+									<span class="seonix-aifeat__ico" aria-hidden="true">&#10022;</span>
+									<p class="seonix-aifeat__txt">
+										<?php esc_html_e( 'AI generation, refinement and one-click SEO fixes run from the Seonix dashboard and right here in the plugin.', 'seonix' ); ?>
+										<button type="button" class="seonix-link" id="seonix-aifeat-more"><?php esc_html_e( "What's included?", 'seonix' ); ?></button>
+									</p>
+								</div>
+
+								<div class="seonix-plancard__actions">
+									<a class="seonix-btn seonix-btn--brand seonix-btn--sm" id="seonix-plan-upgrade"
+										href="<?php echo esc_url( $this->billing_url() ); ?>"
+										target="_blank" rel="noopener" hidden>
+										<?php esc_html_e( 'Upgrade this project', 'seonix' ); ?>
+									</a>
+									<a class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-plan-open"
+										href="<?php echo esc_url( $this->dashboard_url() ); ?>"
+										target="_blank" rel="noopener">
+										<?php esc_html_e( 'Open in Seonix', 'seonix' ); ?>
+									</a>
+								</div>
+							</div>
+
+							<!-- Paid-AI popup — mirrors the web dashboard's AI_PAYWALL modal.
+							     Opened by "What's included?"; CTA goes to this project's
+							     billing page inside Seonix (admin.js swaps the exact URL). -->
+							<div class="seonix-modal seonix-modal--paywall" id="seonix-paywall-modal" hidden role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="seonix-paywall-title">
+								<div class="seonix-modal__backdrop" data-seonix-paywall-close></div>
+								<div class="seonix-modal__panel" role="document">
+									<div class="seonix-modal__head">
+										<div class="seonix-modal__heading">
+											<h2 class="seonix-modal__title" id="seonix-paywall-title">
+												<span class="seonix-paywall__spark" aria-hidden="true">&#10022;</span>
+												<?php esc_html_e( 'AI features are part of a paid plan', 'seonix' ); ?>
+											</h2>
+										</div>
+										<button type="button" class="seonix-modal__close" data-seonix-paywall-close aria-label="<?php esc_attr_e( 'Close', 'seonix' ); ?>">&times;</button>
+									</div>
+									<div class="seonix-modal__body">
+										<p class="seonix-paywall__body"><?php esc_html_e( 'Upgrade this project to unlock AI generation, refinement, and one-click SEO fixes. These run from the Seonix dashboard and from this plugin. Other projects keep their current plan.', 'seonix' ); ?></p>
+										<ul class="seonix-paywall__list">
+											<li><?php esc_html_e( 'AI article generation & refinement', 'seonix' ); ?></li>
+											<li><?php esc_html_e( 'One-click SEO auto-fixes', 'seonix' ); ?></li>
+											<li><?php esc_html_e( 'Auto-publishing on a schedule', 'seonix' ); ?></li>
+										</ul>
+									</div>
+									<div class="seonix-modal__foot">
+										<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" data-seonix-paywall-close>
+											<?php esc_html_e( 'Close', 'seonix' ); ?>
+										</button>
+										<a class="seonix-btn seonix-btn--brand seonix-btn--sm" id="seonix-paywall-cta"
+											href="<?php echo esc_url( $this->billing_url() ); ?>"
+											target="_blank" rel="noopener">
+											<?php esc_html_e( 'Upgrade this project', 'seonix' ); ?>
+										</a>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+
 						<?php if ( $is_connected && ! empty( $project_name ) ) : ?>
 							<!-- Connection card -->
 							<div class="seonix-card">

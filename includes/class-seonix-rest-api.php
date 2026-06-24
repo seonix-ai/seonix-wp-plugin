@@ -989,6 +989,7 @@ class Seonix_REST_API {
 		$value_option = '_transient_' . $transient_key;
 		// Single atomic DELETE: only the caller whose query removes the row wins.
 		// $wpdb->query returns the number of affected rows (0 if already gone).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time atomic nonce-gate delete; prepared; caching would defeat the gate.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->options} WHERE option_name = %s",
@@ -1003,6 +1004,7 @@ class Seonix_REST_API {
 		// Best-effort cleanup of the timeout companion row. Not load-bearing for
 		// correctness (the value row is the one-time gate); also clear any cached
 		// copy so a persistent options cache doesn't keep serving the stale value.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- best-effort companion-row cleanup; prepared; cache cleared right after.
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->options} WHERE option_name = %s",

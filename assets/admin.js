@@ -592,6 +592,89 @@
     });
   }
 
+  // ── Plan card + "Open in Seonix" deep links ──
+  // Pull the connected project's plan + exact dashboard/billing URLs from the
+  // Seonix backend (server-side proxy: the Bearer key never touches the
+  // browser). Fills the plan badge + AI-features subline and repoints every
+  // "Open in Seonix" / "Upgrade" link at the backend-built URL (correct in dev
+  // too). Best-effort: a failure leaves the PHP-side fallback links + a soft
+  // error line.
+  (function () {
+    var planCard = document.getElementById('seonix-plan-card');
+    var openApp = document.getElementById('seonix-open-app');
+    if ((!planCard && !openApp) || !seonixConnector.accountNonce) return;
+
+    var setHref = function (id, url) {
+      if (!url) return;
+      var el = document.getElementById(id);
+      if (el) el.setAttribute('href', url);
+    };
+    var planError = function () {
+      var sub = document.getElementById('seonix-plan-sub');
+      if (sub) sub.textContent = i18n('planError', 'Could not load your plan.');
+    };
+
+    var body = new URLSearchParams();
+    body.append('action', 'seonix_account');
+    body.append('nonce', seonixConnector.accountNonce);
+    fetch(seonixConnector.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.success || !res.data) { planError(); return; }
+        var d = res.data;
+        var plan = d.plan || {};
+        var isPaid = !!plan.is_paid;
+        var name = plan.name || i18n('planFree', 'Free');
+
+        setHref('seonix-open-app', d.dashboard_url);
+        setHref('seonix-plan-open', d.dashboard_url);
+        setHref('seonix-plan-upgrade', d.billing_url);
+        setHref('seonix-paywall-cta', d.billing_url);
+
+        var badge = document.getElementById('seonix-plan-badge');
+        if (badge) {
+          badge.setAttribute('data-tier', isPaid ? 'paid' : 'free');
+          var txt = badge.querySelector('.seonix-planbadge__txt');
+          if (txt) txt.textContent = name;
+        }
+        var sub = document.getElementById('seonix-plan-sub');
+        if (sub) {
+          sub.textContent = isPaid
+            ? i18n('planActiveSub', 'AI features are active — generate, refine and auto-publish from Seonix or right here.')
+            : i18n('planFreeSub', 'This project is on the Free plan. Upgrade to unlock AI generation, refinement and one-click SEO fixes.');
+        }
+        var upgrade = document.getElementById('seonix-plan-upgrade');
+        if (upgrade) upgrade.hidden = isPaid;
+      })
+      .catch(planError);
+  })();
+
+  // ── Paid-AI popup — mirrors the web app's AI_PAYWALL modal ──
+  // The "What's included?" link opens a small dialog explaining the paid AI
+  // features; its CTA jumps to this project's billing page inside Seonix.
+  (function () {
+    var pop = document.getElementById('seonix-paywall-modal');
+    if (!pop) return;
+    var trigger = document.getElementById('seonix-aifeat-more');
+    var openPop = function () {
+      pop.hidden = false;
+      pop.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('seonix-modal-open');
+    };
+    var closePop = function () {
+      pop.hidden = true;
+      pop.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('seonix-modal-open');
+    };
+    if (trigger) trigger.addEventListener('click', openPop);
+    pop.querySelectorAll('[data-seonix-paywall-close]').forEach(function (el) {
+      el.addEventListener('click', closePop);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !pop.hidden) closePop();
+    });
+  })();
+
   // ── Helpers ──
 
   // Resolve a localized string from the wp_localize_script i18n bag, falling

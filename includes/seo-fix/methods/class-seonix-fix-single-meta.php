@@ -27,6 +27,20 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 	abstract protected function meta_key(): string;
 	abstract protected function target_type(): string;
 
+	/**
+	 * Resolve the meta key to read/write for this run, or a WP_Error when the
+	 * fix can't run in the current environment. Defaults to the static
+	 * meta_key(); methods whose target key depends on the active SEO plugin
+	 * (meta_title / meta_description) override this to pick the Yoast vs
+	 * Rank Math key and fail loud (412) when neither is active — so we never
+	 * write meta no SEO plugin will read.
+	 *
+	 * @return string|\WP_Error
+	 */
+	protected function resolve_meta_key() {
+		return $this->meta_key();
+	}
+
 	public function validate_params( array $params ) {
 		if ( empty( $params['post_id'] ) || ! is_numeric( $params['post_id'] ) ) {
 			return new WP_Error( 'missing_post_id', 'post_id is required.', array( 'status' => 400 ) );
@@ -38,14 +52,22 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 	}
 
 	public function dry_run( array $params ) {
+		$key = $this->resolve_meta_key();
+		if ( is_wp_error( $key ) ) {
+			return $key;
+		}
 		$post_id = (int) $params['post_id'];
-		$current = (string) get_post_meta( $post_id, $this->meta_key(), true );
+		$current = (string) get_post_meta( $post_id, $key, true );
 		return $this->describe_result( $post_id, $current, (string) $params['suggested_value'] );
 	}
 
 	public function apply( array $params ) {
+		$key = $this->resolve_meta_key();
+		if ( is_wp_error( $key ) ) {
+			return $key;
+		}
 		$post_id   = (int) $params['post_id'];
-		$current   = (string) get_post_meta( $post_id, $this->meta_key(), true );
+		$current   = (string) get_post_meta( $post_id, $key, true );
 		$suggested = (string) $params['suggested_value'];
 
 		// Safety guard: never overwrite an existing non-empty meta value with an
@@ -67,7 +89,7 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 			return $result;
 		}
 
-		$ok = update_post_meta( $post_id, $this->meta_key(), $suggested );
+		$ok = update_post_meta( $post_id, $key, $suggested );
 		if ( false === $ok ) {
 			return new WP_Error( 'update_failed', 'update_post_meta returned false.', array( 'status' => 500 ) );
 		}
@@ -87,7 +109,12 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 			return new WP_Error( 'invalid_history_entry', 'History entry is missing snapshot.', array( 'status' => 422 ) );
 		}
 
-		update_post_meta( $post_id, $this->meta_key(), $old_val );
+		$key = $this->resolve_meta_key();
+		if ( is_wp_error( $key ) ) {
+			return $key;
+		}
+
+		update_post_meta( $post_id, $key, $old_val );
 
 		return array(
 			'before' => array( 'value' => (string) ( $entry['after_state']['value'] ?? '' ) ),

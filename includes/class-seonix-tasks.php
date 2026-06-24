@@ -40,7 +40,7 @@ class Seonix_Tasks {
 	 * rendered "—" and excluded from the overall mean. Mirrors the frontend
 	 * Site Health page's four-pillar model.
 	 */
-	const SUPPORTED_SCHEMA_VERSION = 2;
+	const SUPPORTED_SCHEMA_VERSION = 3;
 
 	/** Option holding the JSON summary (open/solved/regressed/score + categories). */
 	const OPTION_SUMMARY = 'seonix_tasks_summary';
@@ -108,6 +108,13 @@ class Seonix_Tasks {
 			title TEXT NULL,
 			description LONGTEXT NULL,
 			recommendation LONGTEXT NULL,
+			why_it_matters LONGTEXT NULL,
+			how_to_fix_steps LONGTEXT NULL,
+			bad_example_code LONGTEXT NULL,
+			bad_example_caption TEXT NULL,
+			good_example_code LONGTEXT NULL,
+			good_example_caption TEXT NULL,
+			warnings LONGTEXT NULL,
 			severity VARCHAR(20) NOT NULL DEFAULT 'notice',
 			priority VARCHAR(20) NOT NULL DEFAULT 'low',
 			category VARCHAR(20) NOT NULL DEFAULT 'seo',
@@ -184,6 +191,13 @@ class Seonix_Tasks {
 					'title'            => $this->str( $task, 'title' ),
 					'description'      => $this->str( $task, 'description' ),
 					'recommendation'   => $this->str( $task, 'recommendation' ),
+					'why_it_matters'   => $this->str( $task, 'why_it_matters' ),
+					'how_to_fix_steps' => wp_json_encode( $this->string_list( $task, 'how_to_fix_steps' ) ),
+					'bad_example_code'    => $this->raw( $task, 'bad_example_code' ),
+					'bad_example_caption' => $this->str( $task, 'bad_example_caption' ),
+					'good_example_code'    => $this->raw( $task, 'good_example_code' ),
+					'good_example_caption' => $this->str( $task, 'good_example_caption' ),
+					'warnings'         => wp_json_encode( $this->string_list( $task, 'warnings' ) ),
 					'severity'         => $this->enum( $task, 'severity', array( 'error', 'warning', 'notice' ), 'notice' ),
 					'priority'         => $this->enum( $task, 'priority', array( 'high', 'medium', 'low' ), 'low' ),
 					'category'         => $this->enum( $task, 'category', array( 'seo', 'technical', 'speed', 'ai' ), 'seo' ),
@@ -206,6 +220,13 @@ class Seonix_Tasks {
 					'%s', // title
 					'%s', // description
 					'%s', // recommendation
+					'%s', // why_it_matters
+					'%s', // how_to_fix_steps (JSON)
+					'%s', // bad_example_code
+					'%s', // bad_example_caption
+					'%s', // good_example_code
+					'%s', // good_example_caption
+					'%s', // warnings (JSON)
 					'%s', // severity
 					'%s', // priority
 					'%s', // category
@@ -232,11 +253,24 @@ class Seonix_Tasks {
 			'open'       => isset( $summary['open'] ) ? (int) $summary['open'] : 0,
 			'solved'     => isset( $summary['solved'] ) ? (int) $summary['solved'] : 0,
 			'regressed'  => isset( $summary['regressed'] ) ? (int) $summary['regressed'] : 0,
+			// Canonical "active issues" count computed by the backend (mirrors the
+			// app's activeProblemPageTotal). The plugin renders this verbatim so its
+			// headline equals the dashboard's. -1 = field absent (older backend) →
+			// the dashboard falls back to a local count until the next sync.
+			'active'     => isset( $summary['active'] ) ? (int) $summary['active'] : -1,
 			'score'      => isset( $summary['score'] ) ? (int) $summary['score'] : 0,
 			'categories' => array(),
 		);
 		foreach ( $categories as $cat ) {
 			if ( ! is_array( $cat ) ) {
+				continue;
+			}
+			// Only the four pillars this plugin renders are stored. An unknown
+			// key (e.g. the v3 "content" pillar this version does not render yet)
+			// is SKIPPED rather than clamped to "seo" — clamping would create a
+			// duplicate SEO gauge in the header.
+			$cat_key = isset( $cat['key'] ) ? (string) $cat['key'] : '';
+			if ( ! in_array( $cat_key, array( 'seo', 'technical', 'speed', 'ai' ), true ) ) {
 				continue;
 			}
 			// The speed pillar's score is null until the first per-page speed
@@ -248,7 +282,7 @@ class Seonix_Tasks {
 				$cat_score = (int) $cat['score'];
 			}
 			$stored_summary['categories'][] = array(
-				'key'   => $this->enum( $cat, 'key', array( 'seo', 'technical', 'speed', 'ai' ), 'seo' ),
+				'key'   => $cat_key,
 				'score' => $cat_score,
 				'open'  => isset( $cat['open'] ) ? (int) $cat['open'] : 0,
 			);
@@ -417,16 +451,27 @@ class Seonix_Tasks {
 				$priority = 'low';
 			}
 
+			$steps = json_decode( isset( $row['how_to_fix_steps'] ) ? (string) $row['how_to_fix_steps'] : '', true );
+			$warns = json_decode( isset( $row['warnings'] ) ? (string) $row['warnings'] : '', true );
 			$out[] = array(
-				'title'          => isset( $row['title'] ) ? (string) $row['title'] : '',
-				'description'    => isset( $row['description'] ) ? (string) $row['description'] : '',
-				'recommendation' => isset( $row['recommendation'] ) ? (string) $row['recommendation'] : '',
-				'category'       => $category,
-				'severity'       => $severity,
-				'priority'       => $priority,
-				'code'           => isset( $row['code'] ) ? (string) $row['code'] : '',
-				'informational'  => ! empty( $row['informational'] ),
-				'status'         => $page_status,
+				'title'                => isset( $row['title'] ) ? (string) $row['title'] : '',
+				'description'          => isset( $row['description'] ) ? (string) $row['description'] : '',
+				'recommendation'       => isset( $row['recommendation'] ) ? (string) $row['recommendation'] : '',
+				'category'             => $category,
+				'severity'             => $severity,
+				'priority'             => $priority,
+				'code'                 => isset( $row['code'] ) ? (string) $row['code'] : '',
+				'informational'        => ! empty( $row['informational'] ),
+				'status'               => $page_status,
+				// Remediation detail (mirrored from the backend catalog) so the
+				// editor panel can show the same per-issue drill-down as the dashboard.
+				'why_it_matters'       => isset( $row['why_it_matters'] ) ? (string) $row['why_it_matters'] : '',
+				'how_to_fix_steps'     => is_array( $steps ) ? array_values( array_filter( array_map( 'strval', $steps ) ) ) : array(),
+				'bad_example_code'     => isset( $row['bad_example_code'] ) ? (string) $row['bad_example_code'] : '',
+				'bad_example_caption'  => isset( $row['bad_example_caption'] ) ? (string) $row['bad_example_caption'] : '',
+				'good_example_code'    => isset( $row['good_example_code'] ) ? (string) $row['good_example_code'] : '',
+				'good_example_caption' => isset( $row['good_example_caption'] ) ? (string) $row['good_example_caption'] : '',
+				'warnings'             => is_array( $warns ) ? array_values( array_filter( array_map( 'strval', $warns ) ) ) : array(),
 			);
 		}
 
@@ -540,6 +585,40 @@ class Seonix_Tasks {
 			$value = substr( $value, 0, $max );
 		}
 		return $value;
+	}
+
+	/**
+	 * Preserve a multi-line / HTML-bearing string field verbatim (e.g. a bad/good
+	 * code example). NOT sanitize_text_field — that strips tags and newlines,
+	 * which would destroy the example markup. Output is always esc_html()'d at
+	 * render time, so storing it raw is safe.
+	 */
+	private function raw( array $task, string $key ): string {
+		return isset( $task[ $key ] ) && is_scalar( $task[ $key ] ) ? (string) $task[ $key ] : '';
+	}
+
+	/**
+	 * Sanitize a payload field that should be a list of plain strings (fix steps,
+	 * warnings) into a clean indexed array. Non-arrays and non-scalar members are
+	 * dropped; each kept member is sanitize_text_field'd.
+	 *
+	 * @return array<int,string>
+	 */
+	private function string_list( array $task, string $key ): array {
+		$out = array();
+		if ( ! isset( $task[ $key ] ) || ! is_array( $task[ $key ] ) ) {
+			return $out;
+		}
+		foreach ( $task[ $key ] as $item ) {
+			if ( ! is_scalar( $item ) ) {
+				continue;
+			}
+			$s = sanitize_text_field( (string) $item );
+			if ( '' !== $s ) {
+				$out[] = $s;
+			}
+		}
+		return $out;
 	}
 
 	private function url( array $task, string $key ): string {

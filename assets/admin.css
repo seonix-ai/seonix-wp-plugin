@@ -2094,6 +2094,145 @@ body.seonix-modal-open {
   color: var(--sx-mute);
 }
 
+/* --- Editor sidebar panel: Yoast-style accordion. Brand header + two
+   collapsible analysis sections (SEO / Readability), each with a Seonix eye
+   indicator coloured by status. Scoped to --panel; no horizontal bleed so the
+   panel never gets a horizontal scrollbar. --- */
+.seonix-metabox--panel,
+.seonix-metabox--panel * { box-sizing: border-box; }
+.seonix-metabox--panel { margin: 0; overflow-x: hidden; overflow-wrap: anywhere; }
+
+/* Yoast-like inset: all content padded 16px left/right (and 16px top on the
+   header) so nothing hugs the panel edges. Section dividers stay full-bleed. */
+.sx-ph-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+}
+.sx-ph-logo { display: inline-flex; flex-shrink: 0; }
+.sx-ph-logo svg { display: block; border-radius: 6px; }
+.sx-ph-brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--sx-ink);
+  line-height: 1.2;
+}
+.sx-ph-sub { font-size: 12px; font-weight: 500; color: var(--sx-mute); margin-top: 1px; }
+
+.sx-acc { border-top: 1px solid var(--sx-border-soft); }
+.sx-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  margin: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--sx-ink);
+}
+.sx-acc-head:hover { background: var(--sx-paper-warm); }
+.sx-acc-eye { flex-shrink: 0; display: block; }
+.sx-acc-label { flex: 1 1 auto; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.sx-acc-count { font-family: var(--sx-mono); font-size: 11px; font-weight: 600; color: var(--sx-mute-dim); }
+.sx-acc-chev { flex-shrink: 0; color: var(--sx-mute-dim); transition: transform 0.15s ease; }
+.sx-acc-chev.is-open { transform: rotate(180deg); }
+.sx-acc-body { padding: 2px 16px 12px; }
+.sx-acc-empty { padding: 4px 0 6px; font-size: 12.5px; font-weight: 500; color: var(--sx-mute); }
+
+/* Issue rows sit inside the already-inset .sx-acc-body, so no extra side padding. */
+.seonix-metabox--panel .seonix-mb-issue {
+  gap: 10px;
+  padding: 10px 0;
+  align-items: flex-start;
+}
+.seonix-metabox--panel .seonix-mb-issue + .seonix-mb-issue { border-top: 1px solid var(--sx-border-soft); }
+.seonix-metabox--panel .seonix-mb-issuetitle { font-size: 13px; line-height: 1.35; }
+.seonix-metabox--panel .seonix-mb-issuerec { margin-top: 3px; line-height: 1.45; }
+.seonix-metabox--panel .seonix-mb-issue .seonix-pagedot { margin-top: 5px; }
+
+/* Footer: inset to match, no negative-margin bleed (that bled into a scrollbar). */
+.seonix-metabox--panel .seonix-mb-foot {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--sx-border-soft);
+  background: none;
+}
+
+/* --- Per-issue expandable detail (dashboard-style drill-down): click an issue
+   title to reveal what / why it matters / avoid-vs-better example / how to fix /
+   warnings. Sits inside the already-inset .sx-acc-body. --- */
+.sx-iss { border-top: 1px solid var(--sx-border-soft); }
+.sx-acc-body > .sx-iss:first-child { border-top: none; }
+.sx-iss-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 10px 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--sx-ink);
+}
+.sx-iss-head[disabled] { cursor: default; }
+.sx-iss-head .seonix-pagedot { margin-top: 5px; flex-shrink: 0; }
+.sx-iss-title { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; }
+.sx-iss-chev { flex-shrink: 0; margin-top: 3px; color: var(--sx-mute-dim); transition: transform 0.15s ease; }
+.sx-iss-chev.is-open { transform: rotate(180deg); }
+
+.sx-iss-detail { padding: 0 0 12px 16px; }
+.sx-iss-lead { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--sx-mute); }
+.sx-iss-sec { margin: 10px 0 0; }
+.sx-iss-h {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sx-mute-dim);
+  margin-bottom: 3px;
+}
+.sx-iss-sec p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--sx-ink); }
+.sx-iss-steps { margin: 0; padding-left: 18px; }
+.sx-iss-steps li { font-size: 12.5px; line-height: 1.5; color: var(--sx-ink); margin: 2px 0; }
+
+.sx-ex-wrap { margin: 10px 0 0; display: grid; gap: 6px; }
+.sx-ex { border: 1px solid var(--sx-border-soft); border-left-width: 3px; border-radius: 8px; overflow: hidden; }
+.sx-ex--bad { border-left-color: var(--sx-red); }
+.sx-ex--good { border-left-color: var(--sx-green); }
+.sx-ex-cap { font-size: 11px; font-weight: 700; padding: 5px 9px; }
+.sx-ex--bad .sx-ex-cap { background: var(--sx-red-soft); color: var(--sx-red); }
+.sx-ex--good .sx-ex-cap { background: var(--sx-green-soft); color: var(--sx-green-ink); }
+.sx-ex-code {
+  margin: 0;
+  padding: 8px 9px;
+  font-family: var(--sx-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--sx-ink);
+  background: var(--sx-paper-warm);
+}
+.sx-iss-warn { margin: 10px 0 0; }
+.sx-iss-warn-row {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sx-amber-ink);
+  background: var(--sx-amber-soft);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-top: 4px;
+}
+
 /* ── Task table: responsive (stack on narrow) ── */
 
 @media (max-width: 600px) {
@@ -2144,4 +2283,199 @@ body.seonix-modal-open {
     padding-left: 18px;
     padding-right: 18px;
   }
+}
+
+/* Rich remediation detail — Why this matters / Bad-vs-good / fix steps /
+   warnings. Mirrors the dashboard IssueArtefactModal sections. */
+.seonix-modal__body .seonix-bg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .seonix-modal__body .seonix-bg-grid { grid-template-columns: 1fr; }
+}
+.seonix-modal__body .seonix-bg-col {
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--sx-border);
+}
+.seonix-modal__body .seonix-bg-bad { background: var(--sx-red-soft); border-color: #f6cdd2; }
+.seonix-modal__body .seonix-bg-good { background: var(--sx-green-soft); border-color: #c7ecdd; }
+.seonix-modal__body .seonix-bg-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+.seonix-modal__body .seonix-bg-bad .seonix-bg-tag { color: var(--sx-red-ink); }
+.seonix-modal__body .seonix-bg-good .seonix-bg-tag { color: var(--sx-green-ink); }
+.seonix-modal__body .seonix-bg-code {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--sx-ink-2);
+  background: transparent;
+}
+.seonix-modal__body .seonix-bg-cap {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--sx-mute);
+}
+.seonix-modal__body .seonix-fix-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+.seonix-modal__body .seonix-fix-steps li {
+  margin: 2px 0;
+  font-size: 13px;
+  color: var(--sx-ink-2);
+}
+.seonix-modal__body .seonix-task-warn {
+  font-size: 12px;
+  color: var(--sx-amber-ink);
+  background: var(--sx-amber-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.seonix-modal__body .seonix-task-warn + .seonix-task-warn { margin-top: 6px; }
+
+/* ── "Open in Seonix" + plan card + paid-AI popup ───────────────────────── */
+.seonix-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seonix-btn--brand {
+  background: var(--sx-ac-grad);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(139, 61, 255, 0.28);
+}
+
+.seonix-btn--brand:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow: 0 4px 14px rgba(139, 61, 255, 0.32);
+  color: #fff;
+}
+
+.seonix-openapp__ico {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.seonix-plancard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.seonix-plancard__head h2 {
+  margin: 0;
+}
+
+.seonix-planbadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: var(--sx-track);
+  color: var(--sx-mute);
+  white-space: nowrap;
+}
+
+.seonix-planbadge[data-tier="paid"] {
+  background: var(--sx-ac-soft);
+  color: var(--sx-ac-deep);
+}
+
+.seonix-plancard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.seonix-aifeat {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--sx-ac-line);
+  background: var(--sx-ac-soft);
+  border-radius: 12px;
+}
+
+.seonix-aifeat__ico {
+  flex-shrink: 0;
+  color: var(--sx-ac);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.seonix-aifeat__txt {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--sx-ink-2);
+}
+
+.seonix-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: 4px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--sx-ac-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.seonix-link:hover {
+  color: var(--sx-ac);
+}
+
+.seonix-modal--paywall .seonix-modal__panel {
+  max-width: 460px;
+}
+
+.seonix-paywall__spark {
+  color: var(--sx-ac);
+  margin-right: 8px;
+}
+
+.seonix-paywall__body {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--sx-ink-2);
+}
+
+.seonix-paywall__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sx-ink);
+}
+
+.seonix-paywall__list li::marker {
+  color: var(--sx-ac);
 }
