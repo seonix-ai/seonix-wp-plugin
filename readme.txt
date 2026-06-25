@@ -131,6 +131,14 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 == Changelog ==
 
+= 2.5.38 =
+* New: one-click SEO fixes from the plugin. Fixable issues — page titles, meta descriptions, image alt text, mixed content and paginated-archive noindex among them — now show a "Fix it for me" button that applies the change through the connected Seonix service. Available on paid Seonix plans.
+* Real-time SEO and readability scoring in the block editor sidebar, with per-issue detail (what it means, why it matters, how to fix) that mirrors the Seonix dashboard.
+* Supplemental FAQ / Q&A structured data is now emitted alongside your existing SEO plugin instead of conflicting with it.
+* Site Health issue counts now match the Seonix dashboard exactly.
+* Bundled the admin-interface fonts with the plugin (no external CDN requests).
+* Housekeeping: corrected the readme stable tag and added database-escaping annotations for WordPress.org compliance.
+
 = 2.5.22 =
 * Fixed the top bar / nav alignment: the brand and tabs are now centered with the page content (a class name collided with the hero pillar style and pushed them to the left edge).
 
