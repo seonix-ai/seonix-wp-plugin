@@ -571,6 +571,72 @@
     });
   }
 
+  // ── One-click SEO fix (inside the task modal) ──
+  // The "Fix it for me" button lives in the hidden .seonix-task-detail block and
+  // is CLONED into the modal, so the clone carries no listeners — we delegate the
+  // click from document. WordPress proxies the call to the Seonix backend, which
+  // gates it on a paid subscription: a 402 closes the detail modal and opens the
+  // upgrade popup, mirroring the web app's AI paywall. On success we re-pull the
+  // canonical task view from the backend and reload so the list reflects it.
+  document.addEventListener('click', function (e) {
+    var btn = (e.target && e.target.closest) ? e.target.closest('.seonix-fix-btn') : null;
+    if (!btn || btn.disabled) return;
+    var code = btn.getAttribute('data-code') || '';
+    if (!code || !seonixConnector.fixNonce) return;
+
+    btn.disabled = true;
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="ce-spinner"></span> ' + escapeHtml(i18n('fixing', 'Fixing…'));
+
+    var body = new URLSearchParams();
+    body.append('action', 'seonix_seo_fix');
+    body.append('nonce', seonixConnector.fixNonce);
+    body.append('issue_code', code);
+
+    fetch(seonixConnector.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); })
+      .then(function (res) {
+        if (res.json && res.json.success) {
+          showNotice('success', i18n('fixApplied', 'Fix applied. It will clear on the next scan.'));
+          // Re-pull the canonical task view from the backend, then reload.
+          var rb = new URLSearchParams();
+          rb.append('action', 'seonix_refresh_tasks');
+          rb.append('nonce', seonixConnector.refreshNonce);
+          var reload = function () { setTimeout(function () { window.location.reload(); }, 800); };
+          fetch(seonixConnector.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: rb })
+            .then(reload).catch(reload);
+          return;
+        }
+        // Restore the button so the action can be retried.
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        if (res.status === 402) {
+          // No paid subscription → close this modal, open the upgrade popup.
+          var taskModal = document.getElementById('seonix-modal');
+          if (taskModal) {
+            taskModal.hidden = true;
+            taskModal.setAttribute('aria-hidden', 'true');
+          }
+          var pop = document.getElementById('seonix-paywall-modal');
+          if (pop) {
+            pop.hidden = false;
+            pop.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('seonix-modal-open');
+          } else {
+            showNotice('error', i18n('fixPaywall', 'An active subscription is required to apply fixes.'));
+          }
+          return;
+        }
+        var msg = (res.json && res.json.data && res.json.data.message) ? res.json.data.message : i18n('fixFailed', 'Could not apply the fix.');
+        showNotice('error', msg);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        showNotice('error', i18n('networkError', 'Network error.'));
+      });
+  });
+
   // ── By page view: URL search ──
   // Filtering by URL substring (lowercased). Non-matching page items are hidden;
   // a friendly empty state shows when nothing matches.

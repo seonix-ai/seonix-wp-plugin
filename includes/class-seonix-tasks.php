@@ -175,7 +175,7 @@ class Seonix_Tasks {
 		// Replace the full set. delete-all then insert keeps the table in lockstep
 		// with the latest scan. $table is internal (prefix + constant), never
 		// user-controlled — same rationale as Seonix_SEO_Fix_History.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		$wpdb->query( "DELETE FROM {$table}" );
 
 		$now = gmdate( 'Y-m-d H:i:s' );
@@ -183,6 +183,7 @@ class Seonix_Tasks {
 			if ( ! is_array( $task ) ) {
 				continue;
 			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->insert(
 				$table,
 				array(

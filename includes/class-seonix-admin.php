@@ -162,6 +162,7 @@ class Seonix_Admin {
 			'refreshNonce'  => wp_create_nonce( 'seonix_refresh_tasks' ),
 			'connectNonce'  => wp_create_nonce( 'seonix_connect' ),
 			'accountNonce'  => wp_create_nonce( 'seonix_account' ),
+			'fixNonce'      => wp_create_nonce( 'seonix_seo_fix' ),
 			'i18n'          => array(
 				'refreshing'     => __( 'Refreshing…', 'seonix' ),
 				'tasksRefreshed' => __( 'Tasks refreshed.', 'seonix' ),
@@ -180,6 +181,12 @@ class Seonix_Admin {
 				'planFreeSub'    => __( 'This project is on the Free plan. Upgrade to unlock AI generation, refinement and one-click SEO fixes.', 'seonix' ),
 				'planError'      => __( 'Could not load your plan.', 'seonix' ),
 				'planFree'       => __( 'Free', 'seonix' ),
+				// One-click SEO fix (task modal). The fix runs through the backend,
+				// which gates it on a paid subscription (402 → upgrade popup).
+				'fixing'         => __( 'Fixing…', 'seonix' ),
+				'fixApplied'     => __( 'Fix applied. It will clear on the next scan.', 'seonix' ),
+				'fixFailed'      => __( 'Could not apply the fix.', 'seonix' ),
+				'fixPaywall'     => __( 'An active subscription is required to apply fixes.', 'seonix' ),
 			),
 		) );
 	}
@@ -495,6 +502,97 @@ class Seonix_Admin {
 		}
 
 		wp_send_json_success( $data );
+	}
+
+	/**
+	 * Run a one-click SEO fix through the Seonix backend.
+	 *
+	 * This is the plugin half of the dashboard's one-click fix: the browser only
+	 * asks WordPress to proxy the call, and WordPress forwards it to the backend
+	 * with the Bearer key (which never reaches the browser). The backend gates the
+	 * fix on an active paid subscription and runs the SAME orchestration the
+	 * dashboard uses (preview → AI suggestion → apply). We surface the upstream
+	 * HTTP status verbatim so the JS can open the upgrade popup on 402.
+	 */
+	public function ajax_seo_fix(): void {
+		check_ajax_referer( 'seonix_seo_fix', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'seonix' ) ), 403 );
+		}
+
+		$code = isset( $_POST['issue_code'] ) ? sanitize_text_field( wp_unslash( $_POST['issue_code'] ) ) : '';
+		if ( '' === $code || ! $this->is_auto_fixable( $code ) ) {
+			wp_send_json_error( array( 'message' => __( 'This issue cannot be fixed automatically.', 'seonix' ) ), 400 );
+		}
+
+		$engine_url = get_option( 'seonix_engine_url', '' );
+		$api_key    = Seonix_Auth::get_key();
+		if ( empty( $engine_url ) || empty( $api_key ) ) {
+			wp_send_json_error( array( 'message' => __( 'Connect this site to Seonix first.', 'seonix' ) ), 400 );
+		}
+		if ( ! Seonix_Auth::is_safe_url( $engine_url ) ) {
+			wp_send_json_error( array( 'message' => __( 'Configured engine URL is not allowed.', 'seonix' ) ), 400 );
+		}
+
+		// The backend runs preview → AI suggestion → apply synchronously, so allow
+		// a generous timeout (the AI suggestion step is the slow part).
+		$response = wp_remote_post(
+			trailingslashit( $engine_url ) . 'api/plugin/seo-fix',
+			array(
+				'timeout' => 60,
+				'headers' => array(
+					'Accept'        => 'application/json',
+					'Content-Type'  => 'application/json',
+					'Authorization' => 'Bearer ' . $api_key,
+				),
+				'body'    => wp_json_encode( array( 'issue_code' => $code ) ),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			wp_send_json_error( array( 'message' => $response->get_error_message() ), 502 );
+		}
+
+		$status  = (int) wp_remote_retrieve_response_code( $response );
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		$data    = ( is_array( $decoded ) && isset( $decoded['data'] ) && is_array( $decoded['data'] ) ) ? $decoded['data'] : array();
+		if ( $status < 200 || $status >= 300 ) {
+			// Surface the upstream status so the JS can branch — 402 means "no paid
+			// subscription" and opens the upgrade popup (mirrors the AI paywall).
+			$http = ( $status >= 400 && $status < 600 ) ? $status : 502;
+			$msg  = ( 402 === $status )
+				? __( 'An active subscription is required to apply fixes.', 'seonix' )
+				: __( 'Could not apply the fix.', 'seonix' );
+			wp_send_json_error( array( 'message' => $msg ), $http );
+		}
+
+		wp_send_json_success( $data );
+	}
+
+	/**
+	 * Whether an issue code has a server-side auto-fix. Mirror of the backend
+	 * seofix.issueCodeToMethod map (internal/seofix/issue_to_method.go) — keep in
+	 * sync: the backend rejects non-fixable codes with 400, so the Fix button must
+	 * only appear for codes that are actually fixable.
+	 *
+	 * @param string $code Scanner issue code.
+	 * @return bool
+	 */
+	private function is_auto_fixable( string $code ): bool {
+		static $fixable = array(
+			'ssl_mixed_content',
+			'broken_internal_link',
+			'http_4xx',
+			'title_too_long',
+			'title_too_short',
+			'duplicate_title',
+			'meta_description_missing',
+			'meta_desc_too_long',
+			'meta_desc_too_short',
+			'duplicate_meta_desc',
+			'images_missing_alt',
+			'pagination_noindex_recommended',
+		);
+		return in_array( $code, $fixable, true );
 	}
 
 	/**
@@ -1222,6 +1320,14 @@ class Seonix_Admin {
 			</button>
 
 			<div class="seonix-task-detail" id="<?php echo esc_attr( $panel_id ); ?>" hidden>
+				<?php if ( $this->is_auto_fixable( $code ) ) : ?>
+					<div class="seonix-task-detail__sec seonix-fixcta">
+						<button type="button" class="seonix-btn seonix-btn--brand seonix-fix-btn" data-code="<?php echo esc_attr( $code ); ?>">
+							<?php esc_html_e( 'Fix it for me', 'seonix' ); ?>
+						</button>
+						<p class="seonix-fixcta__note"><?php esc_html_e( 'Seonix applies this fix to your site automatically. Available on a paid plan.', 'seonix' ); ?></p>
+					</div>
+				<?php endif; ?>
 				<?php if ( '' !== $why_it_matters ) : ?>
 					<div class="seonix-task-detail__sec">
 						<div class="seonix-msec-label"><?php esc_html_e( 'Why this matters', 'seonix' ); ?></div>

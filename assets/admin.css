@@ -2364,6 +2364,21 @@ body.seonix-modal-open {
   color: #fff;
 }
 
+/* One-click fix CTA at the top of the task detail modal. */
+.seonix-fixcta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.seonix-fixcta__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--sx-ink-2);
+  line-height: 1.5;
+}
+
 .seonix-openapp__ico {
   font-size: 13px;
   line-height: 1;
