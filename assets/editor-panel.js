@@ -220,14 +220,16 @@
 	// --- The two "eyes" of the Seonix mark = two Yoast-style tracks ----------
 	// Left eye  = SEO track        (seo + technical + ai + speed)
 	// Right eye = Readability track (content)
-	// Each eye takes the colour of the WORST severity in its track, on the
-	// Yoast-style 3-light model: green = clean, amber = needs work (warning OR
-	// notice/improvement), red = errors, grey = not published / not scanned.
-	// Computed here in JS from data.groups, so no backend change is needed.
+	// Each eye takes the colour of the WORST severity in its track on a
+	// traffic-light model: red = errors, amber = needs work (warning OR
+	// notice/improvement), green = no open issues. A track with nothing to flag
+	// reads as green even on a not-yet-scanned page — the panel is only enqueued
+	// for sites linked to a Seonix account, so "no issues shown" is a clean
+	// signal, not an unknown one. Computed in JS from data.groups, no backend
+	// change needed.
 	var EYE_RED = '#FF5468';
 	var EYE_AMBER = '#FBB024';
 	var EYE_GREEN = '#27D49A';
-	var EYE_MUTE = '#9A9AB2';
 
 	function worstColor( severities ) {
 		if ( severities.indexOf( 'error' ) !== -1 ) { return EYE_RED; }
@@ -244,9 +246,8 @@
 		( g.items || [] ).forEach( function ( it ) { bucket.push( it.severity ); } );
 	} );
 
-	var noData = ( 'unpublished' === data.state || 'unscanned' === data.state );
-	var seoEye = noData ? EYE_MUTE : worstColor( seoSev );
-	var contentEye = noData ? EYE_MUTE : worstColor( contentSev );
+	var seoEye = worstColor( seoSev );
+	var contentEye = worstColor( contentSev );
 
 	// The two sparkle "eyes" — same paths as the dashboard logo (viewBox 0 0 50).
 	var EYE_LEFT = 'M13.6719 17.0898L15.3866 22.0738C15.5823 22.6427 16.0292 23.0896 16.598 23.2853L21.582 25L16.598 26.7147C16.0292 26.9104 15.5823 27.3573 15.3866 27.9262L13.6719 32.9102L11.9572 27.9262C11.7615 27.3573 11.3146 26.9104 10.7457 26.7147L5.76172 25L10.7457 23.2853C11.3146 23.0896 11.7615 22.6427 11.9572 22.0738L13.6719 17.0898Z';

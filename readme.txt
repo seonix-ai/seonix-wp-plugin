@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.38
+Stable tag: 2.5.39
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 2. Every issue becomes a task with its category, the pages it affects, and its priority.
 
 == Changelog ==
+
+= 2.5.39 =
+* The Seonix mark in the block-editor sidebar now reads green when a track has no open issues, instead of greying out on pages that have not been scanned yet.
 
 = 2.5.38 =
 * New: one-click SEO fixes from the plugin. Fixable issues — page titles, meta descriptions, image alt text, mixed content and paginated-archive noindex among them — now show a "Fix it for me" button that applies the change through the connected Seonix service. Available on paid Seonix plans.

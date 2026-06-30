@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: Real-time AI Agent for Technical SEO, AI Content & Autonomous Growth. Grow your SEO with real-time site audits, AI-written articles, and one-click technical fixes — an autonomous AI agent publishes on autopilot.
- * Version:     2.5.38
+ * Version:     2.5.39
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.5.38' );
+define( 'SEONIX_VERSION', '2.5.39' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
