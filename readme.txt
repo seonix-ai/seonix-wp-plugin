@@ -136,8 +136,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 == Screenshots ==
 
-1. Your site health score inside WordPress, with SEO, technical, and AI search breakdowns synced from Seonix.
-2. Every issue becomes a task with its category, the pages it affects, and its priority.
+1. Your site health score inside WordPress, with SEO, technical, and AI-search breakdowns synced from Seonix.
+2. Every issue becomes a prioritized task showing its category and the pages it affects.
+3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
 
