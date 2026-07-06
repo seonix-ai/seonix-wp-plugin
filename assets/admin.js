@@ -242,6 +242,50 @@
     });
   }
 
+  // ── IndexNow auto-submit toggle (standalone feature card) ──
+  // Saves on change (no separate button); the status pill next to the card
+  // title flips together with the checkbox. On failure the checkbox reverts so
+  // the UI never lies about the stored setting.
+
+  var indexnowToggle = document.getElementById('seonix-indexnow-auto');
+  if (indexnowToggle) {
+    indexnowToggle.addEventListener('change', function () {
+      var enabled = indexnowToggle.checked;
+      indexnowToggle.disabled = true;
+
+      var body = new URLSearchParams();
+      body.append('action', 'seonix_save_indexnow');
+      body.append('_wpnonce', seonixConnector.nonce);
+      body.append('enabled', enabled ? '1' : '0');
+
+      fetch(seonixConnector.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.success) {
+            showNotice('success', i18n('indexnowSaved', 'IndexNow setting saved.'));
+            var pill = document.getElementById('seonix-indexnow-status');
+            if (pill) {
+              pill.classList.toggle('seonix-featstatus--on', enabled);
+              var dot = pill.querySelector('.seonix-status__dot');
+              if (dot) dot.classList.toggle('seonix-status__dot--green', enabled);
+              var txt = pill.querySelector('.seonix-featstatus__txt');
+              if (txt) txt.textContent = enabled ? i18n('indexnowEnabled', 'Enabled') : i18n('indexnowDisabled', 'Disabled');
+            }
+          } else {
+            indexnowToggle.checked = !enabled;
+            var msg = res.data && res.data.message ? res.data.message : i18n('saveFailed', 'Failed to save setting.');
+            showNotice('error', msg);
+          }
+          indexnowToggle.disabled = false;
+        })
+        .catch(function () {
+          indexnowToggle.checked = !enabled;
+          indexnowToggle.disabled = false;
+          showNotice('error', i18n('networkError', 'Network error.'));
+        });
+    });
+  }
+
   // ── Refresh tasks (Dashboard) ──
   // Server-side pulls the latest TaskView from the connected Seonix backend
   // and replaces the local copy, then reloads so the freshly-stored rows

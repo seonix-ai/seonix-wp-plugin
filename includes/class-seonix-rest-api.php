@@ -17,6 +17,11 @@
  *   POST   /setup-indexnow  - Set up IndexNow key file
  *   GET    /indexnow-status - Check IndexNow configuration
  *   GET    /llms-status     - Check LLMs.txt generation status
+ *   POST   /connect/exchange - One-click connect handoff (since 2.5.0)
+ *   POST   /tasks           - Task sink from the backend (since 2.5.0)
+ *
+ * SEO Fix routes live in class-seonix-seo-fix-controller.php (/seo-fix/*).
+ * All routes are mirrored under the legacy content-engine/v1 namespace.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

@@ -7,9 +7,11 @@
  * deterministic slug-similarity matcher, with optional AI fallback for low-
  * confidence cases). The plugin just executes the substitution it's told.
  *
- * Replacement strategy: plain str_replace on the full URL string. This catches
- * URLs in href, src, and even plain-text mentions. The dry-run reports the
- * occurrence count so the user can review before applying.
+ * Replacement strategy: boundary-anchored exact-URL replacement (see
+ * replace_url_bounded). This catches URLs in href, src, and plain-text
+ * mentions while refusing partial matches — replacing /foo never rewrites
+ * /foo-bar, /foo/child, or the same path on a different host. The dry-run
+ * reports the occurrence count so the user can review before applying.
  *
  * Idempotent: if the old_url no longer appears in the post, returns no_op.
  */
@@ -154,7 +156,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			$total = 0;
 			foreach ( $pairs as $pair ) {
 				$c = 0;
-				$replaced = str_replace( $pair[0], $pair[1], $replaced, $c );
+				$replaced = $this->replace_url_bounded( $pair[0], $pair[1], $replaced, $c );
 				$total += $c;
 			}
 			if ( $total > 0 && $replaced !== $row->post_content ) {
@@ -216,7 +218,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 		$total_count  = 0;
 		foreach ( $this->url_variant_pairs( $old_url, $new_url ) as $pair ) {
 			$count    = 0;
-			$replaced = str_replace( $pair[0], $pair[1], $replaced, $count );
+			$replaced = $this->replace_url_bounded( $pair[0], $pair[1], $replaced, $count );
 			$total_count += $count;
 		}
 		$is_no_op = 0 === $total_count;
@@ -373,7 +375,50 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 	}
 
 	/**
-	 * Returns pairs of (old_variant, new_variant) to feed str_replace, in
+	 * Boundary-anchored URL replacement.
+	 *
+	 * A plain str_replace on a URL corrupts partial matches: replacing "/foo"
+	 * would also rewrite "/foo-bar", "/foobar", "/foo/child" — and, for the
+	 * path-only variant, the same path inside a DIFFERENT host's absolute URL
+	 * ("https://other.com/foo"). In deep mode that corruption multiplies
+	 * across up to 200 posts. This anchors the match on both sides:
+	 *
+	 *  - LEFT: the preceding character must not be a host/path character
+	 *    ([A-Za-z0-9_.-]), so a path needle can't match mid-URL (the char
+	 *    before a legit occurrence is a quote, whitespace, '(' or '=').
+	 *  - RIGHT: the following character must not extend the path
+	 *    ([A-Za-z0-9_.-] or '/'), so "/foo" never matches inside "/foo-bar"
+	 *    or "/foo/child". A query string or fragment MAY follow and is
+	 *    preserved: "/foo?page=2" → "/new?page=2".
+	 *
+	 * Deliberately stricter than str_replace: a trailing-slash mismatch
+	 * ("/foo" vs "/foo/" in content) no longer half-matches — the fix
+	 * no-ops instead of corrupting, and the issue stays visible for a rerun
+	 * with the exact URL. Replacement goes through preg_replace_callback so
+	 * "$" and "\" in the new URL are inserted literally.
+	 *
+	 * @param string $old     Exact URL (or path) to replace.
+	 * @param string $new     Replacement URL (or path).
+	 * @param string $subject Post content to rewrite.
+	 * @param int    $count   OUT: number of replacements made.
+	 * @return string The rewritten content ($subject untouched on regex failure).
+	 */
+	private function replace_url_bounded( string $old, string $new, string $subject, int &$count ): string {
+		$count   = 0;
+		$pattern = '#(?<![A-Za-z0-9_.\-])' . preg_quote( $old, '#' ) . '(?![A-Za-z0-9_.\-/])#';
+		$result  = preg_replace_callback(
+			$pattern,
+			static function () use ( $new, &$count ) {
+				$count++;
+				return $new;
+			},
+			$subject
+		);
+		return is_string( $result ) ? $result : $subject;
+	}
+
+	/**
+	 * Returns pairs of (old_variant, new_variant) for replace_url_bounded, in
 	 * priority order (most specific first). When both URLs point at this site,
 	 * we ALSO try the path-only relative form because WP block editor stores
 	 * internal links as relative href values ("/foo/" not "https://host/foo/").

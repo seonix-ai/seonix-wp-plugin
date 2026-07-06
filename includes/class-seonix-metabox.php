@@ -157,6 +157,15 @@ class Seonix_Metabox {
 				'optional' => __( 'Optional', 'seonix' ),
 				/* translators: %s: human-readable age, e.g. "2 hours" — how long ago the page was last scanned. */
 				'scanned'  => __( 'scanned %s ago', 'seonix' ),
+				// Editor sidebar panel (editor-panel.js). These cover every string
+				// the JS previously fell back to in hard-coded English.
+				'seoLabel'         => __( 'SEO', 'seonix' ),
+				'readabilityLabel' => __( 'Readability', 'seonix' ),
+				'noIssues'         => __( 'No issues found', 'seonix' ),
+				'why'              => __( 'Why it matters', 'seonix' ),
+				'howToFix'         => __( 'How to fix', 'seonix' ),
+				'avoid'            => __( 'Avoid', 'seonix' ),
+				'better'           => __( 'Better', 'seonix' ),
 			),
 			'groups'  => array(),
 			'light'   => 'green',

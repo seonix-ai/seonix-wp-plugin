@@ -224,11 +224,14 @@ final class TasksTest extends TestCase {
 
 	public function test_upsert_view_rejects_newer_schema_version(): void {
 		// Newer schema → WP_Error, and NOTHING is written (no DELETE, no insert).
+		// Version-relative so the test doesn't go stale when the supported
+		// schema version is bumped (it previously hard-coded 2 and broke when
+		// SUPPORTED_SCHEMA_VERSION reached 3).
 		$this->wpdb->shouldNotReceive( 'query' );
 		$this->wpdb->shouldNotReceive( 'insert' );
 
 		$result = $this->tasks->upsert_view( array(
-			'schema_version' => 2,
+			'schema_version' => Seonix_Tasks::SUPPORTED_SCHEMA_VERSION + 1,
 			'tasks'          => array(),
 		) );
 

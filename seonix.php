@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Seonix SEO
- * Description: Real-time AI Agent for Technical SEO, AI Content & Autonomous Growth. Grow your SEO with real-time site audits, AI-written articles, and one-click technical fixes — an autonomous AI agent publishes on autopilot.
+ * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
  * Version:     2.5.39
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -29,6 +29,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-sync.php';
 require_once SEONIX_DIR . 'includes/class-seonix-tasks.php';
 require_once SEONIX_DIR . 'includes/class-seonix-rest-api.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin.php';
+require_once SEONIX_DIR . 'includes/class-seonix-onboarding.php';
 require_once SEONIX_DIR . 'includes/class-seonix-metabox.php';
 require_once SEONIX_DIR . 'includes/class-seonix-llmtxt.php';
 require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
@@ -115,6 +116,12 @@ function seonix_init() {
 	add_action( 'admin_menu', array( $admin, 'add_menu_page' ) );
 	add_action( 'admin_enqueue_scripts', array( $admin, 'enqueue_assets' ) );
 
+	// Post-activation onboarding: one-time redirect to the Seonix screen and a
+	// dismissible connect notice (admin requests only; admin-ajax is is_admin).
+	if ( is_admin() ) {
+		Seonix_Onboarding::register();
+	}
+
 	// Per-page audit meta box in the post editor (Yoast-style).
 	$metabox->register();
 
@@ -145,6 +152,9 @@ function seonix_init() {
 	// key; the backend gates it on a paid subscription and runs the same fix
 	// orchestration as the dashboard.
 	add_action( 'wp_ajax_seonix_seo_fix', array( $admin, 'ajax_seo_fix' ) );
+	// IndexNow auto-submit toggle (standalone feature card on Settings /
+	// the unconnected Dashboard).
+	add_action( 'wp_ajax_seonix_save_indexnow', array( $admin, 'ajax_save_indexnow' ) );
 
 	// Content sync hooks.
 	add_action( 'save_post', array( $sync, 'on_save_post' ), 10, 3 );
@@ -290,6 +300,15 @@ function seonix_activate() {
 	$tasks = new Seonix_Tasks();
 	$tasks->create_table();
 	update_option( 'seonix_db_version', SEONIX_VERSION );
+
+	// Onboarding: flag the one-time redirect to the Seonix screen (consumed on
+	// the next admin page load; Seonix_Onboarding skips it for bulk activation)
+	// and — only while the site is not yet connected — the dismissible connect
+	// notice. Reactivating an already-connected site never nags.
+	update_option( Seonix_Onboarding::REDIRECT_OPTION, 1 );
+	if ( ! get_option( 'seonix_connected' ) ) {
+		update_option( Seonix_Onboarding::NOTICE_OPTION, 1 );
+	}
 }
 
 register_activation_hook( __FILE__, 'seonix_activate' );
@@ -331,6 +350,8 @@ function seonix_uninstall() {
 		'seonix_tasks_summary',
 		'seonix_tasks_synced_at',
 		'seonix_migrated_from_ce',
+		'seonix_activation_redirect',
+		'seonix_activation_notice',
 	);
 
 	foreach ( $options as $option ) {

@@ -8,27 +8,37 @@ Stable tag: 2.5.39
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Grow your SEO with real-time site audits, AI-written articles, and one-click technical fixes. An autonomous AI agent publishes on autopilot.
+AI search visibility out of the box — llms.txt and IndexNow, no account needed. Connect Seonix for site audits, AI articles, and SEO fixes.
 
 == Description ==
 
-**Seonix SEO is the AI agent for organic and AI-search growth.** Connect your WordPress site and Seonix audits your technical SEO in real time, writes SEO-optimized articles, fixes site issues in one click, and publishes everything on autopilot — for Google and AI search engines like ChatGPT, Gemini, and Perplexity.
+**Seonix SEO gives your site AI-search visibility from the moment you activate it — and becomes a full growth agent when you connect a Seonix account.** Two features work immediately, free, with no account. Connect a Seonix project and the plugin brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search engines like ChatGPT, Gemini, and Perplexity.
 
-Built for site owners who want growth without learning SEO or hiring an agency.
+**Free — works right after activation, no account needed**
 
-**What Seonix does for your site**
+* **llms.txt for AI search** — your site serves `/llms.txt` and `/llms-full.txt`, a machine-readable index of your published content that AI assistants use to discover and cite your pages. Generated live, always in sync with your content.
+* **IndexNow auto-submit** — publishing or updating a post pings IndexNow, so participating search engines (Bing, Yandex, Seznam, Naver) re-crawl the changed URL within minutes. The verification key is provisioned automatically; toggle it any time from the plugin settings.
 
-* **Real-time technical SEO audits** — broken links, duplicate content, missing meta descriptions, image alt issues, schema gaps, sitemap problems, and dozens more checks.
-* **One-click SEO fixes** — apply AI-suggested fixes for the most common technical issues directly from the Seonix dashboard. Rollback any change if you don't like the result.
+**Free with a Seonix account**
+
+* **Site Health inside WordPress** — your site's SEO audit as a task list: overall score, SEO / technical / AI-search breakdowns, and every issue explained (what it means, why it matters, how to fix it). Checks cover broken links, duplicate content, missing meta descriptions, image alt issues, schema gaps, sitemap problems, and dozens more.
+* **Page audit in the editor** — the current page's issues from the last scan, in the block editor sidebar and the classic editor.
+* **Structured data (JSON-LD)** on articles published through Seonix — and it stays silent when another SEO plugin already outputs schema.
+
+**What requires a paid Seonix plan**
+
+* **One-click SEO fixes** — apply AI-suggested fixes for the most common technical issues directly from WordPress or the Seonix dashboard. Rollback any change if you don't like the result.
 * **AI-written articles, SEO-tuned end-to-end** — Seonix learns your site, audience, voice, and topics, then generates articles with optimized titles, meta descriptions, internal links, headings, and schema markup.
 * **Autonomous publishing on a schedule** — pick a cadence (daily, every 3 days, weekly), and the AI agent plans, generates, and publishes for you. Pause anytime.
-* **AI-search visibility** — content is structured for both Google and the new generation of AI search engines (ChatGPT, Gemini, Perplexity), with built-in `llms.txt` support.
-* **Works with the SEO plugin you already use** — Seonix writes the standard meta fields every major WordPress SEO plugin reads, so your existing setup keeps working.
+
+**Plays well with your stack**
+
+* **Works alongside your existing SEO plugin** — Seonix writes the standard meta fields every major WordPress SEO plugin reads, so your current setup keeps working.
 * **WooCommerce-ready** — product pages flow into the AI context for relevant internal linking.
 
 **How the WordPress plugin fits in**
 
-The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the Seonix platform.
+The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — serving llms.txt, pinging IndexNow, receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the Seonix platform.
 
 **How it works:**
 
@@ -136,11 +146,14 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 = 2.5.38 =
 * New: one-click SEO fixes from the plugin. Fixable issues — page titles, meta descriptions, image alt text, mixed content and paginated-archive noindex among them — now show a "Fix it for me" button that applies the change through the connected Seonix service. Available on paid Seonix plans.
-* Real-time SEO and readability scoring in the block editor sidebar, with per-issue detail (what it means, why it matters, how to fix) that mirrors the Seonix dashboard.
+* Per-page audit detail in the block editor sidebar: each issue now explains what it means, why it matters, and how to fix it, mirroring the Seonix dashboard.
 * Supplemental FAQ / Q&A structured data is now emitted alongside your existing SEO plugin instead of conflicting with it.
 * Site Health issue counts now match the Seonix dashboard exactly.
 * Bundled the admin-interface fonts with the plugin (no external CDN requests).
 * Housekeeping: corrected the readme stable tag and added database-escaping annotations for WordPress.org compliance.
+
+= 2.5.23 – 2.5.37 =
+* Internal iterations: admin UI and editor-panel refinements, sync reliability fixes, and WordPress.org compliance housekeeping. See the GitHub releases for per-version detail.
 
 = 2.5.22 =
 * Fixed the top bar / nav alignment: the brand and tabs are now centered with the page content (a class name collided with the hero pillar style and pushed them to the left edge).
@@ -149,7 +162,7 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 * Admin screens now paint the full warm app-shell background, so the white top bar and cards read with proper depth (matches the Seonix Optimizer look).
 
 = 2.5.20 =
-* Per-page audit now appears in the block-editor document sidebar (like Yoast), not just at the bottom. Pages added or changed after the last scan are clearly marked "Not scanned yet" instead of showing a misleading "all clear".
+* Per-page audit now appears in the block-editor document sidebar, not just at the bottom. Pages added or changed after the last scan are clearly marked "Not scanned yet" instead of showing a misleading "all clear".
 
 = 2.5.18 =
 * Admin shell now matches the Seonix app: a flush full-width white top bar (brand + version + connection status) and a Site Health / Settings nav-tab row with the active tab underlined in brand purple. Reconnect moved into Settings. No behaviour change.

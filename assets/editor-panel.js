@@ -212,7 +212,15 @@
 			{ className: 'seonix-metabox seonix-metabox--panel' },
 			brandHeader(),
 			el( Section, { key: 'seo', label: seoLabel, color: seoEye, items: seoItems } ),
-			el( Section, { key: 'rd', label: rdLabel, color: contentEye, items: contentItems } ),
+			// The Readability track only renders when the payload actually
+			// carries a 'content' group. The platform does not ship one today
+			// (categories are clamped to seo/technical/ai server-side), so
+			// without this guard the section was a permanently empty
+			// "No issues" block — dead UI. If the backend ever starts sending
+			// 'content' issues, the section reappears with no plugin change.
+			contentItems.length
+				? el( Section, { key: 'rd', label: rdLabel, color: contentEye, items: contentItems } )
+				: null,
 			foot()
 		);
 	}
@@ -247,7 +255,10 @@
 	} );
 
 	var seoEye = worstColor( seoSev );
-	var contentEye = worstColor( contentSev );
+	// When the payload has no 'content' track (the platform doesn't ship one
+	// today), the right eye mirrors the SEO track instead of reading as a
+	// fake-green "readability is fine" signal next to a red SEO eye.
+	var contentEye = contentSev.length ? worstColor( contentSev ) : seoEye;
 
 	// The two sparkle "eyes" — same paths as the dashboard logo (viewBox 0 0 50).
 	var EYE_LEFT = 'M13.6719 17.0898L15.3866 22.0738C15.5823 22.6427 16.0292 23.0896 16.598 23.2853L21.582 25L16.598 26.7147C16.0292 26.9104 15.5823 27.3573 15.3866 27.9262L13.6719 32.9102L11.9572 27.9262C11.7615 27.3573 11.3146 26.9104 10.7457 26.7147L5.76172 25L10.7457 23.2853C11.3146 23.0896 11.7615 22.6427 11.9572 22.0738L13.6719 17.0898Z';

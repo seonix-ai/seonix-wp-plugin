@@ -268,6 +268,93 @@ final class BrokenLinkTest extends TestCase {
         $this->assertSame( 'update_failed', $r->get_error_code() );
     }
 
+    public function test_replacement_does_not_touch_partially_matching_urls(): void {
+        // The old plain str_replace corrupted every URL that merely STARTED
+        // with the broken one: /foo also rewrote /foo-bar, /foobar and
+        // /foo/child. The bounded replacement must only touch the exact URL.
+        $post = (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="/foo">a</a> <a href="/foo-bar">b</a> ' .
+                              '<a href="/foobar">c</a> <a href="/foo/child">d</a>',
+        );
+        Functions\when( 'get_post' )->justReturn( $post );
+
+        $r = $this->method->dry_run( array(
+            'post_id' => 5,
+            'old_url' => '/foo',
+            'new_url' => '/new',
+        ) );
+
+        $this->assertSame( 1, $r['after']['replacements'] );
+        $this->assertStringContainsString( 'href="/new"', $r['after']['post_content'] );
+        $this->assertStringContainsString( 'href="/foo-bar"', $r['after']['post_content'] );
+        $this->assertStringContainsString( 'href="/foobar"', $r['after']['post_content'] );
+        $this->assertStringContainsString( 'href="/foo/child"', $r['after']['post_content'] );
+    }
+
+    public function test_replacement_does_not_touch_same_path_on_other_host(): void {
+        // The path-only variant pair ('/old/' → '/new/') must not rewrite the
+        // same path inside a DIFFERENT host's absolute URL.
+        \Brain\Monkey\Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+        $post = (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="/old/">mine</a> ' .
+                              '<a href="https://other.com/old/">theirs</a>',
+        );
+        Functions\when( 'get_post' )->justReturn( $post );
+        Functions\expect( 'wp_update_post' )->once()->andReturn( 5 );
+
+        $r = $this->method->apply( array(
+            'post_id' => 5,
+            'old_url' => 'https://example.com/old/',
+            'new_url' => 'https://example.com/new/',
+        ) );
+
+        $this->assertSame( 1, $r['after']['replacements'] );
+        $this->assertStringContainsString( 'href="/new/"', $r['after']['post_content'] );
+        $this->assertStringContainsString( 'https://other.com/old/', $r['after']['post_content'] );
+    }
+
+    public function test_replacement_preserves_trailing_query_string(): void {
+        // A query string extends the URL but is not part of the path segment —
+        // the same behaviour str_replace had for this legitimate case.
+        $post = (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="/old?page=2">x</a>',
+        );
+        Functions\when( 'get_post' )->justReturn( $post );
+
+        $r = $this->method->dry_run( array(
+            'post_id' => 5,
+            'old_url' => '/old',
+            'new_url' => '/new',
+        ) );
+
+        $this->assertSame( 1, $r['after']['replacements'] );
+        $this->assertStringContainsString( 'href="/new?page=2"', $r['after']['post_content'] );
+    }
+
+    public function test_replacement_handles_regex_special_chars_in_urls(): void {
+        // preg_quote must neutralise regex metacharacters in the needle, and
+        // the callback-based replacement must insert '$' in the NEW url
+        // literally (a plain preg_replace would eat '$1' as a backreference).
+        $post = (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="/old(1)">x</a>',
+        );
+        Functions\when( 'get_post' )->justReturn( $post );
+
+        $r = $this->method->dry_run( array(
+            'post_id' => 5,
+            'old_url' => '/old(1)',
+            'new_url' => '/new$1',
+        ) );
+
+        $this->assertSame( 1, $r['after']['replacements'] );
+        $this->assertStringContainsString( 'href="/new$1"', $r['after']['post_content'] );
+    }
+
     public function test_rollback_restores_post_content_from_history(): void {
         $this->history->shouldReceive( 'get' )
             ->with( 7 )

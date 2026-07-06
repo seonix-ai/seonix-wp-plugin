@@ -2494,3 +2494,82 @@ body.seonix-modal-open {
 .seonix-paywall__list li::marker {
   color: var(--sx-ac);
 }
+
+/* ── Standalone feature cards (llms.txt / IndexNow) ──
+   Shown in every connection state: these two features work without a Seonix
+   account, so the plugin has visible value before (and after) connecting. */
+
+.seonix-featcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.seonix-featcard__head h2 {
+  margin: 0;
+}
+
+.seonix-featstatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: var(--sx-track);
+  color: var(--sx-mute);
+  white-space: nowrap;
+}
+
+.seonix-featstatus--on {
+  background: var(--sx-green-soft);
+  color: var(--sx-green-ink);
+}
+
+.seonix-featlinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seonix-featnote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sx-ink-2);
+}
+
+.seonix-checkrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 0 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sx-ink);
+}
+
+.seonix-checkrow input {
+  margin: 0;
+}
+
+/* Pre-connect Dashboard: "Already working on your site" section. */
+.seonix-standalone {
+  margin-top: 22px;
+}
+
+.seonix-standalone__title {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--sx-ink);
+}
+
+.seonix-standalone__sub {
+  margin-bottom: 14px;
+}

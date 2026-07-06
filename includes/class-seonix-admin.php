@@ -187,6 +187,11 @@ class Seonix_Admin {
 				'fixApplied'     => __( 'Fix applied. It will clear on the next scan.', 'seonix' ),
 				'fixFailed'      => __( 'Could not apply the fix.', 'seonix' ),
 				'fixPaywall'     => __( 'An active subscription is required to apply fixes.', 'seonix' ),
+				// IndexNow toggle on the standalone feature card.
+				'indexnowSaved'    => __( 'IndexNow setting saved.', 'seonix' ),
+				'indexnowEnabled'  => __( 'Enabled', 'seonix' ),
+				'indexnowDisabled' => __( 'Disabled', 'seonix' ),
+				'saveFailed'       => __( 'Failed to save setting.', 'seonix' ),
 			),
 		) );
 	}
@@ -505,6 +510,26 @@ class Seonix_Admin {
 	}
 
 	/**
+	 * AJAX: Save the IndexNow auto-submit toggle (standalone feature — works
+	 * without a Seonix account, so this handler has no connection requirement).
+	 */
+	public function ajax_save_indexnow(): void {
+		check_ajax_referer( 'seonix', '_wpnonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'seonix' ) ), 403 );
+		}
+
+		$enabled = isset( $_POST['enabled'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['enabled'] ) );
+		update_option( Seonix_IndexNow::AUTO_OPTION, $enabled ? '1' : '0' );
+
+		wp_send_json_success( array(
+			'saved'   => true,
+			'enabled' => $enabled,
+		) );
+	}
+
+	/**
 	 * Run a one-click SEO fix through the Seonix backend.
 	 *
 	 * This is the plugin half of the dashboard's one-click fix: the browser only
@@ -704,6 +729,94 @@ class Seonix_Admin {
 		echo '<svg class="seonix-navtab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' . $inner . '</svg>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted static markup.
 	}
 
+	// ─── Render: standalone feature cards ────────────────────────
+
+	/**
+	 * Render the two STANDALONE feature cards — AI Search (llms.txt) and
+	 * IndexNow. Both features work without a Seonix account (llms.txt serving
+	 * registers unconditionally; the IndexNow ping is explicitly independent of
+	 * the backend connection — see Seonix_Sync), so these cards are shown in
+	 * every connection state. They give a plugin installed "just to look"
+	 * immediate, visible value instead of a bare connect button.
+	 */
+	private function render_standalone_cards(): void {
+		$permalinks_ok = '' !== (string) get_option( 'permalink_structure', '' );
+		$llms_url      = home_url( '/llms.txt' );
+		$llms_full_url = home_url( '/llms-full.txt' );
+
+		$indexnow_on   = Seonix_IndexNow::is_auto_enabled();
+		$indexnow_last = get_option( Seonix_IndexNow::LAST_OPTION, array() );
+		$last_at       = is_array( $indexnow_last ) && ! empty( $indexnow_last['at'] ) ? (int) $indexnow_last['at'] : 0;
+		$last_count    = is_array( $indexnow_last ) && ! empty( $indexnow_last['count'] ) ? (int) $indexnow_last['count'] : 0;
+		?>
+		<!-- AI Search (llms.txt) — standalone, no account needed. -->
+		<div class="seonix-card">
+			<div class="seonix-featcard__head">
+				<h2><?php esc_html_e( 'AI Search (llms.txt)', 'seonix' ); ?></h2>
+				<?php if ( $permalinks_ok ) : ?>
+					<span class="seonix-featstatus seonix-featstatus--on">
+						<span class="seonix-status__dot seonix-status__dot--green"></span>
+						<span class="seonix-featstatus__txt"><?php esc_html_e( 'Active', 'seonix' ); ?></span>
+					</span>
+				<?php else : ?>
+					<span class="seonix-featstatus">
+						<span class="seonix-status__dot"></span>
+						<span class="seonix-featstatus__txt"><?php esc_html_e( 'Needs pretty permalinks', 'seonix' ); ?></span>
+					</span>
+				<?php endif; ?>
+			</div>
+			<p class="seonix-subtitle"><?php esc_html_e( 'Your site serves llms.txt and llms-full.txt — a machine-readable index of your published content that AI assistants (ChatGPT, Perplexity and others) use to discover and cite your pages. Generated live from your content, always up to date. Works without a Seonix account.', 'seonix' ); ?></p>
+			<?php if ( $permalinks_ok ) : ?>
+				<div class="seonix-featlinks">
+					<a class="seonix-btn seonix-btn--secondary seonix-btn--sm" href="<?php echo esc_url( $llms_url ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'View /llms.txt', 'seonix' ); ?></a>
+					<a class="seonix-btn seonix-btn--secondary seonix-btn--sm" href="<?php echo esc_url( $llms_full_url ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'View /llms-full.txt', 'seonix' ); ?></a>
+				</div>
+			<?php else : ?>
+				<p class="seonix-featnote">
+					<?php
+					printf(
+						/* translators: %1$s / %2$s: opening and closing <a> tag linking to the WordPress permalink settings. */
+						esc_html__( 'Serving /llms.txt needs pretty permalinks. Enable any structure other than "Plain" under %1$sSettings → Permalinks%2$s.', 'seonix' ),
+						'<a href="' . esc_url( admin_url( 'options-permalink.php' ) ) . '">',
+						'</a>'
+					);
+					?>
+				</p>
+			<?php endif; ?>
+		</div>
+
+		<!-- IndexNow — standalone, no account needed. -->
+		<div class="seonix-card">
+			<div class="seonix-featcard__head">
+				<h2><?php esc_html_e( 'IndexNow', 'seonix' ); ?></h2>
+				<span class="seonix-featstatus<?php echo $indexnow_on ? ' seonix-featstatus--on' : ''; ?>" id="seonix-indexnow-status">
+					<span class="seonix-status__dot<?php echo $indexnow_on ? ' seonix-status__dot--green' : ''; ?>"></span>
+					<span class="seonix-featstatus__txt"><?php $indexnow_on ? esc_html_e( 'Enabled', 'seonix' ) : esc_html_e( 'Disabled', 'seonix' ); ?></span>
+				</span>
+			</div>
+			<p class="seonix-subtitle"><?php esc_html_e( 'When you publish or update a public post or page, the plugin pings IndexNow so participating search engines (Bing, Yandex, Seznam, Naver) re-crawl the URL within minutes. The verification key is set up automatically. Works without a Seonix account. Google does not participate in IndexNow.', 'seonix' ); ?></p>
+			<label class="seonix-checkrow" for="seonix-indexnow-auto">
+				<input type="checkbox" id="seonix-indexnow-auto" <?php checked( $indexnow_on ); ?> />
+				<span><?php esc_html_e( 'Submit new and updated content automatically', 'seonix' ); ?></span>
+			</label>
+			<p class="seonix-sync-time">
+				<?php if ( $last_at > 0 ) : ?>
+					<?php
+					printf(
+						/* translators: 1: number of URLs submitted, 2: formatted date/time of the last IndexNow submission. */
+						esc_html( _n( 'Last submission: %1$s URL on %2$s.', 'Last submission: %1$s URLs on %2$s.', $last_count, 'seonix' ) ),
+						esc_html( number_format_i18n( $last_count ) ),
+						esc_html( wp_date( 'F j, Y \a\t g:i A', $last_at ) )
+					);
+					?>
+				<?php else : ?>
+					<?php esc_html_e( 'No submissions yet — publish or update a post to trigger the first one.', 'seonix' ); ?>
+				<?php endif; ?>
+			</p>
+		</div>
+		<?php
+	}
+
 	// ─── Render: Dashboard ───────────────────────────────────────
 
 	/**
@@ -779,6 +892,15 @@ class Seonix_Admin {
 								<?php esc_html_e( 'Connect to Seonix', 'seonix' ); ?>
 							</button>
 						</div>
+					</div>
+
+					<!-- Standalone value: the two features that already run on this
+					     site without any account, so the pre-connect screen is not
+					     an empty shell with a single button. -->
+					<div class="seonix-standalone">
+						<h2 class="seonix-standalone__title"><?php esc_html_e( 'Already working on your site', 'seonix' ); ?></h2>
+						<p class="seonix-subtitle seonix-standalone__sub"><?php esc_html_e( 'These features run locally in the plugin and need no account.', 'seonix' ); ?></p>
+						<?php $this->render_standalone_cards(); ?>
 					</div>
 				<?php endif; ?>
 
@@ -1641,6 +1763,15 @@ class Seonix_Admin {
 
 				<div class="seonix-cols">
 					<div class="seonix-cols__main">
+						<?php if ( ! $is_connected ) : ?>
+							<?php
+							// Not connected → lead with what already works without an
+							// account (llms.txt + IndexNow) so Settings is useful on
+							// day zero, before any Seonix project exists.
+							$this->render_standalone_cards();
+							?>
+						<?php endif; ?>
+
 						<!-- API Key card -->
 						<div class="seonix-card">
 							<h2><?php esc_html_e( 'API Key', 'seonix' ); ?></h2>
@@ -1687,7 +1818,7 @@ class Seonix_Admin {
 						<!-- Structured Data (JSON-LD) card -->
 						<div class="seonix-card">
 							<h2><?php esc_html_e( 'Structured Data (JSON-LD)', 'seonix' ); ?></h2>
-							<p class="seonix-subtitle"><?php esc_html_e( 'Output schema.org structured data for Seonix articles. "Auto" stays silent when an SEO plugin (Yoast, Rank Math, AIOSEO) is active, so it never duplicates their schema.', 'seonix' ); ?></p>
+							<p class="seonix-subtitle"><?php esc_html_e( 'Output schema.org structured data for Seonix articles. "Auto" stays silent when another SEO plugin is active, so schema is never duplicated.', 'seonix' ); ?></p>
 
 							<div class="seonix-field">
 								<select id="seonix-schema-mode-select" class="seonix-select">
@@ -1742,6 +1873,15 @@ class Seonix_Admin {
 								<?php esc_html_e( 'Sync Now', 'seonix' ); ?>
 							</button>
 						</div>
+
+						<?php if ( $is_connected ) : ?>
+							<?php
+							// Connected → the standalone cards (llms.txt + IndexNow)
+							// still matter (status + toggle live here), they just sit
+							// below the connection-specific cards.
+							$this->render_standalone_cards();
+							?>
+						<?php endif; ?>
 					</div>
 
 					<div class="seonix-cols__side">
