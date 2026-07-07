@@ -38,11 +38,23 @@ class Seonix_Schema {
 	const MAX_BYTES = 100000;
 
 	/**
-	 * @types Seonix may emit alongside a dedicated SEO engine. These add an
-	 * AI-citation signal (FAQ/Q&A) that Yoast / Rank Math / AIOSEO do not
-	 * produce from headings, so they never collide with the engine's graph.
+	 * @types Seonix may emit alongside a dedicated SEO engine. These add signals
+	 * a core engine does not produce: FAQ/Q&A citation blocks, and a LocalBusiness
+	 * node (NAP + service area). Yoast Free / Rank Math / AIOSEO do not emit
+	 * LocalBusiness unless a paid Local-SEO addon is configured, so it is
+	 * genuinely supplemental and never collides with the engine's core graph.
+	 * None of these appear in ENGINE_OWNED_TYPES, so supplemental_only keeps them.
 	 */
-	const SUPPLEMENTAL_TYPES = array( 'FAQPage', 'QAPage' );
+	const SUPPLEMENTAL_TYPES = array(
+		'FAQPage',
+		'QAPage',
+		'LocalBusiness',
+		'HomeAndConstructionBusiness',
+		'MovingCompany',
+		'GeneralContractor',
+		'ProfessionalService',
+		'Store',
+	);
 
 	/**
 	 * @types a dedicated SEO engine owns. A node carrying any of these is

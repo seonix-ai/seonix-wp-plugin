@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.39
+Stable tag: 2.5.41
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,16 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.5.41 =
+* Improved llms.txt (the AI-discovery file): pages are now ordered by importance — your home page and main service pages first, instead of buried among sub-pages — so AI assistants can tell which pages matter most.
+* Fixed: llms.txt no longer shows a stray "&amp;" in place of "&", and invisible characters are stripped from headings.
+* Fixed: /llms.txt now serves directly instead of redirecting to /llms.txt/.
+* Structured data can now include a LocalBusiness block (business name, phone, address, service area) alongside your existing SEO plugin, so Google and AI answer engines can attribute your business — shown when your Seonix project has those details.
+
+= 2.5.40 =
+* Fixed: the "Upgrade this project" button no longer shows on paid plans (it was staying visible due to a CSS cascade issue).
+* Fixed: the brand buttons no longer render with invisible text on hover.
 
 = 2.5.39 =
 * The Seonix mark in the block-editor sidebar now reads green when a track has no open issues, instead of greying out on pages that have not been scanned yet.

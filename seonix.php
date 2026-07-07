@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.5.39
+ * Version:     2.5.41
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.5.39' );
+define( 'SEONIX_VERSION', '2.5.41' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -185,7 +185,11 @@ function seonix_init() {
 	$llmtxt = new Seonix_LLMTxt();
 	add_action( 'init', array( $llmtxt, 'register_rewrites' ) );
 	add_filter( 'query_vars', array( $llmtxt, 'register_query_vars' ) );
-	add_action( 'template_redirect', array( $llmtxt, 'handle_request' ) );
+	// Priority 0 so the body is served BEFORE WordPress's redirect_canonical
+	// (default priority 10) can 301 /llms.txt to /llms.txt/ — a slashed URL no
+	// rewrite rule matches. The redirect_canonical filter is a second guard.
+	add_action( 'template_redirect', array( $llmtxt, 'handle_request' ), 0 );
+	add_filter( 'redirect_canonical', array( $llmtxt, 'prevent_canonical_redirect' ), 10, 2 );
 
 	// SEO Fix subsystem: registry + controller + REST routes.
 	$seo_fix_registry   = seonix_seo_fix_build_registry();

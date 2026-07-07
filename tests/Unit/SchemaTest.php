@@ -128,4 +128,42 @@ final class SchemaTest extends TestCase {
 		Functions\when( 'get_option' )->justReturn( 'auto' );
 		$this->assertFalse( Seonix_Schema::should_output() );
 	}
+
+	// ─── supplemental_only: LocalBusiness survives under an active engine ────
+
+	public function test_supplemental_only_keeps_localbusiness_and_faq_drops_core(): void {
+		// Under an active engine (Yoast), supplemental_only must keep the
+		// LocalBusiness + FAQPage nodes (engines don't emit them) and drop the
+		// engine-owned Article / WebPage so we never duplicate the core graph.
+		$graph = wp_json_encode( array(
+			'@context' => 'https://schema.org',
+			'@graph'   => array(
+				array( '@type' => 'Article', 'headline' => 'x' ),
+				array( '@type' => 'WebPage', 'name' => 'x' ),
+				array( '@type' => 'HomeAndConstructionBusiness', 'name' => 'Wohnart', 'telephone' => '+49 1' ),
+				array( '@type' => 'FAQPage', 'mainEntity' => array() ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringContainsString( '"@type":"HomeAndConstructionBusiness"', $out );
+		$this->assertStringContainsString( '"@type":"FAQPage"', $out );
+		$this->assertStringNotContainsString( 'Article', $out );
+		$this->assertStringNotContainsString( 'WebPage', $out );
+	}
+
+	public function test_supplemental_only_drops_multityped_localbusiness_organization(): void {
+		// A node ALSO tagged Organization (engine-owned) must be dropped, so a
+		// multi-typed node can never reintroduce a duplicate Organization.
+		$graph = wp_json_encode( array(
+			'@graph' => array(
+				array( '@type' => array( 'LocalBusiness', 'Organization' ), 'name' => 'x' ),
+				array( '@type' => 'FAQPage', 'mainEntity' => array() ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringNotContainsString( 'LocalBusiness', $out );
+		$this->assertStringContainsString( 'FAQPage', $out );
+	}
 }

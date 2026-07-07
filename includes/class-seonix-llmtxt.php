@@ -86,13 +86,34 @@ class Seonix_LLMTxt {
 		header( 'ETag: ' . $etag );
 		header( 'Cache-Control: public, max-age=3600, must-revalidate' );
 
-		// Escape on output. The body is markdown built from already-stripped
-		// post titles, excerpts and content (wp_strip_all_tags applied in
-		// html_to_markdown). esc_html() only encodes `<>&"'` — none of which
-		// are valid markdown control characters, so the rendered markdown
-		// structure (headings, links, list markers) is fully preserved.
-		echo esc_html( $content );
+		// The body is plain text/markdown (Content-Type: text/markdown), NOT
+		// HTML — every field is normalized via clean_text() (tags stripped,
+		// entities decoded, control chars removed) and the URLs via esc_url_raw.
+		// esc_html() here was wrong: it re-encoded "&" → "&amp;", so a category
+		// "Tipps & Tricks" went out as "Tipps &amp; Tricks" (and any surviving
+		// entity was doubled). Emit the raw markdown.
+		echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- plain text/markdown response; fields normalized in clean_text(), esc_html corrupts "&" and markdown.
 		exit;
+	}
+
+	/**
+	 * Cancel WordPress's canonical redirect for our virtual endpoints.
+	 *
+	 * Without this, a request for /llms.txt is 301-redirected to /llms.txt/
+	 * (WP treats the rule-matched request as a slash-less permalink), and the
+	 * slashed URL then matches no rewrite rule at all. Returning the requested
+	 * URL unchanged when our query var is set short-circuits the redirect so
+	 * /llms.txt serves canonically without a trailing slash.
+	 *
+	 * @param string $redirect_url  The URL WordPress wants to redirect to.
+	 * @param string $requested_url The originally requested URL.
+	 * @return string The requested URL (cancels the redirect) for our endpoints.
+	 */
+	public function prevent_canonical_redirect( $redirect_url, $requested_url ) {
+		if ( get_query_var( 'seonix_llmtxt' ) ) {
+			return $requested_url;
+		}
+		return $redirect_url;
 	}
 
 	/**
@@ -107,8 +128,8 @@ class Seonix_LLMTxt {
 	 * @return string
 	 */
 	private function build_index() {
-		$site_name = wp_strip_all_tags( get_bloginfo( 'name' ) );
-		$site_desc = wp_strip_all_tags( get_bloginfo( 'description' ) );
+		$site_name = $this->clean_text( get_bloginfo( 'name' ) );
+		$site_desc = $this->clean_text( get_bloginfo( 'description' ) );
 
 		$llm_txt = "# {$site_name}\n\n";
 		if ( $site_desc ) {
@@ -125,6 +146,30 @@ class Seonix_LLMTxt {
 		) );
 
 		if ( ! empty( $pages ) ) {
+			// Order by IMPORTANCE, not raw menu_order: front page first, then
+			// top-level pages (service hubs) before nested children (city /
+			// doorway pages typically sit under a hub), then menu_order, then
+			// title. Hand-built pages usually share menu_order=0, so ordering on
+			// menu_order alone buried the money pages among doorway clones and
+			// gave AI crawlers no signal of which pages matter.
+			$front_id = (int) get_option( 'page_on_front' );
+			usort( $pages, function ( $a, $b ) use ( $front_id ) {
+				$fa = ( $front_id && (int) $a->ID === $front_id ) ? 0 : 1;
+				$fb = ( $front_id && (int) $b->ID === $front_id ) ? 0 : 1;
+				if ( $fa !== $fb ) {
+					return $fa - $fb;
+				}
+				$da = $a->post_parent ? 1 : 0;
+				$db = $b->post_parent ? 1 : 0;
+				if ( $da !== $db ) {
+					return $da - $db;
+				}
+				if ( (int) $a->menu_order !== (int) $b->menu_order ) {
+					return (int) $a->menu_order - (int) $b->menu_order;
+				}
+				return strcasecmp( (string) $a->post_title, (string) $b->post_title );
+			} );
+
 			$llm_txt .= "## Pages\n\n";
 			foreach ( $pages as $page ) {
 				$llm_txt .= $this->format_link_line( $page ) . "\n";
@@ -155,7 +200,7 @@ class Seonix_LLMTxt {
 					continue;
 				}
 
-				$llm_txt .= '## ' . wp_strip_all_tags( $category->name ) . "\n\n";
+				$llm_txt .= '## ' . $this->clean_text( $category->name ) . "\n\n";
 				foreach ( $posts as $post ) {
 					$llm_txt .= $this->format_link_line( $post ) . "\n";
 				}
@@ -173,10 +218,10 @@ class Seonix_LLMTxt {
 	 * @return string Formatted markdown link line.
 	 */
 	private function format_link_line( $post ) {
-		$line = '- [' . wp_strip_all_tags( $post->post_title ) . '](' . esc_url_raw( get_permalink( $post ) ) . ')';
+		$line = '- [' . $this->clean_text( $post->post_title ) . '](' . esc_url_raw( get_permalink( $post ) ) . ')';
 		$excerpt = get_the_excerpt( $post );
 		if ( $excerpt ) {
-			$line .= ': ' . wp_trim_words( $excerpt, 20, '...' );
+			$line .= ': ' . $this->clean_text( wp_trim_words( $excerpt, 20, '...' ) );
 		}
 		return $line;
 	}
@@ -187,8 +232,8 @@ class Seonix_LLMTxt {
 	 * @return string
 	 */
 	private function build_full() {
-		$site_name = wp_strip_all_tags( get_bloginfo( 'name' ) );
-		$site_desc = wp_strip_all_tags( get_bloginfo( 'description' ) );
+		$site_name = $this->clean_text( get_bloginfo( 'name' ) );
+		$site_desc = $this->clean_text( get_bloginfo( 'description' ) );
 
 		$posts = get_posts( array(
 			'post_type'      => array( 'post', 'page' ),
@@ -205,7 +250,7 @@ class Seonix_LLMTxt {
 
 		foreach ( $posts as $post ) {
 			$llm_full .= "---\n\n";
-			$llm_full .= '## ' . wp_strip_all_tags( $post->post_title ) . "\n\n";
+			$llm_full .= '## ' . $this->clean_text( $post->post_title ) . "\n\n";
 			$llm_full .= 'URL: ' . esc_url_raw( get_permalink( $post ) ) . "\n";
 			$llm_full .= "Type: " . $post->post_type . "\n";
 			$llm_full .= "Date: " . $post->post_date . "\n\n";
@@ -258,5 +303,30 @@ class Seonix_LLMTxt {
 		$md = preg_replace( '/\n{3,}/', "\n\n", $md );
 
 		return trim( $md );
+	}
+
+	/**
+	 * Normalize a WordPress-sourced string for plain-text/markdown output.
+	 *
+	 * WordPress returns term names, titles and excerpts already HTML-entity
+	 * encoded (a category stored as "Tipps & Tricks" comes back as
+	 * "Tipps &amp; Tricks"), and real post content can carry invisible
+	 * zero-width / soft-hyphen format characters. wp_strip_all_tags removes
+	 * tags only — it decodes nothing and strips no format chars — so those
+	 * artifacts used to land verbatim in llms.txt (literal "&amp;", stray
+	 * U+200B). This helper strips tags, decodes entities, removes zero-width /
+	 * BOM / soft-hyphen characters, and collapses whitespace.
+	 *
+	 * @param string $s Raw WordPress string.
+	 * @return string Clean plain text.
+	 */
+	private function clean_text( $s ) {
+		$s = wp_strip_all_tags( (string) $s );
+		$s = html_entity_decode( $s, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		// Strip zero-width space/joiner/non-joiner, BOM, and soft hyphen.
+		$s = preg_replace( '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $s );
+		// Collapse any whitespace run (incl. newlines) to a single space.
+		$s = preg_replace( '/\s+/u', ' ', $s );
+		return trim( $s );
 	}
 }
