@@ -56,7 +56,10 @@ class Seonix_Fix_SSL_Mixed_Content implements Seonix_Fix_Method {
 
 		$update = wp_update_post( array(
 			'ID'           => (int) $post->ID,
-			'post_content' => $rewritten,
+			// wp_slash: wp_update_post() runs wp_unslash() on the array, so a
+			// value derived from the DB-read post_content must be re-slashed or
+			// every literal backslash (\uXXXX, CSS \2019, regex) is stripped.
+			'post_content' => wp_slash( $rewritten ),
 		), true );
 
 		if ( $update instanceof WP_Error || 0 === (int) $update ) {
@@ -86,7 +89,9 @@ class Seonix_Fix_SSL_Mixed_Content implements Seonix_Fix_Method {
 
 		$update = wp_update_post( array(
 			'ID'           => $post_id,
-			'post_content' => $old_content,
+			// wp_slash: the snapshot holds the unslashed DB content, so restore
+			// it slashed or wp_update_post's internal wp_unslash corrupts it.
+			'post_content' => wp_slash( $old_content ),
 		), true );
 
 		if ( $update instanceof WP_Error || 0 === (int) $update ) {

@@ -138,6 +138,37 @@ final class SslMixedContentTest extends TestCase {
         $this->assertStringContainsString( 'https://example.com', $result['after']['post_content'] );
     }
 
+    public function test_apply_wp_slashes_content_preserving_backslashes(): void {
+        // Content carries a literal backslash (a JS \uXXXX escape). wp_update_post
+        // runs wp_unslash() on its input, so without wp_slash the backslash would
+        // be silently stripped and the snippet corrupted. Regression for the
+        // missing-wp_slash content-corruption bug.
+        $post = (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="http://example.com/x">x</a> snippet: \uD83D',
+        );
+        Functions\when( 'get_post' )->justReturn( $post );
+
+        $captured = null;
+        Functions\when( 'wp_update_post' )->alias( function ( $args ) use ( &$captured ) {
+            $captured = $args;
+            return (int) $args['ID'];
+        } );
+
+        $this->method->apply( array( 'post_id' => 5 ) );
+
+        $this->assertNotNull( $captured, 'wp_update_post should have been called' );
+        // The value handed to wp_update_post is slashed, so WordPress' internal
+        // wp_unslash round-trips it back to the intended content — backslash intact.
+        $roundTripped = wp_unslash( $captured['post_content'] );
+        $this->assertStringContainsString( 'snippet: \uD83D', $roundTripped );
+        $this->assertStringContainsString( 'https://example.com', $roundTripped );
+        // The stored (slashed) form must differ from the round-tripped value —
+        // proof the backslash was doubled rather than passed through raw (which
+        // wp_unslash would then have stripped).
+        $this->assertNotSame( $roundTripped, $captured['post_content'] );
+    }
+
     public function test_apply_returns_no_op_when_already_https(): void {
         $post = (object) array(
             'ID'           => 5,

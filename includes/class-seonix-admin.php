@@ -185,6 +185,8 @@ class Seonix_Admin {
 				// which gates it on a paid subscription (402 → upgrade popup).
 				'fixing'         => __( 'Fixing…', 'seonix' ),
 				'fixApplied'     => __( 'Fix applied. It will clear on the next scan.', 'seonix' ),
+				'fixPartial'     => __( 'Some items were fixed; the rest need attention. It will refine on the next scan.', 'seonix' ),
+				'fixNothingApplied' => __( 'Nothing could be applied automatically — this one needs a manual look.', 'seonix' ),
 				'fixFailed'      => __( 'Could not apply the fix.', 'seonix' ),
 				'fixPaywall'     => __( 'An active subscription is required to apply fixes.', 'seonix' ),
 				// IndexNow toggle on the standalone feature card.

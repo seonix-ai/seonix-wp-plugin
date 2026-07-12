@@ -147,7 +147,10 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 			if ( $count > 0 && $new_content !== $row->post_content ) {
 				$ok = wp_update_post( array(
 					'ID'           => (int) $row->ID,
-					'post_content' => $new_content,
+					// wp_slash: $new_content is the DB-read post_content with alt
+					// attributes rewritten; wp_update_post() unslashes its input,
+					// so re-slash to keep literal backslashes intact.
+					'post_content' => wp_slash( $new_content ),
 				), true );
 				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
 					$updates[ (int) $row->ID ] = $count;

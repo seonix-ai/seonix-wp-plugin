@@ -641,7 +641,24 @@
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); })
       .then(function (res) {
         if (res.json && res.json.success) {
-          showNotice('success', i18n('fixApplied', 'Fix applied. It will clear on the next scan.'));
+          // HTTP 200 only means the run finished — NOT that anything was fixed.
+          // The backend reports the honest outcome in data.status; when every
+          // item errored ('failed') or there was nothing to do, don't claim
+          // success and keep the button enabled for a retry.
+          var d = (res.json && res.json.data) ? res.json.data : {};
+          var st = d.status || 'applied';
+          if (st === 'failed' || st === 'nothing_to_do') {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            showNotice('error', i18n('fixNothingApplied', 'Nothing could be applied automatically — this one needs a manual look.'));
+            return;
+          }
+          showNotice(
+            'success',
+            st === 'partial'
+              ? i18n('fixPartial', 'Some items were fixed; the rest need attention. It will refine on the next scan.')
+              : i18n('fixApplied', 'Fix applied. It will clear on the next scan.')
+          );
           // Re-pull the canonical task view from the backend, then reload.
           var rb = new URLSearchParams();
           rb.append('action', 'seonix_refresh_tasks');

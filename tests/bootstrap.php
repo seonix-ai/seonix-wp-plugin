@@ -89,6 +89,24 @@ if ( ! function_exists( 'wp_unslash' ) ) {
     }
 }
 
+// wp_slash is the exact inverse of wp_unslash — WordPress core applies it via
+// addslashes semantics. wp_insert_post()/update_post_meta()/update_term_meta()
+// all run wp_unslash() on their input, so a value read from the DB (or an
+// already-unslashed REST param) MUST be wp_slash()'d before write or literal
+// backslashes are silently stripped. The stub mirrors the wp_unslash stub above
+// so tests that don't override it exercise the real slash/unslash round-trip.
+if ( ! function_exists( 'wp_slash' ) ) {
+    function wp_slash( $value ) {
+        if ( is_array( $value ) ) {
+            return array_map( 'wp_slash', $value );
+        }
+        if ( is_string( $value ) ) {
+            return addslashes( $value );
+        }
+        return $value;
+    }
+}
+
 // Lightweight in-process transient store. The controller's rate-limiter calls
 // get_transient/set_transient to gate noisy clients; tests that hit /apply via
 // the controller would otherwise blow up with "undefined function". A static

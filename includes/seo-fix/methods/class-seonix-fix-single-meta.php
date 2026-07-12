@@ -89,7 +89,10 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 			return $result;
 		}
 
-		$ok = update_post_meta( $post_id, $key, $suggested );
+		// wp_slash: update_post_meta() runs wp_unslash() on the value, and the
+		// controller already wp_unslash()ed the incoming REST params, so re-slash
+		// here or a title/description containing a backslash is silently mangled.
+		$ok = update_post_meta( $post_id, $key, wp_slash( $suggested ) );
 		if ( false === $ok ) {
 			return new WP_Error( 'update_failed', 'update_post_meta returned false.', array( 'status' => 500 ) );
 		}
@@ -114,7 +117,9 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 			return $key;
 		}
 
-		update_post_meta( $post_id, $key, $old_val );
+		// wp_slash: restore the unslashed snapshot slashed so update_post_meta's
+		// internal wp_unslash round-trips it back to the original value.
+		update_post_meta( $post_id, $key, wp_slash( $old_val ) );
 
 		return array(
 			'before' => array( 'value' => (string) ( $entry['after_state']['value'] ?? '' ) ),

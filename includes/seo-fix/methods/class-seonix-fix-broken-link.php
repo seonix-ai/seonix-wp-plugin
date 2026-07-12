@@ -88,7 +88,10 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 		} else {
 			$update = wp_update_post( array(
 				'ID'           => (int) $post->ID,
-				'post_content' => $result['after']['post_content'],
+				// wp_slash: wp_update_post() wp_unslash()es its input, so content
+				// derived from the DB-read post_content must be re-slashed to keep
+				// literal backslashes intact.
+				'post_content' => wp_slash( $result['after']['post_content'] ),
 			), true );
 
 			if ( $update instanceof WP_Error || 0 === (int) $update ) {
@@ -162,7 +165,9 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			if ( $total > 0 && $replaced !== $row->post_content ) {
 				$ok = wp_update_post( array(
 					'ID'           => (int) $row->ID,
-					'post_content' => $replaced,
+					// wp_slash: $replaced comes from the DB-read post_content;
+					// wp_update_post() unslashes, so re-slash to preserve backslashes.
+					'post_content' => wp_slash( $replaced ),
 				), true );
 				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
 					$updates[ (int) $row->ID ] = $total;
@@ -187,7 +192,9 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 
 		$update = wp_update_post( array(
 			'ID'           => $post_id,
-			'post_content' => $old_content,
+			// wp_slash: restore the unslashed snapshot slashed so wp_update_post's
+			// internal wp_unslash round-trips it back to the original bytes.
+			'post_content' => wp_slash( $old_content ),
 		), true );
 
 		if ( $update instanceof WP_Error || 0 === (int) $update ) {
@@ -364,7 +371,9 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			if ( $count > 0 && $replaced !== $row->post_content ) {
 				$ok = wp_update_post( array(
 					'ID'           => (int) $row->ID,
-					'post_content' => $replaced,
+					// wp_slash: $replaced comes from the DB-read post_content;
+					// wp_update_post() unslashes, so re-slash to preserve backslashes.
+					'post_content' => wp_slash( $replaced ),
 				), true );
 				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
 					$updates[ (int) $row->ID ] = $count;

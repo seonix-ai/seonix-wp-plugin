@@ -274,10 +274,13 @@ class Seonix_Fix_Term_Meta_Description implements Seonix_Fix_Method {
 			case 'yoast':
 				return $this->engine_write( $term_id, $taxonomy, $value );
 			case 'rankmath':
-				$ok = update_term_meta( $term_id, 'rank_math_description', $value );
+				// wp_slash: update_term_meta() unslashes its value. (The Yoast path
+				// above uses WPSEO_Taxonomy_Meta::set_value, which sanitizes on its
+				// own and must NOT be pre-slashed — only the raw meta writes are.)
+				$ok = update_term_meta( $term_id, 'rank_math_description', wp_slash( $value ) );
 				return false !== $ok ? true : new WP_Error( 'update_failed', 'update_term_meta returned false (rank_math_description).', array( 'status' => 500 ) );
 			case 'aioseo':
-				$ok = update_term_meta( $term_id, '_aioseo_description', $value );
+				$ok = update_term_meta( $term_id, '_aioseo_description', wp_slash( $value ) );
 				return false !== $ok ? true : new WP_Error( 'update_failed', 'update_term_meta returned false (_aioseo_description).', array( 'status' => 500 ) );
 		}
 		return new WP_Error( 'no_seo_plugin', 'Unhandled SEO engine branch.', array( 'status' => 500 ) );
