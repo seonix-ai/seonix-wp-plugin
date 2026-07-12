@@ -525,6 +525,15 @@ body.seonix_page_seonix-settings #wpbody-content > .update-nag {
   cursor: not-allowed;
 }
 
+/* The `hidden` attribute must win over .seonix-btn's own `display` rule: both
+   have equal specificity (0,1,0), so the author `display: inline-flex` would
+   otherwise beat the UA `[hidden] { display: none }` and leave a "hidden"
+   button (e.g. the plan-upgrade CTA on a paid plan) visible. Mirrors the
+   existing .seonix-view[hidden] / .seonix-modal[hidden] guards. */
+.seonix-btn[hidden] {
+  display: none !important;
+}
+
 .seonix-btn--primary {
   background: var(--sx-ac);
   border-color: transparent;
@@ -2359,6 +2368,10 @@ body.seonix-modal-open {
 }
 
 .seonix-btn--brand:hover:not(:disabled) {
+  /* Re-assert the gradient on hover: the base `.seonix-btn:hover` rule has the
+     same (0,3,0) specificity and would otherwise repaint the fill to the
+     near-white --sx-paper-warm, leaving white-on-white (invisible) text. */
+  background: var(--sx-ac-grad);
   filter: brightness(1.04);
   box-shadow: 0 4px 14px rgba(139, 61, 255, 0.32);
   color: #fff;
