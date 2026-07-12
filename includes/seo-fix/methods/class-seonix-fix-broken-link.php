@@ -113,6 +113,25 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			$result['no_op'] = false;
 		}
 
+		// Replace the heavy page-content snapshot with a compact summary. We keep
+		// NO page copy — rollback() is surgical (it reverses new_url -> old_url on
+		// the CURRENT content of the affected posts, read from params +
+		// deep_rewrites), so a copy is dead weight and restoring from one would
+		// clobber later edits to those pages.
+		//
+		// before/after MUST remain non-empty JSON OBJECTS: an empty PHP array
+		// serializes to "[]", which the backend decodes into a map and rejects —
+		// marking the whole apply failed (and losing plugin_history_id, hence
+		// rollback) even though the WordPress write already succeeded.
+		$after_summary = array(
+			'replacements' => isset( $result['after']['replacements'] ) ? (int) $result['after']['replacements'] : 0,
+		);
+		if ( ! empty( $deep ) ) {
+			$after_summary['deep_rewrites'] = $deep;
+		}
+		$result['before'] = array( 'mode' => $mode );
+		$result['after']  = $after_summary;
+
 		return $result;
 	}
 
@@ -177,37 +196,126 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 		return $updates;
 	}
 
+	/**
+	 * Undo a broken_link fix SURGICALLY — reverse the exact substitution the
+	 * fix made, on the CURRENT content of every post it touched, and only where
+	 * that substitution is still present. We never restore a stored page copy,
+	 * so any edits made to those posts after the fix (other fixes, manual edits)
+	 * are preserved.
+	 *
+	 * rewrite mode: replace new_url back to old_url (boundary-anchored, same as
+	 * apply but reversed) on the primary target and every deep-rewritten post
+	 * recorded in after_state['deep_rewrites']. A post whose new_url is gone is
+	 * left untouched (nothing to undo there).
+	 *
+	 * remove_link mode: the fix stripped the <a> wrapper and kept only the inner
+	 * text; re-wrapping that text in the original anchor can't be done reliably
+	 * without a page copy (which we intentionally don't keep), so this fix is
+	 * reported as not automatically reversible rather than guessed at.
+	 *
+	 * ACCEPTED LIMITATION (no-page-copy design): we reverse every boundary-
+	 * matched occurrence of new_url, without provenance. In the rare case where
+	 * new_url legitimately appears on the page for another reason — e.g. a second,
+	 * independent broken_link fix on the SAME post whose chosen target is the SAME
+	 * URL — this undo reverts that occurrence too. Distinguishing them would
+	 * require the stored page copy the product owner deliberately rejected, so
+	 * this is a conscious trade-off, not a bug. Boundary anchoring still prevents
+	 * partial / cross-host mismatches.
+	 */
 	public function rollback( int $history_id ) {
 		$entry = $this->history->get( $history_id );
 		if ( ! $entry ) {
 			return new WP_Error( 'unknown_history_entry', 'No history entry with that id.', array( 'status' => 404 ) );
 		}
 
-		$post_id     = (int) ( $entry['target_id'] ?? 0 );
-		$old_content = $entry['before_state']['post_content'] ?? null;
+		$params  = isset( $entry['params'] ) && is_array( $entry['params'] ) ? $entry['params'] : array();
+		$mode    = isset( $params['mode'] ) ? (string) $params['mode'] : 'rewrite';
+		$old_url = isset( $params['old_url'] ) ? (string) $params['old_url'] : '';
+		$new_url = isset( $params['new_url'] ) ? (string) $params['new_url'] : '';
 
-		if ( $post_id <= 0 || ! is_string( $old_content ) ) {
-			return new WP_Error( 'invalid_history_entry', 'History entry is missing post snapshot.', array( 'status' => 422 ) );
+		if ( 'remove_link' === $mode ) {
+			return new WP_Error(
+				'not_reversible',
+				'Removing a broken link cannot be undone automatically — the original link wrapper was not kept.',
+				array( 'status' => 422 )
+			);
 		}
 
-		$update = wp_update_post( array(
-			'ID'           => $post_id,
-			// wp_slash: restore the unslashed snapshot slashed so wp_update_post's
-			// internal wp_unslash round-trips it back to the original bytes.
-			'post_content' => wp_slash( $old_content ),
-		), true );
+		if ( '' === $old_url || '' === $new_url ) {
+			return new WP_Error(
+				'invalid_history_entry',
+				'History entry is missing the URLs needed to reverse this fix.',
+				array( 'status' => 422 )
+			);
+		}
 
-		if ( $update instanceof WP_Error || 0 === (int) $update ) {
-			return new WP_Error( 'rollback_failed', 'wp_update_post failed during rollback.', array( 'status' => 500 ) );
+		$reverted = 0;
+		$skipped  = 0;
+		foreach ( $this->rollback_target_ids( $entry ) as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post ) {
+				$skipped++;
+				continue;
+			}
+			$content = (string) $post->post_content;
+			$total   = 0;
+			// Reverse direction: put new_url back to old_url. Reusing
+			// url_variant_pairs keeps the absolute/relative handling identical to
+			// apply, just swapped.
+			foreach ( $this->url_variant_pairs( $new_url, $old_url ) as $pair ) {
+				$c       = 0;
+				$content = $this->replace_url_bounded( $pair[0], $pair[1], $content, $c );
+				$total  += $c;
+			}
+			if ( $total > 0 && $content !== $post->post_content ) {
+				$ok = wp_update_post( array(
+					'ID'           => (int) $post_id,
+					// wp_slash: content is DB-read; wp_update_post() unslashes it.
+					'post_content' => wp_slash( $content ),
+				), true );
+				if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
+					$reverted++;
+					continue;
+				}
+			}
+			// new_url no longer present (page edited/removed since), or the write
+			// failed — nothing to undo on this post. Not an error.
+			$skipped++;
 		}
 
 		return array(
-			'before' => array( 'post_content' => $entry['after_state']['post_content'] ?? '' ),
-			'after'  => array( 'post_content' => $old_content ),
+			'before' => array( 'url' => $new_url, 'reverted_posts' => $reverted, 'skipped_posts' => $skipped ),
+			'after'  => array( 'url' => $old_url, 'reverted_posts' => $reverted ),
 		);
 	}
 
 	// ─── Internals ───────────────────────────────────────────────────────
+
+	/**
+	 * The full set of posts a broken_link fix mutated: the primary target plus
+	 * every post recorded in the deep_rewrites map. Deduplicated (the primary is
+	 * excluded from the deep scan, but guard anyway). Keys of deep_rewrites are
+	 * post ids (JSON object keys decode to strings — cast to int).
+	 *
+	 * @return int[]
+	 */
+	private function rollback_target_ids( array $entry ): array {
+		$ids     = array();
+		$primary = (int) ( $entry['target_id'] ?? 0 );
+		if ( $primary > 0 ) {
+			$ids[ $primary ] = true;
+		}
+		$deep = $entry['after_state']['deep_rewrites'] ?? null;
+		if ( is_array( $deep ) ) {
+			foreach ( array_keys( $deep ) as $id ) {
+				$id = (int) $id;
+				if ( $id > 0 ) {
+					$ids[ $id ] = true;
+				}
+			}
+		}
+		return array_map( 'intval', array_keys( $ids ) );
+	}
 
 	/**
 	 * @return object|\WP_Error

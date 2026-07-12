@@ -233,6 +233,29 @@ final class BrokenLinkTest extends TestCase {
         $this->assertSame( 1, $r['after']['replacements'] );
     }
 
+    public function test_apply_before_after_serialize_as_json_objects_not_arrays(): void {
+        // Regression for the [] vs {} wire bug: apply() must never emit an empty
+        // PHP array for before/after — it serializes to "[]" and the Go backend
+        // decodes before/after as a map, rejecting the whole (successful) apply
+        // and losing rollback capability. Both must be non-empty JSON objects.
+        $post = (object) array( 'ID' => 5, 'post_content' => '<a href="/old">x</a>' );
+        Functions\when( 'get_post' )->justReturn( $post );
+        Functions\expect( 'wp_update_post' )->once()->andReturn( 5 );
+
+        $r = $this->method->apply( array(
+            'post_id' => 5,
+            'old_url' => '/old',
+            'new_url' => '/new',
+        ) );
+
+        $this->assertNotSame( '[]', json_encode( $r['before'] ) );
+        $this->assertNotSame( '[]', json_encode( $r['after'] ) );
+        $this->assertStringStartsWith( '{', json_encode( $r['before'] ) );
+        $this->assertStringStartsWith( '{', json_encode( $r['after'] ) );
+        // The change summary survives for the dashboard.
+        $this->assertSame( 1, $r['after']['replacements'] );
+    }
+
     public function test_apply_no_op_when_old_url_absent(): void {
         $post = (object) array(
             'ID'           => 5,
@@ -303,7 +326,14 @@ final class BrokenLinkTest extends TestCase {
                               '<a href="https://other.com/old/">theirs</a>',
         );
         Functions\when( 'get_post' )->justReturn( $post );
-        Functions\expect( 'wp_update_post' )->once()->andReturn( 5 );
+        $captured = null;
+        Functions\expect( 'wp_update_post' )
+            ->once()
+            ->with( Mockery::on( function ( $u ) use ( &$captured ) {
+                $captured = $u['post_content'];
+                return true;
+            } ), true )
+            ->andReturn( 5 );
 
         $r = $this->method->apply( array(
             'post_id' => 5,
@@ -312,8 +342,11 @@ final class BrokenLinkTest extends TestCase {
         ) );
 
         $this->assertSame( 1, $r['after']['replacements'] );
-        $this->assertStringContainsString( 'href="/new/"', $r['after']['post_content'] );
-        $this->assertStringContainsString( 'https://other.com/old/', $r['after']['post_content'] );
+        // apply() no longer returns a page-content copy — assert on what was
+        // actually written to the DB. Needles are quote-free: wp_slash() escapes
+        // the surrounding quotes in the written content.
+        $this->assertStringContainsString( '/new/', $captured );          // mine rewritten
+        $this->assertStringContainsString( 'other.com/old/', $captured ); // other host untouched
     }
 
     public function test_replacement_preserves_trailing_query_string(): void {
@@ -355,27 +388,116 @@ final class BrokenLinkTest extends TestCase {
         $this->assertStringContainsString( 'href="/new$1"', $r['after']['post_content'] );
     }
 
-    public function test_rollback_restores_post_content_from_history(): void {
+    public function test_rollback_surgically_reverses_new_url_to_old_on_current_content(): void {
+        // Rollback must NOT restore a stored page copy — it reverses the exact
+        // substitution (new_url -> old_url) on the CURRENT content, so an edit
+        // made to the page after the fix survives the undo.
         $this->history->shouldReceive( 'get' )
             ->with( 7 )
             ->andReturn( array(
-                'id'           => 7,
-                'method'       => 'broken_link',
-                'target_type'  => 'post',
-                'target_id'    => 5,
-                'before_state' => array( 'post_content' => '<a href="/old">x</a>' ),
-                'after_state'  => array( 'post_content' => '<a href="/new">x</a>', 'replacements' => 1 ),
+                'id'          => 7,
+                'method'      => 'broken_link',
+                'params'      => array( 'old_url' => '/old', 'new_url' => '/new', 'mode' => 'rewrite' ),
+                'target_id'   => 5,
+                'after_state' => array( 'replacements' => 1 ),
             ) );
 
+        Functions\when( 'get_post' )->justReturn( (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="/new">x</a> <p>edited later</p>',
+        ) );
+
+        $captured = null;
         Functions\expect( 'wp_update_post' )
             ->once()
-            ->with( Mockery::on( fn ( $u ) => $u['ID'] === 5 && false !== strpos( $u['post_content'], '/old' ) ), true )
+            ->with( Mockery::on( function ( $u ) use ( &$captured ) {
+                $captured = $u['post_content'];
+                return 5 === (int) $u['ID'];
+            } ), true )
             ->andReturn( 5 );
 
         $r = $this->method->rollback( 7 );
 
         $this->assertIsArray( $r );
-        $this->assertStringContainsString( '/old', $r['after']['post_content'] );
+        // Quote-free needles: wp_slash() escapes quotes in the written content.
+        $this->assertStringContainsString( '/old', $captured );         // reversed back
+        $this->assertStringNotContainsString( '/new', $captured );      // new_url gone
+        $this->assertStringContainsString( 'edited later', $captured ); // unrelated edit preserved
+        $this->assertSame( 1, $r['before']['reverted_posts'] );
+    }
+
+    public function test_rollback_reverses_primary_and_deep_posts(): void {
+        // Primary target AND every deep-rewritten post in after_state must revert.
+        $this->history->shouldReceive( 'get' )
+            ->with( 7 )
+            ->andReturn( array(
+                'id'          => 7,
+                'method'      => 'broken_link',
+                'params'      => array( 'old_url' => '/old', 'new_url' => '/new', 'mode' => 'rewrite' ),
+                'target_id'   => 5,
+                'after_state' => array( 'deep_rewrites' => array( '8' => 1, '9' => 2 ) ),
+            ) );
+
+        Functions\when( 'get_post' )->alias( function ( $id ) {
+            return (object) array( 'ID' => (int) $id, 'post_content' => '<a href="/new">x</a>' );
+        } );
+
+        $ids = array();
+        Functions\expect( 'wp_update_post' )
+            ->times( 3 )
+            ->with( Mockery::on( function ( $u ) use ( &$ids ) {
+                $ids[] = (int) $u['ID'];
+                return false !== strpos( $u['post_content'], '/old' );
+            } ), true )
+            ->andReturn( 1 );
+
+        $r = $this->method->rollback( 7 );
+
+        sort( $ids );
+        $this->assertSame( array( 5, 8, 9 ), $ids );
+        $this->assertSame( 3, $r['before']['reverted_posts'] );
+    }
+
+    public function test_rollback_skips_post_where_new_url_already_gone(): void {
+        // If the page was edited and no longer contains new_url, there is nothing
+        // to undo there — skip it silently, do not write or error.
+        $this->history->shouldReceive( 'get' )
+            ->with( 7 )
+            ->andReturn( array(
+                'method'    => 'broken_link',
+                'params'    => array( 'old_url' => '/old', 'new_url' => '/new', 'mode' => 'rewrite' ),
+                'target_id' => 5,
+            ) );
+
+        Functions\when( 'get_post' )->justReturn( (object) array(
+            'ID'           => 5,
+            'post_content' => '<p>the link was removed by the author</p>',
+        ) );
+        Functions\expect( 'wp_update_post' )->never();
+
+        $r = $this->method->rollback( 7 );
+
+        $this->assertIsArray( $r );
+        $this->assertSame( 0, $r['before']['reverted_posts'] );
+        $this->assertSame( 1, $r['before']['skipped_posts'] );
+    }
+
+    public function test_rollback_remove_link_mode_is_not_reversible(): void {
+        // remove_link stripped the <a> wrapper — no reliable surgical way to
+        // re-create it, so rollback reports it honestly instead of guessing.
+        $this->history->shouldReceive( 'get' )
+            ->with( 7 )
+            ->andReturn( array(
+                'method'    => 'broken_link',
+                'params'    => array( 'old_url' => '/old', 'mode' => 'remove_link' ),
+                'target_id' => 5,
+            ) );
+        Functions\expect( 'wp_update_post' )->never();
+
+        $r = $this->method->rollback( 7 );
+
+        $this->assertInstanceOf( WP_Error::class, $r );
+        $this->assertSame( 'not_reversible', $r->get_error_code() );
     }
 
     public function test_rollback_unknown_history_returns_error(): void {

@@ -89,24 +89,80 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 		// fine but the rendered HTML still has alt="".
 		if ( '' !== $image_url && '' !== $suggested ) {
 			$rewrite = $this->rewrite_alt_in_posts( $image_url, $suggested );
-			if ( is_array( $result ) ) {
-				$result['post_rewrites'] = $rewrite;
-				// If we touched any post_content, this run is NOT a no-op even
-				// if the attachment meta was already correct. The controller
-				// uses no_op to decide between status='applied' and
-				// 'already_applied' — we want 'applied' so the dashboard
-				// reflects that real content changed.
-				$total = array_sum( $rewrite );
-				if ( $total > 0 ) {
-					$result['no_op'] = false;
-					if ( isset( $result['after']['value'] ) || ! isset( $result['after'] ) ) {
-						$result['after']['post_rewrite_count'] = $total;
+			if ( is_array( $result ) && ! empty( $rewrite ) ) {
+				// Persist the affected post ids UNDER after_state (the controller
+				// records before/after only, so a top-level key would be lost) so
+				// rollback() can find those posts and surgically revert the alt we
+				// wrote — no page copies needed.
+				$result['after']['post_rewrites']      = $rewrite;
+				$result['after']['post_rewrite_count'] = array_sum( $rewrite );
+				// We changed real post_content, so this run is 'applied', not
+				// 'already_applied', even if the attachment meta was already set.
+				$result['no_op'] = false;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Undo an image_alt fix SURGICALLY.
+	 *
+	 * Step 1 — restore the attachment meta from the single stored value (the
+	 * base class handles this; it is one short string, not a page copy).
+	 *
+	 * Step 2 — for every post the fix rewrote (recorded in
+	 * after_state['post_rewrites']), reverse the alt we wrote back to empty on
+	 * the CURRENT content, and ONLY where the alt is still exactly the value we
+	 * set. A post whose alt an editor changed since, or that no longer contains
+	 * the image, is left untouched — we never restore a stored page copy, so
+	 * unrelated edits survive.
+	 */
+	public function rollback( int $history_id ) {
+		$meta_result = parent::rollback( $history_id );
+		if ( $meta_result instanceof WP_Error ) {
+			return $meta_result;
+		}
+
+		$entry     = $this->history->get( $history_id );
+		$params    = ( is_array( $entry ) && isset( $entry['params'] ) && is_array( $entry['params'] ) ) ? $entry['params'] : array();
+		$image_url = isset( $params['image_url'] ) ? (string) $params['image_url'] : '';
+		$alt       = isset( $params['suggested_value'] ) ? (string) $params['suggested_value'] : '';
+
+		$reverted = 0;
+		$rewrites = ( is_array( $entry ) && isset( $entry['after_state']['post_rewrites'] ) && is_array( $entry['after_state']['post_rewrites'] ) )
+			? $entry['after_state']['post_rewrites']
+			: array();
+
+		if ( '' !== $image_url && '' !== $alt && ! empty( $rewrites ) ) {
+			foreach ( array_keys( $rewrites ) as $raw_id ) {
+				$post_id = (int) $raw_id;
+				if ( $post_id <= 0 ) {
+					continue;
+				}
+				$post = get_post( $post_id );
+				if ( ! $post ) {
+					continue;
+				}
+				$count       = 0;
+				$new_content = $this->revert_alt_in_html( (string) $post->post_content, $image_url, $alt, $count );
+				if ( $count > 0 && $new_content !== $post->post_content ) {
+					$ok = wp_update_post( array(
+						'ID'           => (int) $post_id,
+						// wp_slash: content is DB-read; wp_update_post() unslashes.
+						'post_content' => wp_slash( $new_content ),
+					), true );
+					if ( ! ( $ok instanceof WP_Error ) && (int) $ok > 0 ) {
+						$reverted++;
 					}
 				}
 			}
 		}
 
-		return $result;
+		if ( is_array( $meta_result ) ) {
+			$meta_result['reverted_posts'] = $reverted;
+		}
+		return $meta_result;
 	}
 
 	/**
@@ -211,6 +267,42 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 	}
 
 	/**
+	 * Inverse of rewrite_alt_in_html: put the alt we wrote back to empty, but
+	 * ONLY where it is still exactly the value we set — so a caption an editor
+	 * changed after the fix is never clobbered. Sets $count to the number of
+	 * reverts. Used by rollback().
+	 */
+	private function revert_alt_in_html( string $html, string $image_url, string $alt, &$count ): string {
+		$count = 0;
+		$base  = preg_quote( $this->basename_no_ext( $image_url ), '~' );
+		if ( '' === $base || '' === $alt ) {
+			return $html;
+		}
+
+		// Pass 1: <img> tags whose alt is exactly our value → back to alt="".
+		$alt_escaped_html = htmlspecialchars( $alt, ENT_QUOTES, 'UTF-8' );
+		$alt_q            = preg_quote( $alt_escaped_html, '~' );
+		$tag_pattern      = '~(<img\b[^>]*?(?:src|data-src)=["\'][^"\']*' . $base . '[^"\']*["\'][^>]*?\balt=)"' . $alt_q . '"~i';
+		$html             = preg_replace_callback( $tag_pattern, function ( $m ) use ( &$count ) {
+			$count++;
+			return $m[1] . '""';
+		}, $html );
+		if ( ! is_string( $html ) ) {
+			return '';
+		}
+
+		// Pass 2: block-JSON "alt":"<our value>" → "alt":"" within objects that
+		// reference this image.
+		$alt_json_inner = trim( (string) wp_json_encode( $alt, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ), '"' );
+		$needle         = '"alt":"' . $alt_json_inner . '"';
+		$base_re        = '~' . $base . '~i';
+
+		$html = $this->walk_block_json_alt( $html, $needle, '"alt":""', $base_re, $count );
+
+		return $html;
+	}
+
+	/**
 	 * Walk every "alt":"" in the content, find the enclosing {…} object via
 	 * brace-counting, and rewrite if the basename URL appears anywhere inside
 	 * that object (including arbitrarily nested children — which is the case
@@ -222,7 +314,16 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 	 * never does, so a simpler counter is fine in practice.
 	 */
 	private function rewrite_block_json_alt( string $html, string $base_re, string $replacement, int &$count ): string {
-		$needle     = '"alt":""';
+		return $this->walk_block_json_alt( $html, '"alt":""', $replacement, $base_re, $count );
+	}
+
+	/**
+	 * Walk every $needle occurrence, find its enclosing {…} object via
+	 * brace-counting, and swap it for $replacement when that object references
+	 * this image's basename ($base_re). Shared by the forward rewrite (needle
+	 * "alt":"") and the rollback revert (needle "alt":"<our value>").
+	 */
+	private function walk_block_json_alt( string $html, string $needle, string $replacement, string $base_re, int &$count ): string {
 		$needle_len = strlen( $needle );
 		$out        = '';
 		$cursor     = 0;

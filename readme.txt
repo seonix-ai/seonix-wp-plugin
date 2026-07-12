@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.41
+Stable tag: 2.5.42
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,10 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.5.42 =
+* Improved: undoing an automatic fix for a broken link or a missing image alt now reverses exactly that change wherever it was applied across your site — and leaves any later edits to those pages untouched, instead of restoring an old copy of the whole page.
+* Fixed: a broken-link fix could be reported as failed even when it actually succeeded on the page; this no longer happens.
 
 = 2.5.41 =
 * Improved llms.txt (the AI-discovery file): pages are now ordered by importance — your home page and main service pages first, instead of buried among sub-pages — so AI assistants can tell which pages matter most.
