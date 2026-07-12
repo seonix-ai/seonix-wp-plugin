@@ -12,16 +12,16 @@ use WP_Error;
 /**
  * Covers the yoast_setting_pagination_noindex fix method.
  *
- * The method's job is two-fold:
- *   1. Flip wpseo_titles['noindex-subpages-wpseo'] to true while preserving
- *      every other key in the option.
- *   2. Force-rebuild affected term indexables (UPDATE wp_yoast_indexable
- *      SET is_robots_noindex = NULL WHERE object_type = 'term') so Yoast
- *      renders the new robots tag on the live page without waiting for
- *      its background cron.
+ * The method's only job is to flip wpseo_titles['noindex-subpages-wpseo'] to
+ * true while preserving every other key in the option. Yoast's robots presenter
+ * applies the subpage noindex from that option at render time (gated on
+ * is_paged()), so the fix takes effect without touching wp_yoast_indexable.
  *
- * Tests use Brain Monkey to stub WordPress option functions and a Mockery
- * spy on $wpdb to assert the UPDATE happens with the right WHERE clause.
+ * The P0 audit removed an earlier `UPDATE {prefix}yoast_indexable SET
+ * is_robots_noindex = NULL WHERE object_type = 'term'` (plus a full object-cache
+ * flush) that erased deliberate per-term noindex overrides and did nothing for
+ * subpage robots. Tests use Brain Monkey to stub WordPress option functions; a
+ * Mockery spy on $wpdb asserts the indexable table is never written.
  */
 final class YoastPaginationNoindexTest extends TestCase {
 
@@ -99,15 +99,18 @@ final class YoastPaginationNoindexTest extends TestCase {
 	}
 
 	public function test_dry_run_does_not_persist(): void {
-		Functions\when( 'get_option' )->justReturn( array() );
-		Functions\expect( 'update_option' )->never();
+		// dry_run must be a pure read: it goes through WPSEO_Options::get and
+		// must never write through the setter. Assert the setter call count
+		// directly (the option store is the real thing dry_run could mutate),
+		// rather than stubbing update_option — which isn't on this code path.
+		\WPSEO_Options::$store = array( 'separator' => 'sc-dash' );
 
 		$this->method->dry_run( array() );
 
-		$this->assertTrue( true );
+		$this->assertSame( 0, \WPSEO_Options::$set_calls );
 	}
 
-	public function test_apply_writes_option_preserving_other_keys(): void {
+	public function test_apply_writes_option_and_never_touches_indexables(): void {
 		// Existing wpseo_titles keys, as Yoast's option API would report them.
 		\WPSEO_Options::$store = array(
 			'separator'          => 'sc-dash',
@@ -115,22 +118,15 @@ final class YoastPaginationNoindexTest extends TestCase {
 			'breadcrumbs-enable' => true,
 		);
 
-		// $wpdb spy so the indexable rebuild step can be asserted.
+		// Regression lock for the P0 fix: apply() must flip the option ONLY and
+		// must never run the old destructive `UPDATE wp_yoast_indexable SET
+		// is_robots_noindex = NULL` (which erased deliberate per-term noindex).
+		// Wire a $wpdb spy that fails the test if any query/prepare is attempted.
 		$wpdb         = Mockery::mock();
 		$wpdb->prefix = 'wp_';
-		$wpdb->shouldReceive( 'suppress_errors' )->andReturn( false );
-		$wpdb->shouldReceive( 'prepare' )
-			->once()
-			->with( Mockery::pattern( '/UPDATE wp_yoast_indexable SET is_robots_noindex = NULL WHERE object_type = %s/' ), 'term' )
-			->andReturn( "UPDATE wp_yoast_indexable SET is_robots_noindex = NULL WHERE object_type = 'term'" );
-		$wpdb->shouldReceive( 'query' )->once()->andReturn( 3 );
+		$wpdb->shouldReceive( 'query' )->never();
+		$wpdb->shouldReceive( 'prepare' )->never();
 		$GLOBALS['wpdb'] = $wpdb;
-
-		// The indexable rebuild step finishes by flushing Yoast's object
-		// cache. Prefer wp_cache_flush_group when available, else fall back
-		// to wp_cache_flush — stub both so we don't care which path runs.
-		Functions\when( 'wp_cache_flush_group' )->justReturn( true );
-		Functions\when( 'wp_cache_flush' )->justReturn( true );
 
 		$r = $this->method->apply( array() );
 

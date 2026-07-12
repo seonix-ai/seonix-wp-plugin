@@ -2,27 +2,28 @@
 /**
  * Fix method: yoast_setting_pagination_noindex.
  *
- * Flips the SEO plugin's site-wide `noindex-subpages-wpseo` option (stored under
+ * Flips Yoast SEO's site-wide `noindex-subpages-wpseo` option (stored under
  * `wpseo_titles`) to `true`, so paginated archive subpages (/category/x/page/2,
  * /page/3, …) render with a `noindex, follow` robots tag. Industry-standard
  * SEO advice for paginated archives — they duplicate the canonical archive
  * page's content and shouldn't compete with it in search results.
  *
- * Why this needs its own method on top of the option flip:
+ * The option is the single source of truth. Yoast's robots presenter applies
+ * the subpage noindex at request time — it checks `noindex-subpages-wpseo`
+ * together with `is_paged()` when it renders the robots meta — so flipping the
+ * option takes effect on the very next page load, with no per-row indexable
+ * mutation required.
  *
- *   The SEO indexable layer (v14+) renders robots tags from the
- *   `wp_yoast_indexable` table, not the options API. Flipping the option alone
- *   leaves every existing term/archive indexable row with its old per-row
- *   `is_robots_noindex` value, so the live /page/2 HTML keeps rendering
- *   `index, follow` until the SEO plugin's cron rebuild touches each row. We
- *   can't wait for that. So after writing the option we null out
- *   `is_robots_noindex` on term-type indexables, which makes the indexable
- *   layer fall through to the global default we just set. (Setting to `1`
- *   directly would also work, but `NULL` is the "inherit from global" sentinel
- *   and future UI changes won't surprise the site owner.)
+ * We deliberately do NOT touch `wp_yoast_indexable.is_robots_noindex`. That
+ * column holds each term's OWN (page-1) noindex state; nulling it across all
+ * term rows would erase deliberate per-term noindex overrides the owner set by
+ * hand — and it wouldn't affect subpage robots anyway, since those are computed
+ * from the option at render time, not read from the indexable row. An earlier
+ * version ran that UPDATE (plus a full object-cache flush); both were removed as
+ * destructive and unnecessary.
  *
- * Idempotent: re-apply on a site where the option is already true and no
- * stray indexable rows remain returns no_op. dry_run never mutates state.
+ * Idempotent: re-apply on a site where the option is already true returns
+ * no_op. dry_run never mutates state.
  *
  * No AI involvement — params are empty by design. The Seonix backend emits
  * one task per scan with a single `site_url` for attribution; the executor
@@ -61,7 +62,7 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 		if ( ! $this->is_target_seo_plugin_active() ) {
 			return new WP_Error(
 				'seo_plugin_inactive',
-				'This fix requires the Yoast SEO plugin to be active (it edits a Yoast-owned option / indexable row).',
+				'This fix requires the Yoast SEO plugin to be active (it edits a Yoast-owned option).',
 				array( 'status' => 412 )
 			);
 		}
@@ -82,7 +83,7 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 		if ( ! $this->is_target_seo_plugin_active() ) {
 			return new WP_Error(
 				'seo_plugin_inactive',
-				'This fix requires the Yoast SEO plugin to be active (it edits a Yoast-owned option / indexable row).',
+				'This fix requires the Yoast SEO plugin to be active (it edits a Yoast-owned option).',
 				array( 'status' => 412 )
 			);
 		}
@@ -94,12 +95,14 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 			return $result;
 		}
 
+		// The option flip is the entire fix: Yoast's robots presenter reads
+		// `noindex-subpages-wpseo` at render time (gated on is_paged()), so the
+		// change is live on the next request. We intentionally do not mutate
+		// wp_yoast_indexable — see the class docblock.
 		$written = $this->write_setting( true );
 		if ( $written instanceof WP_Error ) {
 			return $written;
 		}
-
-		$this->force_rebuild_term_indexables();
 
 		return $result;
 	}
@@ -128,9 +131,9 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 			return $written;
 		}
 
-		// On rollback we don't try to restore per-row is_robots_noindex —
-		// the SEO plugin's cron reconciliation will recompute them from the
-		// option. Surfacing partial restores would be misleading.
+		// Restoring the option is the whole rollback — apply() only ever wrote
+		// the option, never per-row indexable state, so there is nothing else
+		// to undo.
 		return array(
 			'before' => array( 'value' => $after ),
 			'after'  => array( 'value' => $before ),
@@ -186,63 +189,6 @@ class Seonix_Fix_Pagination_Noindex implements Seonix_Fix_Method {
 			return new WP_Error( 'update_failed', 'WPSEO_Options::set did not persist noindex-subpages-wpseo.', array( 'status' => 500 ) );
 		}
 		return true;
-	}
-
-	/**
-	 * The SEO indexable layer (v14+) renders the robots meta from
-	 * `wp_yoast_indexable`. After flipping the global `noindex-subpages-wpseo`,
-	 * existing term/archive indexable rows still carry whatever
-	 * `is_robots_noindex` value was computed when the row was last touched —
-	 * usually NULL or 0 — so the live /page/2 HTML keeps shipping
-	 * `index, follow` until cron catches up.
-	 *
-	 * We nullify the column on term-type rows so the renderer falls through
-	 * to the global default on the next request. This is intentionally cheap
-	 * (one UPDATE, no per-row PHP) and idempotent: re-running on a clean table
-	 * affects 0 rows. Cache flush ensures any object-cache layers in front
-	 * of the indexable table re-fetch.
-	 *
-	 * Silent best-effort: the table is optional on installs without the
-	 * Indexables module, in which case the UPDATE no-ops and we don't surface
-	 * an error.
-	 */
-	private function force_rebuild_term_indexables(): void {
-		global $wpdb;
-		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
-			return;
-		}
-		$table = $wpdb->prefix . 'yoast_indexable';
-
-		$prev_suppress_errors = method_exists( $wpdb, 'suppress_errors' )
-			? $wpdb->suppress_errors( true )
-			: false;
-
-		// Null out is_robots_noindex for term archive indexables only.
-		// Post indexables and home/static-page indexables are untouched —
-		// their robots state is governed by other options.
-		// $table is internal ($wpdb->prefix . 'yoast_indexable') so direct
-		// interpolation is safe; placeholders do not support identifiers.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
-		$wpdb->query(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				"UPDATE {$table} SET is_robots_noindex = NULL WHERE object_type = %s",
-				'term'
-			)
-		);
-
-		if ( method_exists( $wpdb, 'suppress_errors' ) ) {
-			$wpdb->suppress_errors( $prev_suppress_errors );
-		}
-
-		// Flush the per-indexable object cache so the next request reads
-		// the cleared rows from DB. Group name matches the indexable layer's
-		// convention.
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'yoast_indexables' );
-		} elseif ( function_exists( 'wp_cache_flush' ) ) {
-			wp_cache_flush();
-		}
 	}
 
 	private function describe_result( bool $current, bool $target ): array {
