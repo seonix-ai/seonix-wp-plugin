@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.5.42
+Stable tag: 2.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,7 +33,7 @@ AI search visibility out of the box — llms.txt and IndexNow, no account needed
 
 **Plays well with your stack**
 
-* **Works alongside your existing SEO plugin** — Seonix writes the standard meta fields every major WordPress SEO plugin reads, so your current setup keeps working.
+* **Works alongside your existing SEO plugin** — Seonix writes SEO titles and descriptions into your SEO plugin’s own storage (and syncs your edits back), so your current setup keeps working. No SEO plugin? Seonix renders the meta tags itself.
 * **WooCommerce-ready** — product pages flow into the AI context for relevant internal linking.
 
 **How the WordPress plugin fits in**
@@ -112,7 +112,7 @@ On activation, the plugin generates a unique API key (`sx_` followed by 64 hex c
 
 = What SEO plugins are supported? =
 
-The plugin writes the standard SEO meta keys that every major WordPress SEO plugin reads (meta title, meta description, focus keyword). Whichever SEO plugin you have active will pick up the values without extra setup.
+All major WordPress SEO plugins. Seonix detects which one is active and writes the SEO title, meta description, and focus keyword into that plugin’s own native storage — no extra setup, and you keep editing the values where you always did. Edits made in your SEO plugin sync back to the Seonix dashboard. If you run no SEO plugin at all, Seonix renders the meta tags itself and hands everything over automatically the day you install one.
 
 = Can I change the API key? =
 
@@ -141,6 +141,13 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.6.0 =
+* New: SEO titles and meta descriptions written by Seonix now land inside whichever SEO plugin your site runs, using each plugin's own native storage — so you keep editing them in the tools you already use.
+* New: no SEO plugin? Seonix now renders the SEO title, meta description, and social-share tags itself (Auto mode — it steps aside automatically the moment you activate an SEO plugin, and copies everything you had into it).
+* New: edits you make to SEO titles/descriptions in your SEO plugin sync back to the Seonix dashboard, with a note showing the change came from WordPress.
+* New: structured data (JSON-LD) received from Seonix can include FAQ and HowTo blocks; your SEO plugin's sitemap cache is refreshed right after each publish.
+* Improved: one-click SEO fixes for titles and descriptions now work on sites without any SEO plugin installed.
 
 = 2.5.42 =
 * Improved: undoing an automatic fix for a broken link or a missing image alt now reverses exactly that change wherever it was applied across your site — and leaves any later edits to those pages untouched, instead of restoring an old copy of the whole page.
