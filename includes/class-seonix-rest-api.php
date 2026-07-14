@@ -228,29 +228,21 @@ class Seonix_REST_API {
 
 		// Build SEO meta_input BEFORE wp_insert_post (critical for the SEO
 		// plugin's indexable creation to pick up the values immediately).
-		$meta_input = array();
-
+		// The bridge fans the fields out to Seonix's canonical `_seonix_*` keys
+		// plus every ACTIVE postmeta engine (Yoast / Rank Math / SEOPress /
+		// TSF). AIOSEO keeps meta in its own table and needs the post to exist
+		// first — completed right after wp_insert_post below.
 		$focus_keyword    = sanitize_text_field( $request->get_param( 'focus_keyword' ) );
 		$meta_description = sanitize_text_field( $request->get_param( 'meta_description' ) );
+		$seo_title        = sanitize_text_field( (string) $request->get_param( 'seo_title' ) );
 		$ce_article_id    = sanitize_text_field( $request->get_param( 'ce_article_id' ) );
 
-		if ( ! empty( $focus_keyword ) ) {
-			// Write the focus-keyword meta keys recognised by every supported
-			// SEO plugin so whichever one is active picks the value up.
-			$meta_input['_yoast_wpseo_focuskw']    = $focus_keyword;
-			$meta_input['rank_math_focus_keyword'] = $focus_keyword;
-			$meta_input['_aioseo_keyphrases']      = wp_json_encode( array(
-				array( 'keyphrase' => $focus_keyword, 'score' => 0 ),
-			) );
-		}
-
-		if ( ! empty( $meta_description ) ) {
-			// Write the meta-description keys recognised by every supported
-			// SEO plugin so whichever one is active picks the value up.
-			$meta_input['_yoast_wpseo_metadesc'] = $meta_description;
-			$meta_input['rank_math_description'] = $meta_description;
-			$meta_input['_aioseo_description']   = $meta_description;
-		}
+		$seo_fields = array(
+			'seo_title'        => $seo_title,
+			'meta_description' => $meta_description,
+			'focus_keyword'    => $focus_keyword,
+		);
+		$meta_input = Seonix_Meta_Bridge::meta_input( $seo_fields );
 
 		if ( ! empty( $ce_article_id ) ) {
 			$meta_input['_ce_article_id'] = $ce_article_id;
@@ -439,6 +431,20 @@ class Seonix_REST_API {
 
 		// Rebuild the SEO indexable when a compatible engine is active.
 		$this->rebuild_yoast_indexable( $post_id );
+
+		// AIOSEO stores SEO fields in its own table (postmeta is ignored), so
+		// its write needs the post ID and runs after the insert. No-op unless
+		// AIOSEO is active. Non-empty fields only — publish never clears.
+		if ( in_array( Seonix_SEO_Engine::AIOSEO, Seonix_SEO_Engine::detect_all(), true ) ) {
+			Seonix_Meta_Bridge::write_aioseo( $post_id, array_filter( array(
+				'seo_title'        => Seonix_Meta_Bridge::sanitize_value( $seo_title ),
+				'meta_description' => Seonix_Meta_Bridge::sanitize_value( $meta_description ),
+				'focus_keyword'    => Seonix_Meta_Bridge::sanitize_value( $focus_keyword ),
+			), 'strlen' ) );
+		}
+
+		// Surface the fresh URL to the engines' XML sitemaps immediately.
+		Seonix_Meta_Bridge::invalidate_sitemap_caches();
 
 		// Mark site as connected on first successful publish (if not already).
 		if ( ! Seonix_Auth::is_connected() ) {
@@ -841,9 +847,15 @@ class Seonix_REST_API {
 		// Trimmed in 2.2.5: backend reads only `{site_name, site_url}` (see
 		// channel_handler::Connect). `success`, `version`, `php_version`,
 		// `wp_version` were dropped — they were never consumed.
+		// 2.6.0: + the SEO environment report (which SEO plugin(s) own head
+		// meta, and Seonix's own meta-render mode) so the dashboard can show
+		// "synced with Yoast" vs "Seonix renders meta tags". Older backends
+		// ignore the extra fields.
 		return rest_ensure_response( array(
-			'site_name' => get_bloginfo( 'name' ),
-			'site_url'  => home_url(),
+			'site_name'   => get_bloginfo( 'name' ),
+			'site_url'    => home_url(),
+			'seo_engines' => Seonix_Sync::seo_engines_report(),
+			'meta_mode'   => Seonix_Meta_Renderer::mode(),
 		) );
 	}
 
@@ -1263,20 +1275,16 @@ class Seonix_REST_API {
 	 * @return array Formatted post data.
 	 */
 	private function format_post_data( WP_Post $post ) {
-		// SEO meta: check the supported SEO plugins in order.
-		$focus_keyword    = get_post_meta( $post->ID, '_yoast_wpseo_focuskw', true );
-		$meta_description = get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true );
-
-		if ( empty( $focus_keyword ) ) {
-			$focus_keyword = get_post_meta( $post->ID, 'rank_math_focus_keyword', true );
-		}
-		if ( empty( $meta_description ) ) {
-			$meta_description = get_post_meta( $post->ID, 'rank_math_description', true );
-		}
+		// SEO meta through the bridge: reads the PRIMARY active engine
+		// (incl. AIOSEO's table via its model, SEOPress, TSF), falling back to
+		// Seonix's own canonical keys — so imports capture existing meta no
+		// matter which SEO plugin the site runs.
+		$effective = Seonix_Meta_Bridge::read_effective( $post->ID );
 
 		$seo_meta = array(
-			'focus_keyword'    => $focus_keyword ?: null,
-			'meta_description' => $meta_description ?: null,
+			'focus_keyword'    => '' !== $effective['focus_keyword'] ? $effective['focus_keyword'] : null,
+			'meta_description' => '' !== $effective['meta_description'] ? $effective['meta_description'] : null,
+			'seo_title'        => '' !== $effective['seo_title'] ? $effective['seo_title'] : null,
 		);
 
 		// Featured image.

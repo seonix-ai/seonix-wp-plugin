@@ -202,6 +202,42 @@
     });
   }
 
+  // ── Save Meta Mode ──
+
+  var saveMetaModeBtn = document.getElementById('seonix-save-meta-mode-btn');
+  if (saveMetaModeBtn) {
+    saveMetaModeBtn.addEventListener('click', function () {
+      var select = document.getElementById('seonix-meta-mode-select');
+      if (!select) return;
+
+      saveMetaModeBtn.disabled = true;
+      saveMetaModeBtn.innerHTML = '<span class="ce-spinner"></span> Saving…';
+
+      var body = new URLSearchParams();
+      body.append('action', 'seonix_save_meta_mode');
+      body.append('_wpnonce', seonixConnector.nonce);
+      body.append('mode', select.value);
+
+      fetch(seonixConnector.ajaxUrl, { method: 'POST', body: body })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.success) {
+            showNotice('success', 'SEO meta tags setting saved.');
+          } else {
+            var msg = res.data && res.data.message ? res.data.message : 'Failed to save setting.';
+            showNotice('error', msg);
+          }
+          saveMetaModeBtn.disabled = false;
+          saveMetaModeBtn.textContent = 'Save';
+        })
+        .catch(function () {
+          showNotice('error', 'Network error.');
+          saveMetaModeBtn.disabled = false;
+          saveMetaModeBtn.textContent = 'Save';
+        });
+    });
+  }
+
   // ── Sync Now ──
 
   var syncBtn = document.getElementById('seonix-sync-btn');

@@ -28,6 +28,11 @@ final class VerifyTest extends TestCase {
         parent::setUp();
         Monkey\setUp();
 
+        // handle_verify now runs the SEO-engine detection (detect_all() probes
+        // is_plugin_active for the non-Yoast engines) — stub it so these
+        // pre-existing verify-contract tests exercise their own path only.
+        Functions\when( 'is_plugin_active' )->justReturn( false );
+
         $this->updated = [];
 
         // Skip the `if ( ! is_connected() )` branch — those writes aren't
@@ -107,9 +112,18 @@ final class VerifyTest extends TestCase {
 
         $response = $this->api->handle_verify( $request );
 
+        // Contract extended (SEO Meta Bridge): verify now also reports the
+        // site's detected SEO engine(s) and the current meta mode so the
+        // backend can decide whether the reverse SEO-meta sync is usable.
+        // FakeYoast makes Yoast the sole active engine; meta_mode defaults to
+        // 'auto' (get_option is stubbed to return the default here).
         $this->assertSame( [
-            'site_name' => 'Example Studio',
-            'site_url'  => 'https://example.com',
+            'site_name'   => 'Example Studio',
+            'site_url'    => 'https://example.com',
+            'seo_engines' => [
+                [ 'key' => 'yoast', 'version' => '99.9-test', 'primary' => true ],
+            ],
+            'meta_mode'   => 'auto',
         ], $response );
     }
 

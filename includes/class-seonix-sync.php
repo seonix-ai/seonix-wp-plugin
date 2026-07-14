@@ -127,7 +127,14 @@ class Seonix_Sync {
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $api_key,
 				),
-				'body'    => wp_json_encode( array( 'items' => $items ) ),
+				'body'    => wp_json_encode( array(
+					'items'       => $items,
+					// Environment report: which SEO plugin(s) own the site's
+					// head meta and whether Seonix renders it itself. Older
+					// backends ignore unknown fields, so this is forward-safe.
+					'seo_engines' => self::seo_engines_report(),
+					'meta_mode'   => Seonix_Meta_Renderer::mode(),
+				) ),
 			)
 		);
 
@@ -182,6 +189,71 @@ class Seonix_Sync {
 				) ),
 			)
 		);
+	}
+
+	/**
+	 * Push a `seo_meta_updated` event: the site owner edited the SEO
+	 * title/description/keyword in their SEO plugin and Seonix should mirror
+	 * the change into the article. Fire-and-forget like every content event —
+	 * an unreachable or older backend (which 400s unknown actions) costs
+	 * nothing.
+	 *
+	 * @param int   $post_id   Post ID.
+	 * @param array $effective ['seo_title','meta_description','focus_keyword','engine'] from the bridge.
+	 * @return void
+	 */
+	public function push_seo_meta_event( $post_id, array $effective ) {
+		$engine_url = get_option( 'seonix_engine_url', '' );
+		$api_key    = Seonix_Auth::get_key();
+
+		if ( empty( $engine_url ) || empty( $api_key ) || ! self::is_safe_url( $engine_url ) ) {
+			return;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return;
+		}
+
+		wp_remote_post(
+			trailingslashit( $engine_url ) . 'api/plugin/content-event',
+			array(
+				'timeout'  => 15,
+				'blocking' => false,
+				'headers'  => array(
+					'Content-Type'  => 'application/json',
+					'Authorization' => 'Bearer ' . $api_key,
+				),
+				'body'     => wp_json_encode( array(
+					'action'   => 'seo_meta_updated',
+					'item'     => $this->format_item( $post, $this->resolve_content_type( $post->post_type ) ?: 'post' ),
+					'seo_meta' => array(
+						'ce_article_id'    => (string) get_post_meta( $post_id, '_ce_article_id', true ),
+						'seo_title'        => (string) $effective['seo_title'],
+						'meta_description' => (string) $effective['meta_description'],
+						'focus_keyword'    => (string) $effective['focus_keyword'],
+						'source_engine'    => null !== $effective['engine'] ? (string) $effective['engine'] : 'none',
+					),
+				) ),
+			)
+		);
+	}
+
+	/**
+	 * Active SEO engines + versions for the backend environment report.
+	 *
+	 * @return array<int,array{key:string,version:string,primary:bool}>
+	 */
+	public static function seo_engines_report() {
+		$report = array();
+		foreach ( Seonix_SEO_Engine::detect_all() as $i => $engine ) {
+			$report[] = array(
+				'key'     => $engine,
+				'version' => Seonix_SEO_Engine::version( $engine ),
+				'primary' => 0 === $i,
+			);
+		}
+		return $report;
 	}
 
 	/**

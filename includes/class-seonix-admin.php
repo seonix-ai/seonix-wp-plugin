@@ -245,6 +245,26 @@ class Seonix_Admin {
 	}
 
 	/**
+	 * AJAX: Save the standalone SEO meta output mode (auto|on|off).
+	 */
+	public function ajax_save_meta_mode() {
+		check_ajax_referer( 'seonix', '_wpnonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'seonix' ) ), 403 );
+		}
+
+		$mode = isset( $_POST['mode'] ) ? sanitize_text_field( wp_unslash( $_POST['mode'] ) ) : 'auto';
+		if ( ! in_array( $mode, array( 'auto', 'on', 'off' ), true ) ) {
+			$mode = 'auto';
+		}
+
+		update_option( Seonix_Meta_Renderer::OPTION_MODE, $mode );
+
+		wp_send_json_success( array( 'saved' => true, 'mode' => $mode ) );
+	}
+
+	/**
 	 * AJAX: Regenerate the API key.
 	 */
 	public function ajax_regenerate_key() {
@@ -1705,6 +1725,8 @@ class Seonix_Admin {
 		$connected_at = get_option( 'seonix_connected_at', '' );
 		$author_id    = (int) get_option( 'seonix_post_author', 0 );
 		$schema_mode  = Seonix_Schema::mode();
+		$meta_mode    = Seonix_Meta_Renderer::mode();
+		$seo_engines  = Seonix_SEO_Engine::detect_all();
 		$key_preview  = ! empty( $api_key ) ? substr( $api_key, 0, 11 ) . str_repeat( '*', 20 ) : '';
 
 		// Get sync data.
@@ -1832,6 +1854,50 @@ class Seonix_Admin {
 
 							<div class="seonix-actions">
 								<button type="button" id="seonix-save-schema-mode-btn" class="seonix-btn seonix-btn--primary seonix-btn--sm">
+									<?php esc_html_e( 'Save', 'seonix' ); ?>
+								</button>
+							</div>
+						</div>
+
+						<!-- SEO Meta Tags card -->
+						<div class="seonix-card">
+							<h2><?php esc_html_e( 'SEO Meta Tags', 'seonix' ); ?></h2>
+							<p class="seonix-subtitle"><?php esc_html_e( 'SEO title, meta description and social tags for Seonix articles. Seonix always syncs these into your SEO plugin (Yoast, Rank Math, All in One SEO, SEOPress, The SEO Framework). "Auto" additionally renders the tags itself only when no SEO plugin is active, so tags are never duplicated.', 'seonix' ); ?></p>
+
+							<?php if ( count( $seo_engines ) >= 2 ) : ?>
+								<p class="seonix-subtitle" style="color:#b45309;">
+									<?php
+									printf(
+										/* translators: %s: comma-separated SEO plugin slugs */
+										esc_html__( 'Heads up: multiple SEO plugins are active (%s). They will emit duplicate meta tags — consider keeping only one.', 'seonix' ),
+										esc_html( implode( ', ', $seo_engines ) )
+									);
+									?>
+								</p>
+							<?php elseif ( ! empty( $seo_engines ) ) : ?>
+								<p class="seonix-subtitle">
+									<?php
+									printf(
+										/* translators: %s: SEO plugin slug */
+										esc_html__( 'Detected SEO plugin: %s — Seonix writes titles and descriptions straight into it.', 'seonix' ),
+										esc_html( $seo_engines[0] )
+									);
+									?>
+								</p>
+							<?php else : ?>
+								<p class="seonix-subtitle"><?php esc_html_e( 'No SEO plugin detected — Seonix serves the meta tags for its articles.', 'seonix' ); ?></p>
+							<?php endif; ?>
+
+							<div class="seonix-field">
+								<select id="seonix-meta-mode-select" class="seonix-select">
+									<option value="auto" <?php selected( $meta_mode, 'auto' ); ?>><?php esc_html_e( 'Auto (recommended) — render only when no SEO plugin is active', 'seonix' ); ?></option>
+									<option value="on" <?php selected( $meta_mode, 'on' ); ?>><?php esc_html_e( 'On — always render Seonix meta tags', 'seonix' ); ?></option>
+									<option value="off" <?php selected( $meta_mode, 'off' ); ?>><?php esc_html_e( 'Off — never render (sync into SEO plugins still works)', 'seonix' ); ?></option>
+								</select>
+							</div>
+
+							<div class="seonix-actions">
+								<button type="button" id="seonix-save-meta-mode-btn" class="seonix-btn seonix-btn--primary seonix-btn--sm">
 									<?php esc_html_e( 'Save', 'seonix' ); ?>
 								</button>
 							</div>

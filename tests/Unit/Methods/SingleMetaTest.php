@@ -28,6 +28,12 @@ final class SingleMetaTest extends TestCase {
     protected function setUp(): void {
         parent::setUp();
         Monkey\setUp();
+        // apply()/dry_run() now route through the SEO-engine detection and the
+        // post-write cache purge; stub the WP-admin / cache helpers those paths
+        // touch so the meta-write behaviour under test runs in isolation.
+        Functions\when( 'is_plugin_active' )->justReturn( false );
+        Functions\when( 'wp_cache_flush' )->justReturn( true );
+        Functions\when( 'rocket_clean_domain' )->justReturn( null );
         $this->history = Mockery::mock( Seonix_SEO_Fix_History::class );
         $this->method  = new Seonix_Fix_Meta_Title( $this->history );
     }
@@ -80,12 +86,17 @@ final class SingleMetaTest extends TestCase {
         $this->assertTrue( $r['no_op'] );
     }
 
-    public function test_apply_calls_update_post_meta_when_changed(): void {
+    public function test_apply_writes_bridge_keys_when_changed(): void {
+        // 2.6.0: meta_title applies through the meta bridge — the Seonix
+        // canonical key AND the active engine's key (FakeYoast makes Yoast the
+        // active engine in the test env) get the value, plus a fingerprint so
+        // the reverse-sync watcher recognises the write as Seonix's own.
         Functions\when( 'get_post_meta' )->justReturn( 'old' );
-        Functions\expect( 'update_post_meta' )
-            ->once()
-            ->with( 5, '_yoast_wpseo_title', 'new' )
-            ->andReturn( true );
+        $writes = array();
+        Functions\when( 'update_post_meta' )->alias( function ( $post_id, $key, $value ) use ( &$writes ) {
+            $writes[ $key ] = array( $post_id, $value );
+            return true;
+        } );
 
         $r = $this->method->apply( array(
             'post_id'         => 5,
@@ -94,6 +105,12 @@ final class SingleMetaTest extends TestCase {
 
         $this->assertEmpty( $r['no_op'] ?? false );
         $this->assertSame( 'new', $r['after']['value'] );
+
+        $this->assertArrayHasKey( '_seonix_seo_title', $writes, 'canonical Seonix key must be written' );
+        $this->assertSame( array( 5, 'new' ), $writes['_seonix_seo_title'] );
+        $this->assertArrayHasKey( '_yoast_wpseo_title', $writes, 'active engine (Yoast) key must be written' );
+        $this->assertSame( array( 5, 'new' ), $writes['_yoast_wpseo_title'] );
+        $this->assertArrayHasKey( '_seonix_meta_fingerprint', $writes, 'fingerprint must be refreshed' );
     }
 
     public function test_apply_skips_update_when_value_unchanged(): void {
@@ -128,12 +145,17 @@ final class SingleMetaTest extends TestCase {
     }
 
     public function test_apply_returns_error_when_update_fails(): void {
-        Functions\when( 'get_post_meta' )->justReturn( 'old' );
+        // The update_failed contract survives on the single-key (non-bridge)
+        // path — image_alt. Bridge-backed methods (meta_title/description)
+        // treat update_post_meta's false as benign (same-value write).
+        Functions\when( 'get_post_meta' )->justReturn( '' );
+        Functions\when( 'attachment_url_to_postid' )->justReturn( 0 );
         Functions\when( 'update_post_meta' )->justReturn( false );
 
-        $r = $this->method->apply( array(
+        $m = new Seonix_Fix_Image_Alt( $this->history );
+        $r = $m->apply( array(
             'post_id'         => 5,
-            'suggested_value' => 'new',
+            'suggested_value' => 'new alt',
         ) );
 
         $this->assertInstanceOf( WP_Error::class, $r );
@@ -152,15 +174,21 @@ final class SingleMetaTest extends TestCase {
                 'after_state'  => array( 'value' => 'new' ),
             ) );
 
-        Functions\expect( 'update_post_meta' )
-            ->once()
-            ->with( 5, '_yoast_wpseo_title', 'old' )
-            ->andReturn( true );
+        // Bridge path: the restore is written to the canonical Seonix key AND
+        // the active engine's key, exactly like an apply.
+        Functions\when( 'get_post_meta' )->justReturn( '' );
+        $writes = array();
+        Functions\when( 'update_post_meta' )->alias( function ( $post_id, $key, $value ) use ( &$writes ) {
+            $writes[ $key ] = array( $post_id, $value );
+            return true;
+        } );
 
         $r = $this->method->rollback( 11 );
 
         $this->assertSame( 'old', $r['after']['value'] );
         $this->assertSame( 'new', $r['before']['value'] );
+        $this->assertSame( array( 5, 'old' ), $writes['_seonix_seo_title'] );
+        $this->assertSame( array( 5, 'old' ), $writes['_yoast_wpseo_title'] );
     }
 
     public function test_rollback_unknown_history_returns_error(): void {

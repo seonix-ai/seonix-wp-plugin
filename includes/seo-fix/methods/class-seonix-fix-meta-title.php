@@ -2,9 +2,12 @@
 /**
  * Fix method: meta_title.
  *
- * Sets the SEO plugin's post title meta. Suggested string is generated
- * upstream by the Seonix backend (AI-shortened to ≤60 chars while preserving
- * meaning).
+ * Sets the SEO title through the meta bridge: Seonix's canonical
+ * `_seonix_seo_title` plus every active SEO plugin's storage (Yoast /
+ * Rank Math / SEOPress / TSF postmeta, AIOSEO via its Post model). With no
+ * SEO plugin installed the standalone meta renderer serves the value, so the
+ * fix works on every site. Suggested string is generated upstream by the
+ * Seonix backend (AI-shortened to ≤60 chars while preserving meaning).
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -18,43 +21,37 @@ class Seonix_Fix_Meta_Title extends Seonix_Fix_Single_Meta {
 	}
 
 	/**
-	 * Static fallback (the abstract contract). The live key is chosen per
-	 * active SEO plugin in resolve_meta_key().
+	 * Static fallback (the abstract contract). Reads/writes actually go
+	 * through the bridge — see bridge_field().
 	 */
 	protected function meta_key(): string {
 		$key = Seonix_SEO_Engine::post_title_key();
-		return null !== $key ? $key : '_yoast_wpseo_title';
+		return null !== $key ? $key : Seonix_Meta_Bridge::META_TITLE;
 	}
 
 	protected function target_type(): string {
 		return 'post';
 	}
 
-	/**
-	 * Write to the post-title key of whichever SEO plugin is active (Yoast →
-	 * _yoast_wpseo_title, Rank Math → rank_math_title). When neither stores the
-	 * title in postmeta we can write (AIOSEO's custom table, or no SEO plugin),
-	 * fail loud with 412 so the dashboard never writes meta no plugin reads.
-	 *
-	 * @return string|\WP_Error
-	 */
-	protected function resolve_meta_key() {
-		$key = Seonix_SEO_Engine::post_title_key();
-		if ( null === $key ) {
-			return new WP_Error(
-				'no_seo_plugin',
-				'No supported SEO plugin (Yoast or Rank Math) is active to store the SEO title.',
-				array( 'status' => 412 )
-			);
-		}
-		return $key;
+	protected function bridge_field(): ?string {
+		return 'seo_title';
 	}
 
 	/**
-	 * Advertised to the /capabilities handshake: the dashboard only offers this
-	 * fix when an SEO plugin that stores the title in postmeta is active.
+	 * Advertised to the /capabilities handshake. Available whenever the value
+	 * will actually reach the page: a postmeta engine is active, AIOSEO's
+	 * model is writable, or Seonix itself renders the head meta (no SEO
+	 * plugin + mode allows output). The remaining gap — an unsupported SEO
+	 * plugin owns <head> (e.g. Squirrly) — stays gated off so we never claim
+	 * a fix that can't take effect.
 	 */
 	public function is_available(): bool {
-		return null !== Seonix_SEO_Engine::post_title_key();
+		if ( null !== Seonix_SEO_Engine::post_title_key() ) {
+			return true;
+		}
+		if ( class_exists( '\AIOSEO\Plugin\Common\Models\Post' ) ) {
+			return true;
+		}
+		return Seonix_Meta_Renderer::should_output();
 	}
 }

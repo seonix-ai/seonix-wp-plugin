@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.5.42
+ * Version:     2.6.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.5.42' );
+define( 'SEONIX_VERSION', '2.6.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -37,6 +37,13 @@ require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
 // SEO Fix subsystem.
 require_once SEONIX_DIR . 'includes/seo-fix/interface-seonix-fix-method.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-engine.php';
+
+// SEO meta bridge: canonical _seonix_* store + fan-out to the active SEO
+// plugin(s), standalone head renderer, and reverse sync back to Seonix.
+// Loaded right after the engine detector it builds on.
+require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-bridge.php';
+require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-renderer.php';
+require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-watcher.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-registry.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-history.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-cache-purger.php';
@@ -136,9 +143,22 @@ function seonix_init() {
 	// so it never duplicates Yoast/Rank Math/AIOSEO schema.
 	add_action( 'wp_head', array( $schema, 'render_head' ) );
 
+	// Standalone SEO meta output (title / description / OG / Twitter). Same
+	// auto/on/off contract as the schema emitter: in "auto" it renders ONLY
+	// when no dedicated SEO plugin owns <head>, so tags are never duplicated.
+	$meta_renderer = new Seonix_Meta_Renderer();
+	$meta_renderer->register();
+
+	// Reverse SEO-meta sync: site-owner edits in Yoast/Rank Math/AIOSEO/
+	// SEOPress/TSF flow back into Seonix (managed posts only), plus the
+	// one-time backfill when an SEO plugin is activated later.
+	$meta_watcher = new Seonix_Meta_Watcher( $sync );
+	$meta_watcher->register();
+
 	// Admin AJAX handlers.
 	add_action( 'wp_ajax_seonix_save_author', array( $admin, 'ajax_save_author' ) );
 	add_action( 'wp_ajax_seonix_save_schema_mode', array( $admin, 'ajax_save_schema_mode' ) );
+	add_action( 'wp_ajax_seonix_save_meta_mode', array( $admin, 'ajax_save_meta_mode' ) );
 	add_action( 'wp_ajax_seonix_regenerate_key', array( $admin, 'ajax_regenerate_key' ) );
 	add_action( 'wp_ajax_seonix_sync_now', array( $admin, 'ajax_sync_now' ) );
 	add_action( 'wp_ajax_seonix_get_api_key', array( $admin, 'ajax_get_api_key' ) );

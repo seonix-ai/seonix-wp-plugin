@@ -30,15 +30,34 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 	/**
 	 * Resolve the meta key to read/write for this run, or a WP_Error when the
 	 * fix can't run in the current environment. Defaults to the static
-	 * meta_key(); methods whose target key depends on the active SEO plugin
-	 * (meta_title / meta_description) override this to pick the Yoast vs
-	 * Rank Math key and fail loud (412) when neither is active — so we never
-	 * write meta no SEO plugin will read.
+	 * meta_key().
 	 *
 	 * @return string|\WP_Error
 	 */
 	protected function resolve_meta_key() {
 		return $this->meta_key();
+	}
+
+	/**
+	 * When non-null, this fix reads/writes through the SEO meta bridge
+	 * (Seonix canonical keys + every active engine incl. AIOSEO's table)
+	 * instead of a single postmeta key. Returns the bridge field name
+	 * ('seo_title' | 'meta_description'). meta_title / meta_description
+	 * override this; image_alt keeps the plain single-key path.
+	 *
+	 * @return string|null
+	 */
+	protected function bridge_field(): ?string {
+		return null;
+	}
+
+	/**
+	 * Current effective value of the bridge field (primary engine first,
+	 * Seonix canonical store as fallback).
+	 */
+	private function bridge_current( int $post_id, string $field ): string {
+		$effective = Seonix_Meta_Bridge::read_effective( $post_id );
+		return isset( $effective[ $field ] ) ? (string) $effective[ $field ] : '';
 	}
 
 	public function validate_params( array $params ) {
@@ -52,23 +71,34 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 	}
 
 	public function dry_run( array $params ) {
-		$key = $this->resolve_meta_key();
-		if ( is_wp_error( $key ) ) {
-			return $key;
-		}
 		$post_id = (int) $params['post_id'];
-		$current = (string) get_post_meta( $post_id, $key, true );
+		$field   = $this->bridge_field();
+		if ( null !== $field ) {
+			$current = $this->bridge_current( $post_id, $field );
+		} else {
+			$key = $this->resolve_meta_key();
+			if ( is_wp_error( $key ) ) {
+				return $key;
+			}
+			$current = (string) get_post_meta( $post_id, $key, true );
+		}
 		return $this->describe_result( $post_id, $current, (string) $params['suggested_value'] );
 	}
 
 	public function apply( array $params ) {
-		$key = $this->resolve_meta_key();
-		if ( is_wp_error( $key ) ) {
-			return $key;
-		}
 		$post_id   = (int) $params['post_id'];
-		$current   = (string) get_post_meta( $post_id, $key, true );
+		$field     = $this->bridge_field();
 		$suggested = (string) $params['suggested_value'];
+
+		if ( null !== $field ) {
+			$current = $this->bridge_current( $post_id, $field );
+		} else {
+			$key = $this->resolve_meta_key();
+			if ( is_wp_error( $key ) ) {
+				return $key;
+			}
+			$current = (string) get_post_meta( $post_id, $key, true );
+		}
 
 		// Safety guard: never overwrite an existing non-empty meta value with an
 		// empty one. The backend translator emits suggested_value='' for items
@@ -89,10 +119,18 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 			return $result;
 		}
 
+		if ( null !== $field ) {
+			// Bridge path: writes Seonix's canonical keys + every active engine
+			// (Yoast/RM/SEOPress/TSF postmeta, AIOSEO via its model). With no
+			// SEO plugin at all, the standalone renderer serves the value.
+			Seonix_Meta_Bridge::write( $post_id, array( $field => $suggested ) );
+			return $result;
+		}
+
 		// wp_slash: update_post_meta() runs wp_unslash() on the value, and the
 		// controller already wp_unslash()ed the incoming REST params, so re-slash
 		// here or a title/description containing a backslash is silently mangled.
-		$ok = update_post_meta( $post_id, $key, wp_slash( $suggested ) );
+		$ok = update_post_meta( $post_id, $this->resolve_meta_key(), wp_slash( $suggested ) );
 		if ( false === $ok ) {
 			return new WP_Error( 'update_failed', 'update_post_meta returned false.', array( 'status' => 500 ) );
 		}
@@ -110,6 +148,16 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 
 		if ( $post_id <= 0 || ! is_string( $old_val ) ) {
 			return new WP_Error( 'invalid_history_entry', 'History entry is missing snapshot.', array( 'status' => 422 ) );
+		}
+
+		$field = $this->bridge_field();
+		if ( null !== $field ) {
+			// Restore the previous value everywhere the apply wrote it.
+			Seonix_Meta_Bridge::write( $post_id, array( $field => $old_val ) );
+			return array(
+				'before' => array( 'value' => (string) ( $entry['after_state']['value'] ?? '' ) ),
+				'after'  => array( 'value' => $old_val ),
+			);
 		}
 
 		$key = $this->resolve_meta_key();
