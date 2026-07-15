@@ -1862,27 +1862,21 @@ class Seonix_Admin {
 						<!-- SEO Meta Tags card -->
 						<div class="seonix-card">
 							<h2><?php esc_html_e( 'SEO Meta Tags', 'seonix' ); ?></h2>
-							<p class="seonix-subtitle"><?php esc_html_e( 'SEO title, meta description and social tags for Seonix articles. Seonix always syncs these into your SEO plugin (Yoast, Rank Math, All in One SEO, SEOPress, The SEO Framework). "Auto" additionally renders the tags itself only when no SEO plugin is active, so tags are never duplicated.', 'seonix' ); ?></p>
+							<p class="seonix-subtitle"><?php esc_html_e( 'SEO title, meta description and social tags for Seonix articles. Seonix always syncs these into your SEO plugin, whichever one you run. "Auto" additionally renders the tags itself only when no SEO plugin is active, so tags are never duplicated.', 'seonix' ); ?></p>
 
+							<?php
+							// Detected engines are never named in this UI: the site owner
+							// already sees their own plugin list two clicks away, and
+							// printing a third-party SEO plugin's name inside Seonix
+							// advertises it. The detection itself still drives the copy.
+							?>
 							<?php if ( count( $seo_engines ) >= 2 ) : ?>
 								<p class="seonix-subtitle" style="color:#b45309;">
-									<?php
-									printf(
-										/* translators: %s: comma-separated SEO plugin slugs */
-										esc_html__( 'Heads up: multiple SEO plugins are active (%s). They will emit duplicate meta tags — consider keeping only one.', 'seonix' ),
-										esc_html( implode( ', ', $seo_engines ) )
-									);
-									?>
+									<?php esc_html_e( 'Heads up: more than one SEO plugin is active. They will emit duplicate meta tags — consider keeping only one.', 'seonix' ); ?>
 								</p>
 							<?php elseif ( ! empty( $seo_engines ) ) : ?>
 								<p class="seonix-subtitle">
-									<?php
-									printf(
-										/* translators: %s: SEO plugin slug */
-										esc_html__( 'Detected SEO plugin: %s — Seonix writes titles and descriptions straight into it.', 'seonix' ),
-										esc_html( $seo_engines[0] )
-									);
-									?>
+									<?php esc_html_e( 'Your SEO plugin is detected — Seonix writes titles and descriptions straight into it.', 'seonix' ); ?>
 								</p>
 							<?php else : ?>
 								<p class="seonix-subtitle"><?php esc_html_e( 'No SEO plugin detected — Seonix serves the meta tags for its articles.', 'seonix' ); ?></p>
