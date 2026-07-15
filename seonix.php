@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.8.0
+ * Version:     2.8.1
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.8.0' );
+define( 'SEONIX_VERSION', '2.8.1' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -27,6 +27,10 @@ require_once SEONIX_DIR . 'includes/class-seonix-auth.php';
 require_once SEONIX_DIR . 'includes/class-seonix-indexnow.php';
 require_once SEONIX_DIR . 'includes/class-seonix-sync.php';
 require_once SEONIX_DIR . 'includes/class-seonix-tasks.php';
+// Loaded before the REST API: the /score route calls Seonix_Content_Score
+// statically, so a missing include is a fatal on the editor panel's every
+// keystroke rather than a degraded score.
+require_once SEONIX_DIR . 'includes/class-seonix-content-score.php';
 require_once SEONIX_DIR . 'includes/class-seonix-rest-api.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin.php';
 require_once SEONIX_DIR . 'includes/class-seonix-onboarding.php';

@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.8.1 =
+* Fix: the editor panel's live SEO and readability scores failed with a server error in 2.8.0 — the scoring class shipped in the package but was never loaded. Scores work again; nothing else was affected.
 
 = 2.8.0 =
 * New: live SEO and readability scores while you write. The Seonix panel in the editor sidebar now scores the text you have in front of you — not the last saved version — and updates as you type, so you can fix things before publishing instead of after.

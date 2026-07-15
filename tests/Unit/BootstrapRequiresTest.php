@@ -1,0 +1,126 @@
+<?php
+/**
+ * Every Seonix_* class the plugin calls at runtime must actually be require_once'd
+ * by seonix.php.
+ *
+ * This exists because a release once shipped class-seonix-content-score.php inside
+ * the zip while seonix.php had no include for it: the file was present, the unit
+ * tests (which load classes directly) were green, Plugin Check was clean — and the
+ * editor panel fataled on its first /score call, because
+ * Seonix_REST_API::score() calls Seonix_Content_Score::score() statically.
+ *
+ * Nothing else in the suite can catch that class of bug: the tests never boot
+ * seonix.php, so a missing include is invisible to them.
+ */
+
+namespace Seonix\Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+
+class BootstrapRequiresTest extends TestCase {
+
+	/** Absolute path to the plugin root. */
+	private static function root(): string {
+		return dirname( dirname( __DIR__ ) );
+	}
+
+	/** seonix.php source. */
+	private static function bootstrap(): string {
+		return (string) file_get_contents( self::root() . '/seonix.php' );
+	}
+
+	/**
+	 * Class names referenced statically (Foo::bar) or via `new Foo` anywhere in
+	 * includes/, mapped to the file that defines them.
+	 *
+	 * @return array<string,string> class name => defining file, relative to root
+	 */
+	private static function definedClasses(): array {
+		$map = array();
+		$it  = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( self::root() . '/includes', \FilesystemIterator::SKIP_DOTS )
+		);
+		foreach ( $it as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$src = (string) file_get_contents( $file->getPathname() );
+			if ( preg_match( '/^\s*(?:final\s+)?class\s+(Seonix_[A-Za-z0-9_]+)/m', $src, $m ) ) {
+				$map[ $m[1] ] = ltrim( str_replace( self::root(), '', $file->getPathname() ), '/' );
+			}
+		}
+		return $map;
+	}
+
+	/**
+	 * A class is reachable if seonix.php includes its file directly, or includes
+	 * some file that (transitively) includes it. One hop is enough for the shapes
+	 * this plugin uses; seo-fix methods are pulled in by their own controller.
+	 */
+	private static function isRequired( string $relPath, string $bootstrap ): bool {
+		if ( false !== strpos( $bootstrap, $relPath ) ) {
+			return true;
+		}
+		// Second hop: some other included file requires it.
+		foreach ( glob( self::root() . '/includes/**/*.php' ) ?: array() as $candidate ) {
+			$rel = ltrim( str_replace( self::root(), '', $candidate ), '/' );
+			if ( false === strpos( $bootstrap, $rel ) ) {
+				continue;
+			}
+			if ( false !== strpos( (string) file_get_contents( $candidate ), basename( $relPath ) ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The regression: a class used by another class, shipped in the zip, but never
+	 * included. Seonix_Content_Score is the one that actually broke 2.8.0.
+	 */
+	public function test_every_class_used_by_the_rest_api_is_required_by_the_bootstrap(): void {
+		$bootstrap = self::bootstrap();
+		$defined   = self::definedClasses();
+		$restSrc   = (string) file_get_contents( self::root() . '/includes/class-seonix-rest-api.php' );
+
+		$missing = array();
+		foreach ( $defined as $class => $relPath ) {
+			// Only classes the REST API actually reaches for.
+			if ( ! preg_match( '/\b' . preg_quote( $class, '/' ) . '\s*::/', $restSrc )
+				&& ! preg_match( '/new\s+' . preg_quote( $class, '/' ) . '\b/', $restSrc ) ) {
+				continue;
+			}
+			if ( ! self::isRequired( $relPath, $bootstrap ) ) {
+				$missing[] = $class . ' (' . $relPath . ')';
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$missing,
+			"class-seonix-rest-api.php calls these classes, but seonix.php never require_once's them — "
+				. "they will fatal at runtime even though the file ships in the zip:\n  "
+				. implode( "\n  ", $missing )
+		);
+	}
+
+	/** The specific include whose absence shipped a broken 2.8.0 to the directory. */
+	public function test_content_score_is_wired_into_the_bootstrap(): void {
+		$this->assertStringContainsString(
+			'includes/class-seonix-content-score.php',
+			self::bootstrap(),
+			'seonix.php must require class-seonix-content-score.php: the /score route calls it statically.'
+		);
+	}
+
+	/** It must be included before the REST API that calls it. */
+	public function test_content_score_is_required_before_the_rest_api(): void {
+		$bootstrap = self::bootstrap();
+		$score     = strpos( $bootstrap, 'includes/class-seonix-content-score.php' );
+		$rest      = strpos( $bootstrap, 'includes/class-seonix-rest-api.php' );
+
+		$this->assertNotFalse( $score, 'content-score include missing entirely.' );
+		$this->assertNotFalse( $rest, 'rest-api include missing entirely.' );
+		$this->assertLessThan( $rest, $score, 'content-score must be required before rest-api.' );
+	}
+}
