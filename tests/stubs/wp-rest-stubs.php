@@ -99,6 +99,11 @@ if ( ! class_exists( 'WP_Post' ) ) {
         public string $post_status = 'publish';
         public string $post_content = '';
         public string $post_modified_gmt = '';
+        // Needed by the redirect watcher, which decides from the type whether a
+        // URL was ever public and from the parent where a trashed child should
+        // point. Declared (not dynamic) so PHP 8.2 doesn't deprecate them.
+        public string $post_type = 'post';
+        public int $post_parent = 0;
 
         /**
          * @param array<string,mixed> $fields Field values to seed.

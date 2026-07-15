@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.9.0
+Stable tag: 2.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,13 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.10.0 =
+* New: rename a published post and the old link keeps working — Seonix records the redirect for you, as a real rule you can see and edit. Trash a post and its URL stops pretending: a child page points at its parent, anything else returns "410 Gone" so search engines drop it quickly instead of retrying a dead link for months.
+* New: pattern redirects. One rule can move a whole section — `^/blog/(\d+)/?$` → `/archiv/$1` covers every post id at once.
+* New: 307, 308 and 410 alongside 301 and 302. The 307/308 pair keeps the request method intact, which matters for form endpoints; 410 needs no target at all.
+* New: redirects screen rebuilt — add rules, filter by source or status, search paths, and apply bulk enable/disable/delete. Each rule shows its hit count and when it was last used, so you can tell a rule that still earns its place from one that can go.
+* Improved: a rule pointing at a page you later removed now sends visitors to that page, which answers "gone" — instead of sending them nowhere.
 
 = 2.9.0 =
 * New: Seonix in the toolbar. Every page now carries its own standing in the admin bar — SEO score, readability score, and how many issues the last scan found on it — on the live site as well as in wp-admin, so you can see where a page stands without opening the editor.

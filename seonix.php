@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.9.0
+ * Version:     2.10.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.9.0' );
+define( 'SEONIX_VERSION', '2.10.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -51,6 +51,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-webmcp.php';
 // redirects store.
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-store.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-runner.php';
+require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-watcher.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-controller.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-admin.php';
 
@@ -279,6 +280,12 @@ function seonix_init() {
 
 	$redirects_admin = new Seonix_Redirects_Admin( $redirects_store );
 	$redirects_admin->register();
+
+	// Renaming or trashing a published post silently breaks every link to it.
+	// WordPress only half-answers the rename case and not the trash case at all,
+	// so we record both as real, visible rules.
+	$redirects_watcher = new Seonix_Redirects_Watcher( $redirects_store );
+	$redirects_watcher->register();
 }
 
 /**

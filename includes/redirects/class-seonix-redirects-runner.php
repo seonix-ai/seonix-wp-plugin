@@ -67,12 +67,25 @@ class Seonix_Redirects_Runner {
 		}
 
 		$map = $this->get_map();
-		if ( empty( $map ) ) {
+		$hit = ! empty( $map ) ? self::resolve( $map, $path ) : null;
+
+		// Literal rules win. Only when none matched do we pay for the regex pass,
+		// so the common case stays a single hash lookup no matter how many
+		// patterns the site accumulates.
+		if ( null === $hit ) {
+			$hit = self::resolve_regex( $this->get_regex_rules(), $path );
+		}
+		if ( null === $hit ) {
 			return;
 		}
 
-		$hit = self::resolve( $map, $path );
-		if ( null === $hit ) {
+		$this->store->increment_hits( $hit['id'] );
+
+		// 410 Gone is not a redirect: there is no target and nowhere to send the
+		// visitor. Saying "gone" instead of "not found" is what makes crawlers
+		// drop the URL quickly rather than retrying it for months.
+		if ( 410 === (int) $hit['status'] ) {
+			$this->serve_gone();
 			return;
 		}
 
@@ -83,8 +96,6 @@ class Seonix_Redirects_Runner {
 		if ( self::is_same_host_self_target( $hit['target'], $path, $home_host ) ) {
 			return;
 		}
-
-		$this->store->increment_hits( $hit['id'] );
 
 		$target = self::append_query( $hit['target'], $query );
 
@@ -142,6 +153,24 @@ class Seonix_Redirects_Runner {
 		return false;
 	}
 
+	/**
+	 * Send 410 Gone and stop.
+	 *
+	 * Deliberately not wp_die(): that renders a styled error page and reads as a
+	 * site fault. A bare 410 with a one-line body is what a crawler wants, and a
+	 * human following a dead link gets the theme's own 404 handling on the next
+	 * navigation rather than a WordPress error screen.
+	 */
+	private function serve_gone(): void {
+		if ( ! headers_sent() ) {
+			status_header( 410 );
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+		}
+		echo esc_html__( 'This page has been permanently removed.', 'seonix' );
+		exit;
+	}
+
 	// ─── Map access ───────────────────────────────────────────────────────
 
 	/**
@@ -186,9 +215,17 @@ class Seonix_Redirects_Runner {
 	public static function build_map( array $rows ): array {
 		$map = array();
 		foreach ( $rows as $row ) {
-			$from = isset( $row['from_path'] ) ? (string) $row['from_path'] : '';
-			$to   = isset( $row['to_url'] ) ? (string) $row['to_url'] : '';
-			if ( '' === $from || '' === $to ) {
+			if ( ! empty( $row['is_regex'] ) ) {
+				continue; // regex rules live in their own ordered pass
+			}
+			$from   = isset( $row['from_path'] ) ? (string) $row['from_path'] : '';
+			$to     = isset( $row['to_url'] ) ? (string) $row['to_url'] : '';
+			$status = (int) ( $row['status_code'] ?? 301 );
+			if ( '' === $from ) {
+				continue;
+			}
+			// A 410 legitimately has no target; every other code needs one.
+			if ( '' === $to && ! in_array( $status, Seonix_Redirects_Store::TARGETLESS_STATUS_CODES, true ) ) {
 				continue;
 			}
 			$key = Seonix_Redirects_Store::match_key( $from );
@@ -221,6 +258,108 @@ class Seonix_Redirects_Runner {
 	 * @param string                                               $request_path Raw request path (no query).
 	 * @return array{id:int,target:string,status:int}|null
 	 */
+	/**
+	 * Regex rules for the second pass, oldest first (creation order is the
+	 * operator's priority — first match wins, like every other redirect plugin).
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function get_regex_rules(): array {
+		$rules = array();
+		foreach ( $this->store->get_active_rows() as $row ) {
+			if ( ! empty( $row['is_regex'] ) ) {
+				$rules[] = $row;
+			}
+		}
+		return $rules;
+	}
+
+	/**
+	 * First matching regex rule, with $1…$9 expanded into the target.
+	 *
+	 * Matched against the raw path (not the lower-cased match key): a pattern's
+	 * own captures must return the path as written, and the `i` flag added by
+	 * compile_regex() already makes matching case-insensitive.
+	 *
+	 * @param array<int,array<string,mixed>> $rules
+	 * @param string                         $request_path
+	 * @return array{id:int,target:string,status:int}|null
+	 */
+	public static function resolve_regex( array $rules, string $request_path ): ?array {
+		foreach ( $rules as $row ) {
+			$pattern = Seonix_Redirects_Store::compile_regex( (string) ( $row['from_path'] ?? '' ) );
+			if ( null === $pattern ) {
+				continue; // stored pattern went bad — skip, never fatal on a page view
+			}
+
+			$matches = array();
+			// A pattern that backtracks catastrophically returns false here rather
+			// than hanging the request: PHP gives up at pcre.backtrack_limit. Skip
+			// it like any other non-match.
+			$ok = @preg_match( $pattern, $request_path, $matches ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a bad stored pattern must not warn on every page view.
+			if ( 1 !== $ok ) {
+				continue;
+			}
+
+			$status = (int) ( $row['status_code'] ?? 301 );
+			$target = (string) ( $row['to_url'] ?? '' );
+			if ( '' === $target && ! in_array( $status, Seonix_Redirects_Store::TARGETLESS_STATUS_CODES, true ) ) {
+				continue;
+			}
+			$target = self::expand_captures( $target, $matches );
+
+			// An expanded target that lands back on the requested path would loop.
+			if ( '' !== $target && Seonix_Redirects_Store::match_key( $target ) === Seonix_Redirects_Store::match_key( $request_path ) ) {
+				continue;
+			}
+
+			return array(
+				'id'     => (int) ( $row['id'] ?? 0 ),
+				'target' => $target,
+				'status' => $status,
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * Substitute $1..$9 in a regex target with the captured groups.
+	 *
+	 * Capture groups come from the visitor's own URL, so they are URL-encoded on
+	 * the way in to keep a crafted path from injecting anything into the Location
+	 * header. A reference with no matching group collapses to an empty string —
+	 * the same thing Apache's mod_rewrite does.
+	 *
+	 * @param string             $target
+	 * @param array<int,string>  $matches
+	 */
+	public static function expand_captures( string $target, array $matches ): string {
+		if ( false === strpos( $target, '$' ) ) {
+			return $target;
+		}
+		return (string) preg_replace_callback(
+			'/\$([1-9])/',
+			static function ( $m ) use ( $matches ) {
+				$i = (int) $m[1];
+				if ( ! isset( $matches[ $i ] ) ) {
+					return '';
+				}
+				// rawurlencode would escape the slashes a capture legitimately
+				// carries; encode only what can break out of a URL path.
+				//
+				// '%' MUST be first: str_replace applies pairs in order, so
+				// encoding it last would find the '%' in the '%20' this very call
+				// just produced and double-encode it into '%2520'.
+				return str_replace(
+					array( '%', '"', '<', '>', ' ', '#', '?' ),
+					array( '%25', '%22', '%3C', '%3E', '%20', '%23', '%3F' ),
+					(string) $matches[ $i ]
+				);
+			},
+			$target
+		);
+	}
+
 	public static function resolve( array $map, string $request_path ) {
 		$key = Seonix_Redirects_Store::match_key( $request_path );
 		if ( ! isset( $map[ $key ] ) ) {
@@ -245,7 +384,13 @@ class Seonix_Redirects_Runner {
 				// browser forever — serve the page instead.
 				return null;
 			}
-			$target = $final['target'];
+			// Don't flatten onto a rule that has no target of its own (410).
+			// Collapsing A→B into A→"" sends the visitor nowhere — it 404s. The
+			// honest chain is A→B (301), and B answers 410 on arrival. This is
+			// reachable in one click: rename a post, then trash it.
+			if ( '' !== (string) $final['target'] ) {
+				$target = $final['target'];
+			}
 		}
 
 		return array(

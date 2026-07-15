@@ -47,8 +47,29 @@ class Seonix_Redirects_Store {
 	/** Tombstones older than this many days are pruned during sync. */
 	const TOMBSTONE_TTL_DAYS = 90;
 
-	/** Status codes a redirect rule may carry. */
-	const ALLOWED_STATUS_CODES = array( 301, 302 );
+	/**
+	 * Status codes a rule may carry.
+	 *
+	 * 301/308 permanent, 302/307 temporary — the pairs differ only in whether the
+	 * browser may turn a POST into a GET (301/302 historically do; 307/308 must
+	 * not), which matters for form endpoints. 410 is not a redirect at all: it
+	 * tells crawlers the URL is gone for good, which drops it from the index far
+	 * faster than a 404, so it needs no target.
+	 */
+	const ALLOWED_STATUS_CODES = array( 301, 302, 307, 308, 410 );
+
+	/** Codes that send the visitor somewhere and therefore require a target. */
+	const TARGETLESS_STATUS_CODES = array( 410 );
+
+	/**
+	 * Longest regex pattern we accept.
+	 *
+	 * A regex runs against every unmatched request, so a pathological pattern is
+	 * a self-inflicted DoS. The cap doesn't prevent catastrophic backtracking on
+	 * its own — compile_regex() also enforces a backtrack limit at match time —
+	 * but it keeps the obvious footguns out of the table.
+	 */
+	const REGEX_MAX_LENGTH = 255;
 
 	/** @var \wpdb|null Resolved lazily so constructing the class never requires $wpdb. */
 	private $wpdb;
@@ -96,17 +117,20 @@ class Seonix_Redirects_Store {
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			seonix_id CHAR(36) NULL DEFAULT NULL,
 			from_path VARCHAR(191) NOT NULL,
-			to_url TEXT NOT NULL,
+			to_url TEXT NULL DEFAULT NULL,
 			status_code SMALLINT UNSIGNED NOT NULL DEFAULT 301,
+			is_regex TINYINT(1) NOT NULL DEFAULT 0,
 			enabled TINYINT(1) NOT NULL DEFAULT 1,
 			hits BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			last_accessed_at DATETIME NULL DEFAULT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			deleted_at DATETIME NULL DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY uniq_seonix_id (seonix_id),
 			KEY idx_from_path (from_path),
-			KEY idx_deleted_at (deleted_at)
+			KEY idx_deleted_at (deleted_at),
+			KEY idx_regex (is_regex)
 		) {$charset};";
 
 		if ( ! function_exists( 'dbDelta' ) && defined( 'ABSPATH' ) && file_exists( ABSPATH . 'wp-admin/includes/upgrade.php' ) ) {
@@ -114,6 +138,32 @@ class Seonix_Redirects_Store {
 		}
 
 		dbDelta( $sql );
+		$this->relax_to_url_nullability();
+	}
+
+	/**
+	 * Make to_url nullable on tables created before 410 support existed.
+	 *
+	 * dbDelta adds columns and indexes but does NOT reliably change an existing
+	 * column's nullability — it compares the column definition loosely and skips
+	 * NOT NULL → NULL. A table created by an older version therefore keeps
+	 * `to_url TEXT NOT NULL`, and every 410 insert fails silently (wpdb returns
+	 * false, create() hands back id 0, and the rule just never appears).
+	 *
+	 * Runs only when the column is actually still NOT NULL, so it's a no-op on
+	 * fresh installs and on every subsequent upgrade.
+	 */
+	private function relax_to_url_nullability(): void {
+		$wpdb  = $this->db();
+		$table = $this->table_name();
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$column = $wpdb->get_row( "SHOW COLUMNS FROM {$table} LIKE 'to_url'" );
+		if ( ! $column || ! isset( $column->Null ) || 'NO' !== $column->Null ) {
+			return;
+		}
+		$wpdb->query( "ALTER TABLE {$table} MODIFY to_url TEXT NULL DEFAULT NULL" );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
 	}
 
 	// ─── Normalization & validation (pure, unit-tested directly) ─────────
@@ -196,12 +246,56 @@ class Seonix_Redirects_Store {
 	 * @param mixed $status_code   Raw status code.
 	 * @return array{ok:bool, from_path?:string, to_url?:string, status_code?:int, error?:string}
 	 */
-	public static function validate_rule( $from_path_raw, $to_url, $status_code ): array {
-		$from_path = self::normalize_from_path( $from_path_raw );
-		if ( null === $from_path ) {
+	public static function validate_rule( $from_path_raw, $to_url, $status_code, $is_regex = false ): array {
+		$is_regex    = (bool) $is_regex;
+		$status_code = (int) $status_code;
+
+		if ( ! in_array( $status_code, self::ALLOWED_STATUS_CODES, true ) ) {
 			return array(
 				'ok'    => false,
-				'error' => 'from_path must be a site-relative path starting with "/" (no scheme, host, or query), max 191 chars.',
+				'error' => 'status_code must be one of 301, 302, 307, 308, 410.',
+			);
+		}
+
+		$targetless = in_array( $status_code, self::TARGETLESS_STATUS_CODES, true );
+
+		// ── from_path ───────────────────────────────────────────────────
+		if ( $is_regex ) {
+			$pattern = is_string( $from_path_raw ) ? trim( $from_path_raw ) : '';
+			if ( '' === $pattern ) {
+				return array( 'ok' => false, 'error' => 'A regex rule needs a pattern.' );
+			}
+			if ( strlen( $pattern ) > self::REGEX_MAX_LENGTH ) {
+				return array(
+					'ok'    => false,
+					'error' => sprintf( 'Regex pattern is too long (max %d characters).', self::REGEX_MAX_LENGTH ),
+				);
+			}
+			if ( null === self::compile_regex( $pattern ) ) {
+				return array( 'ok' => false, 'error' => 'That regex pattern is not valid.' );
+			}
+			$from_path = $pattern;
+		} else {
+			$from_path = self::normalize_from_path( $from_path_raw );
+			if ( null === $from_path ) {
+				return array(
+					'ok'    => false,
+					'error' => 'from_path must be a site-relative path starting with "/" (no scheme, host, or query), max 191 chars.',
+				);
+			}
+		}
+
+		// ── to_url ──────────────────────────────────────────────────────
+		if ( $targetless ) {
+			// 410 says "this is gone" — there is nowhere to send anyone. Accept a
+			// blank target and store NULL rather than pretending an empty string
+			// is a URL.
+			return array(
+				'ok'          => true,
+				'from_path'   => $from_path,
+				'to_url'      => null,
+				'status_code' => $status_code,
+				'is_regex'    => $is_regex,
 			);
 		}
 
@@ -213,17 +307,12 @@ class Seonix_Redirects_Store {
 		}
 		$to_url = trim( (string) $to_url );
 
-		$status_code = (int) $status_code;
-		if ( ! in_array( $status_code, self::ALLOWED_STATUS_CODES, true ) ) {
-			return array(
-				'ok'    => false,
-				'error' => 'status_code must be 301 or 302.',
-			);
-		}
-
-		// Self-redirect guard: a relative target that resolves to the same
-		// match key would loop on itself at runtime — reject upfront.
-		if ( '/' === $to_url[0] ) {
+		// Self-redirect guard: a relative target that resolves to the same match
+		// key would loop on itself at runtime — reject upfront. Regex rules are
+		// exempt: their target usually carries $1-style references, so comparing
+		// the literal strings would be meaningless (the runner's own self-target
+		// check catches an expanded loop at request time).
+		if ( ! $is_regex && '/' === $to_url[0] ) {
 			$target_path = self::normalize_from_path( $to_url );
 			if ( null !== $target_path && self::match_key( $target_path ) === self::match_key( $from_path ) ) {
 				return array(
@@ -238,7 +327,32 @@ class Seonix_Redirects_Store {
 			'from_path'   => $from_path,
 			'to_url'      => $to_url,
 			'status_code' => $status_code,
+			'is_regex'    => $is_regex,
 		);
+	}
+
+	/**
+	 * Turn a stored pattern into a delimited PCRE, or null if it won't compile.
+	 *
+	 * Patterns are stored bare ("^/blog/(\d+)/?$") — the operator never writes
+	 * delimiters, so we own them and `#` is used with the `u` (UTF-8) and `i`
+	 * (case-insensitive) flags to match the literal matcher's own case rules.
+	 * Any `#` inside the pattern is escaped first so a stray one can't terminate
+	 * the expression early and smuggle in flags.
+	 *
+	 * @param string $pattern Bare pattern as stored.
+	 * @return string|null Delimited pattern ready for preg_*, or null if invalid.
+	 */
+	public static function compile_regex( string $pattern ): ?string {
+		$delimited = '#' . str_replace( '#', '\#', $pattern ) . '#iu';
+
+		// A pattern that doesn't compile returns false AND emits a warning; the
+		// operator is mid-typing, that's expected, so silence it and report null.
+		$ok = @preg_match( $delimited, '' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- invalid patterns are user input, not an exceptional condition.
+		if ( false === $ok ) {
+			return null;
+		}
+		return $delimited;
 	}
 
 	// ─── Reads ────────────────────────────────────────────────────────────
@@ -270,8 +384,12 @@ class Seonix_Redirects_Store {
 		$wpdb = $this->db();
 		// Internal identifier interpolation — see get_items().
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		// is_regex MUST be selected: the runner splits these rows into the literal
+		// map and the regex pass by that flag, so omitting it silently files every
+		// pattern as a literal path — which matches nothing and makes regex rules
+		// look like they were never saved.
 		$rows = $wpdb->get_results(
-			"SELECT id, from_path, to_url, status_code FROM {$this->table_name()} WHERE deleted_at IS NULL AND enabled = 1 ORDER BY id ASC",
+			"SELECT id, from_path, to_url, status_code, is_regex FROM {$this->table_name()} WHERE deleted_at IS NULL AND enabled = 1 ORDER BY id ASC",
 			ARRAY_A
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -350,13 +468,18 @@ class Seonix_Redirects_Store {
 		$check = self::validate_rule(
 			$data['from_path'] ?? '',
 			$data['to_url'] ?? '',
-			$data['status_code'] ?? 301
+			$data['status_code'] ?? 301,
+			! empty( $data['is_regex'] )
 		);
 		if ( ! $check['ok'] ) {
 			return new WP_Error( 'invalid_redirect', $check['error'], array( 'status' => 422 ) );
 		}
 
-		if ( null !== $this->find_active_conflict( $check['from_path'] ) ) {
+		// Uniqueness is a literal-path property: two regexes may legitimately
+		// overlap (the runner takes the first match, oldest first), and a regex
+		// never collides with a literal because they're matched in separate
+		// passes.
+		if ( empty( $check['is_regex'] ) && null !== $this->find_active_conflict( $check['from_path'] ) ) {
 			return new WP_Error(
 				'from_path_conflict',
 				sprintf( 'A redirect for %s already exists.', $check['from_path'] ),
@@ -364,13 +487,28 @@ class Seonix_Redirects_Store {
 			);
 		}
 
-		return $this->insert_row( array(
+		$id = $this->insert_row( array(
 			'seonix_id'   => $data['seonix_id'] ?? null,
 			'from_path'   => $check['from_path'],
 			'to_url'      => $check['to_url'],
 			'status_code' => $check['status_code'],
+			'is_regex'    => ! empty( $check['is_regex'] ) ? 1 : 0,
 			'enabled'     => ( ! isset( $data['enabled'] ) || $data['enabled'] ) ? 1 : 0,
 		) );
+
+		// insert_row() reports a rejected write as id 0. Returning that as if it
+		// were an id makes the failure invisible: the caller shows "Redirect
+		// added" and the rule simply isn't there (which is exactly how a stale
+		// NOT NULL to_url column swallowed every 410).
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'redirect_insert_failed',
+				__( 'The redirect could not be saved. Please try again.', 'seonix' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return $id;
 	}
 
 	/**
@@ -439,10 +577,17 @@ class Seonix_Redirects_Store {
 	 */
 	public function increment_hits( int $id ): void {
 		$wpdb = $this->db();
+		// last_accessed_at rides along with the counter: "342 hits" says nothing
+		// about whether the rule still earns its place, "342 hits, last one in
+		// March" says it can probably go.
 		// Internal identifier interpolation — see get_items().
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->query(
-			$wpdb->prepare( "UPDATE {$this->table_name()} SET hits = hits + 1 WHERE id = %d", $id )
+			$wpdb->prepare(
+				"UPDATE {$this->table_name()} SET hits = hits + 1, last_accessed_at = %s WHERE id = %d",
+				current_time( 'mysql' ),
+				$id
+			)
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 	}

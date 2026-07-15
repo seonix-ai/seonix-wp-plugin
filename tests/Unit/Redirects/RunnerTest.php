@@ -53,11 +53,49 @@ final class RunnerTest extends TestCase {
             $this->row( 1, '', '/x' ),
             $this->row( 2, '/y', '' ),
             $this->row( 3, '/z', '/ok', 307 ),
+            $this->row( 4, '/w', '/ok', 418 ),
         ) );
 
         $this->assertArrayNotHasKey( '', $map );
-        $this->assertArrayNotHasKey( '/y', $map );
-        $this->assertSame( 301, $map['/z']['status'] ); // 307 coerced to safe default.
+        $this->assertArrayNotHasKey( '/y', $map, 'a redirect with no target cannot be served' );
+        $this->assertSame( 307, $map['/z']['status'], '307 is a supported code, not a typo to be corrected' );
+        $this->assertSame( 301, $map['/w']['status'], 'an unsupported code still falls back to a safe permanent redirect' );
+    }
+
+    /** 410 says "gone" — it is the one code that legitimately has no target. */
+    public function test_build_map_keeps_targetless_410(): void {
+        $map = $this->map( array( $this->row( 1, '/dead', '', 410 ) ) );
+
+        $this->assertArrayHasKey( '/dead', $map );
+        $this->assertSame( 410, $map['/dead']['status'] );
+        $this->assertSame( '', $map['/dead']['target'] );
+    }
+
+    /** Regex rules are matched in their own ordered pass, never via the map. */
+    public function test_build_map_excludes_regex_rows(): void {
+        $row            = $this->row( 1, '^/blog/(\d+)$', '/archive/$1' );
+        $row['is_regex'] = 1;
+
+        $this->assertSame( array(), $this->map( array( $row ) ) );
+    }
+
+
+    /**
+     * Rename a post, then trash it: A→B (301) exists, and B becomes a 410 with
+     * no target. Flattening A onto B's empty target would send the visitor
+     * nowhere — the request 404s and the redirect looks broken. Caught on a live
+     * site, not in review.
+     */
+    public function test_resolve_does_not_flatten_onto_a_targetless_410(): void {
+        $map = $this->map( array(
+            $this->row( 1, '/old', '/new' ),
+            $this->row( 2, '/new', '', 410 ),
+        ) );
+
+        $hit = Seonix_Redirects_Runner::resolve( $map, '/old' );
+
+        $this->assertSame( '/new', $hit['target'], 'A must still point at B; B answers 410 on arrival' );
+        $this->assertSame( 301, $hit['status'] );
     }
 
     // ─── resolve: basic matching ─────────────────────────────────────────
