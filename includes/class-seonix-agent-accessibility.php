@@ -671,6 +671,7 @@ class Seonix_Agent_Accessibility {
 	 * not be mistaken for a named link.
 	 */
 	public static function normalize_text( string $html ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- wp_strip_all_tags() is what actually runs on a WordPress site; the strip_tags() branch exists only for the unit tests, which load this class without WordPress.
 		$text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $html ) : strip_tags( $html );
 		$text = html_entity_decode( (string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 
