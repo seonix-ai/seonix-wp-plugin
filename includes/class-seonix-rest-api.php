@@ -39,6 +39,16 @@ class Seonix_REST_API {
 	private const NAMESPACE = 'seonix/v1';
 
 	/**
+	 * Per-user cap for POST /score.
+	 *
+	 * The panel debounces 2s after typing stops, so an author editing flat out
+	 * cannot legitimately exceed ~30/min; this sits at that ceiling so real
+	 * work never trips it. It also keeps one account from eating the backend's
+	 * 120/min per-IP budget, which the whole site shares.
+	 */
+	private const SCORE_MAX_PER_MINUTE = 30;
+
+	/**
 	 * Legacy REST namespace from the previous "Content Engine Connector" plugin.
 	 * All routes are mirrored under this namespace so existing clients continue to work.
 	 * Will be removed in a future major version.
@@ -181,6 +191,135 @@ class Seonix_REST_API {
 				'permission_callback' => array( 'Seonix_Auth', 'validate_request' ),
 			) );
 		}
+
+		// Live content scoring for the editor panel.
+		//
+		// This route runs the OTHER WAY ROUND from every route above: those are
+		// called BY the Seonix backend and authenticate with the plugin's API
+		// key. This one is called by the logged-in author's browser and
+		// authenticates as WordPress normally does (cookie + REST nonce +
+		// capability). It then makes the outbound engine call server-side, so
+		// the sx_ key never reaches the browser.
+		//
+		// Consequently it is NOT mirrored into the legacy content-engine/v1
+		// namespace: it has no external clients to keep working, and mirroring
+		// it would only widen the attack surface.
+		register_rest_route( self::NAMESPACE, '/score', array(
+			'methods'             => 'POST',
+			'callback'            => array( $this, 'handle_score' ),
+			'permission_callback' => array( $this, 'score_permission' ),
+		) );
+	}
+
+	// ─── Live content scoring ─────────────────────────────────────
+
+	/**
+	 * Permission for POST /score — the caller must be able to edit the post
+	 * they are asking us to score.
+	 *
+	 * Cookie-authenticated REST requests only resolve to a logged-in user when
+	 * a valid X-WP-Nonce accompanies them (WordPress's own rest_cookie_check_errors),
+	 * so a capability check here also covers CSRF: without the nonce the request
+	 * is anonymous and fails this check.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return bool
+	 */
+	public function score_permission( WP_REST_Request $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		if ( $post_id > 0 ) {
+			return current_user_can( 'edit_post', $post_id );
+		}
+		// No post id yet (brand-new draft that has never been saved): fall back
+		// to the generic authoring capability.
+		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * POST /score — score the content currently in the editor.
+	 *
+	 * Body: { post_id?, html_content, title?, focus_keyphrase?, meta_description?, slug? }
+	 * Returns the engine payload: { seo_score, readability_score, seo_checks[],
+	 * readability_checks[], summary }.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function handle_score( WP_REST_Request $request ) {
+		// Every other route here rate-limits on check_rate_limit(), which keys
+		// off the Authorization / X-Seonix-Key header. This route is called by a
+		// browser with a cookie and no such header, so that helper would hash
+		// the empty string and drop every author on the site into ONE bucket.
+		// Key on the user instead.
+		$limited = $this->check_user_rate_limit( 'score', self::SCORE_MAX_PER_MINUTE );
+		if ( is_wp_error( $limited ) ) {
+			return $limited;
+		}
+
+		$post_id = (int) $request->get_param( 'post_id' );
+
+		$keyphrase = $request->get_param( 'focus_keyphrase' );
+		$keyphrase = is_string( $keyphrase ) ? trim( $keyphrase ) : '';
+		// The editor sends the keyphrase it has in its own store (Yoast/Rank Math
+		// keep unsaved edits there). When it has none to send, fall back to the
+		// last SAVED value via the meta bridge, which already reads whichever SEO
+		// plugin the site runs. Fallback only — a keyphrase the author just typed
+		// must win over the stale saved one.
+		if ( '' === $keyphrase && $post_id > 0 && class_exists( 'Seonix_Meta_Bridge' ) ) {
+			$keyphrase = (string) get_post_meta( $post_id, Seonix_Meta_Bridge::META_FOCUS_KW, true );
+		}
+
+		// Same fallback for the meta description. This one matters even more than
+		// it looks: metaDescription carries weight 10 in the engine, so scoring
+		// without it would report a red "no meta description" on a post that has
+		// one saved — the panel would be lying about the author's own work.
+		$description = $request->get_param( 'meta_description' );
+		$description = is_string( $description ) ? trim( $description ) : '';
+		if ( '' === $description && $post_id > 0 && class_exists( 'Seonix_Meta_Bridge' ) ) {
+			$description = (string) get_post_meta( $post_id, Seonix_Meta_Bridge::META_DESC, true );
+		}
+
+		// The slug the editor holds is empty until a draft is first saved, while
+		// the permalink WordPress shows is derived from the title. Mirror that so
+		// slug checks judge the URL the post will actually get.
+		$slug = $request->get_param( 'slug' );
+		$slug = is_string( $slug ) ? trim( $slug ) : '';
+		if ( '' === $slug ) {
+			$post = $post_id > 0 ? get_post( $post_id ) : null;
+			if ( $post instanceof WP_Post && '' !== $post->post_name ) {
+				$slug = $post->post_name;
+			} else {
+				$title = $request->get_param( 'title' );
+				$slug  = is_string( $title ) ? sanitize_title( $title ) : '';
+			}
+		}
+
+		$result = Seonix_Content_Score::score(
+			array(
+				'html_content'     => $request->get_param( 'html_content' ),
+				'focus_keyphrase'  => $keyphrase,
+				'title'            => $request->get_param( 'title' ),
+				'meta_description' => $description,
+				'slug'             => $slug,
+				/**
+				 * Filters the language the content is scored against.
+				 *
+				 * Defaults to the site locale ("de_DE"; the engine normalizes it
+				 * to "de"). Multilingual sites that vary language per post can
+				 * return the post's own locale here.
+				 *
+				 * @param string $locale  Locale to score against.
+				 * @param int    $post_id Post being scored, 0 for an unsaved draft.
+				 */
+				'language'         => apply_filters( 'seonix_score_language', get_locale(), $post_id ),
+			)
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new WP_REST_Response( $result, 200 );
 	}
 
 	// ─── Publish ──────────────────────────────────────────────────
@@ -1976,6 +2115,38 @@ class Seonix_REST_API {
 		$host   = isset( $parts['host'] ) ? $parts['host'] : '';
 		$path   = isset( $parts['path'] ) ? $parts['path'] : '';
 		return $scheme . $host . $path;
+	}
+
+	/**
+	 * Per-user rate limit for browser-authenticated routes.
+	 *
+	 * check_rate_limit() below keys off the plugin's API-key header, which only
+	 * backend-to-plugin calls carry. Cookie-authenticated editor calls have no
+	 * such header, so they need the logged-in user as the bucket key.
+	 *
+	 * Worth limiting even though the caller is authenticated: /score makes a
+	 * blocking outbound request (up to 15s) per call, so a loop from a single
+	 * Contributor account can pin PHP workers and burn the whole site's share
+	 * of the backend's per-IP budget — every author on the site shares one
+	 * outbound IP.
+	 *
+	 * @param string $action        Bucket name.
+	 * @param int    $max_per_minute Allowed calls per minute per user.
+	 * @return true|WP_Error
+	 */
+	private function check_user_rate_limit( $action, $max_per_minute ) {
+		$user_id = get_current_user_id();
+		$key     = 'seonix_rl_' . $action . '_u' . $user_id;
+		$count   = (int) get_transient( $key );
+		if ( $count >= $max_per_minute ) {
+			return new WP_Error(
+				'rate_limited',
+				__( 'Too many requests', 'seonix' ),
+				array( 'status' => 429 )
+			);
+		}
+		set_transient( $key, $count + 1, MINUTE_IN_SECONDS );
+		return true;
 	}
 
 	private function check_rate_limit( WP_REST_Request $request, $action, $max_per_minute = 60 ) {

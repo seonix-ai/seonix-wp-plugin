@@ -121,7 +121,10 @@ class Seonix_Metabox {
 		wp_enqueue_script(
 			'seonix-editor-panel',
 			SEONIX_URL . 'assets/editor-panel.js',
-			array( 'wp-plugins', 'wp-editor', 'wp-edit-post', 'wp-element', 'wp-components', 'wp-i18n' ),
+			// wp-data + wp-api-fetch back the live scoring pass: wp-data to watch
+			// the edited content, wp-api-fetch to call our own /score route (it
+			// attaches the REST nonce the route's capability check depends on).
+			array( 'wp-plugins', 'wp-editor', 'wp-edit-post', 'wp-element', 'wp-components', 'wp-i18n', 'wp-data', 'wp-api-fetch' ),
 			SEONIX_VERSION,
 			true
 		);
@@ -152,6 +155,9 @@ class Seonix_Metabox {
 		$base = array(
 			'title'   => __( 'Seonix — Page audit', 'seonix' ),
 			'allUrl'  => admin_url( 'admin.php?page=' . Seonix_Admin::MENU_SLUG ),
+			// Identifies the post to the /score route, which checks edit_post
+			// against it. 0 for a draft that has never been saved.
+			'postId'  => (int) $post->ID,
 			'i18n'    => array(
 				'viewAll'  => __( 'View all issues', 'seonix' ),
 				'optional' => __( 'Optional', 'seonix' ),
@@ -166,6 +172,18 @@ class Seonix_Metabox {
 				'howToFix'         => __( 'How to fix', 'seonix' ),
 				'avoid'            => __( 'Avoid', 'seonix' ),
 				'better'           => __( 'Better', 'seonix' ),
+				// Live scoring track.
+				'pageIssuesLabel'  => __( 'Page issues', 'seonix' ),
+				'analyzing'        => __( 'Analyzing…', 'seonix' ),
+				'scoreFailed'      => __( 'Could not analyze this text.', 'seonix' ),
+				'retry'            => __( 'Try again', 'seonix' ),
+				'writeToScore'     => __( 'Start writing and Seonix scores the text as you go.', 'seonix' ),
+				'problems'         => __( 'Problems', 'seonix' ),
+				'improvements'     => __( 'Improvements', 'seonix' ),
+				'goodResults'      => __( 'Good results', 'seonix' ),
+				'noKeyphrase'      => __( 'No focus keyphrase set — keyphrase checks are skipped.', 'seonix' ),
+				/* translators: %d: score out of 100. */
+				'scoreOutOf'       => __( '%d out of 100', 'seonix' ),
 			),
 			'groups'  => array(),
 			'light'   => 'green',

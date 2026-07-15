@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.7.0
+Stable tag: 2.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,12 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.8.0 =
+* New: live SEO and readability scores while you write. The Seonix panel in the editor sidebar now scores the text you have in front of you — not the last saved version — and updates as you type, so you can fix things before publishing instead of after.
+* New: each score opens into the checks behind it, so the number always comes with a reason: what passed, what didn't, and what to change.
+* Improved: the panel reads your focus keyphrase and meta description as they are right now, straight from the editor, so the score reflects work you can see on screen even before you save.
+* Note: scoring is done by the Seonix engine, so the panel needs the site connected to a Seonix project. Nothing is sent anywhere until you type, and WordPress — not your browser — makes the call.
 
 = 2.7.0 =
 * New: built-in redirect manager. Redirects created by Seonix's one-click SEO fixes are now served by this plugin directly — no separate redirect plugin required (fixes applied by older versions stay reversible).

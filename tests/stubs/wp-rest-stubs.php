@@ -82,3 +82,33 @@ if ( ! function_exists( 'is_wp_error' ) ) {
         return $thing instanceof WP_Error;
     }
 }
+
+/**
+ * WP_Post stand-in.
+ *
+ * Only the fields our code reads. Production code type-checks with
+ * `instanceof WP_Post` (get_post() returns null for a missing id), so without
+ * this class those checks are silently false in tests and every guarded branch
+ * looks dead — a test would "pass" while exercising nothing.
+ */
+if ( ! class_exists( 'WP_Post' ) ) {
+    class WP_Post {
+        public int $ID = 0;
+        public string $post_name = '';
+        public string $post_title = '';
+        public string $post_status = 'publish';
+        public string $post_content = '';
+        public string $post_modified_gmt = '';
+
+        /**
+         * @param array<string,mixed> $fields Field values to seed.
+         */
+        public function __construct( array $fields = array() ) {
+            foreach ( $fields as $key => $value ) {
+                if ( property_exists( $this, $key ) ) {
+                    $this->$key = $value;
+                }
+            }
+        }
+    }
+}
