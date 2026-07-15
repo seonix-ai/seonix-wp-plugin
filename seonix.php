@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.8.1
+ * Version:     2.9.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.8.1' );
+define( 'SEONIX_VERSION', '2.9.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -35,6 +35,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-rest-api.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin.php';
 require_once SEONIX_DIR . 'includes/class-seonix-onboarding.php';
 require_once SEONIX_DIR . 'includes/class-seonix-metabox.php';
+require_once SEONIX_DIR . 'includes/class-seonix-admin-bar.php';
 require_once SEONIX_DIR . 'includes/class-seonix-llmtxt.php';
 require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
 
@@ -154,6 +155,12 @@ function seonix_init() {
 
 	// Per-page audit meta box in the post editor (Yoast-style).
 	$metabox->register();
+
+	// Toolbar node: the page's scores + issue count wherever the owner already
+	// is, the live site included. Reads what the editor and the scan already
+	// produced; adds no work of its own.
+	$admin_bar = new Seonix_Admin_Bar( $tasks );
+	$admin_bar->register();
 
 	// Front-end stylesheet for content blocks injected by the plugin
 	// (currently the key-takeaways callout). Loaded on singular post pages

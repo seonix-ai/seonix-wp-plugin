@@ -319,6 +319,13 @@ class Seonix_REST_API {
 			return $result;
 		}
 
+		// Park the numbers for the toolbar. NOT written to post meta here: this
+		// scored the text currently in the editor, which may never be saved.
+		// Seonix_Metabox::persist_scores_on_save promotes them to meta when (and
+		// only when) the post is actually saved, so the toolbar always reports
+		// the revision a visitor can see.
+		Seonix_Metabox::stash_scores( $post_id, $result );
+
 		return new WP_REST_Response( $result, 200 );
 	}
 

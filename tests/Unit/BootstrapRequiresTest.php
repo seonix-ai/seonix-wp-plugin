@@ -104,6 +104,37 @@ class BootstrapRequiresTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The same hole, one level up: seonix.php itself does `new Seonix_Foo()` in
+	 * seonix_init(). A missing include there is worse than the REST case — it
+	 * fatals on plugins_loaded, i.e. on every request, admin and front end
+	 * alike. The REST-API check above cannot see it, because the class is never
+	 * named in class-seonix-rest-api.php.
+	 */
+	public function test_every_class_the_bootstrap_instantiates_is_required_by_it(): void {
+		$bootstrap = self::bootstrap();
+		$defined   = self::definedClasses();
+
+		$missing = array();
+		foreach ( $defined as $class => $relPath ) {
+			$usedHere = preg_match( '/new\s+' . preg_quote( $class, '/' ) . '\s*\(/', $bootstrap )
+				|| preg_match( '/\b' . preg_quote( $class, '/' ) . '\s*::/', $bootstrap );
+			if ( ! $usedHere ) {
+				continue;
+			}
+			if ( ! self::isRequired( $relPath, $bootstrap ) ) {
+				$missing[] = $class . ' (' . $relPath . ')';
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$missing,
+			"seonix.php uses these classes but never require_once's them — the plugin fatals on plugins_loaded:\n  "
+				. implode( "\n  ", $missing )
+		);
+	}
+
 	/** The specific include whose absence shipped a broken 2.8.0 to the directory. */
 	public function test_content_score_is_wired_into_the_bootstrap(): void {
 		$this->assertStringContainsString(

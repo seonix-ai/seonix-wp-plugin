@@ -34,6 +34,79 @@ class Seonix_Metabox {
 	public function register(): void {
 		add_action( 'add_meta_boxes', array( $this, 'add' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
+		// Late: let the content settle (other plugins' save_post work included)
+		// before deciding the saved revision's scores are the ones to keep.
+		add_action( 'save_post', array( __CLASS__, 'persist_scores_on_save' ), 100, 3 );
+	}
+
+	// ─── Toolbar scores ──────────────────────────────────────────────────
+
+	/** Transient prefix holding the last /score result per post. */
+	const SCORE_STASH_PREFIX = 'seonix_score_';
+
+	/** How long an unsaved score stays interesting. */
+	const SCORE_STASH_TTL = HOUR_IN_SECONDS;
+
+	/**
+	 * Remember the last live score for a post without committing it.
+	 *
+	 * The editor scores the text as it is typed, so most of these results
+	 * describe a revision that will never exist. Keeping them in a transient
+	 * (instead of meta) means an abandoned draft leaves no trace on the post,
+	 * and the toolbar can't quote a score for prose nobody published.
+	 *
+	 * @param int   $post_id Post being scored; 0 for an unsaved draft.
+	 * @param mixed $result  Engine result: seo_score / readability_score.
+	 */
+	public static function stash_scores( int $post_id, $result ): void {
+		if ( $post_id <= 0 || ! is_array( $result ) ) {
+			return;
+		}
+		$seo  = isset( $result['seo_score'] ) ? (int) $result['seo_score'] : null;
+		$read = isset( $result['readability_score'] ) ? (int) $result['readability_score'] : null;
+		if ( null === $seo && null === $read ) {
+			return;
+		}
+		set_transient(
+			self::SCORE_STASH_PREFIX . $post_id,
+			array( 'seo' => $seo, 'readability' => $read ),
+			self::SCORE_STASH_TTL
+		);
+	}
+
+	/**
+	 * Promote the stashed score to post meta when the post is saved.
+	 *
+	 * Runs on the real save only: autosaves and revisions describe a different
+	 * row, and a bulk/quick edit never went through the editor, so there is
+	 * nothing fresh to promote — in that case the previous meta stays, which is
+	 * still the last thing that was actually scored.
+	 *
+	 * @param int     $post_id
+	 * @param WP_Post $post
+	 * @param bool    $update
+	 */
+	public static function persist_scores_on_save( $post_id, $post = null, $update = false ): void {
+		$post_id = (int) $post_id;
+		if ( $post_id <= 0 || wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			return;
+		}
+
+		$stash = get_transient( self::SCORE_STASH_PREFIX . $post_id );
+		if ( ! is_array( $stash ) ) {
+			return;
+		}
+
+		if ( isset( $stash['seo'] ) && null !== $stash['seo'] ) {
+			update_post_meta( $post_id, Seonix_Admin_Bar::META_SEO, max( 0, min( 100, (int) $stash['seo'] ) ) );
+		}
+		if ( isset( $stash['readability'] ) && null !== $stash['readability'] ) {
+			update_post_meta( $post_id, Seonix_Admin_Bar::META_READABILITY, max( 0, min( 100, (int) $stash['readability'] ) ) );
+		}
+		delete_transient( self::SCORE_STASH_PREFIX . $post_id );
 	}
 
 	/**

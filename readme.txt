@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.8.1
+Stable tag: 2.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,10 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.9.0 =
+* New: Seonix in the toolbar. Every page now carries its own standing in the admin bar — SEO score, readability score, and how many issues the last scan found on it — on the live site as well as in wp-admin, so you can see where a page stands without opening the editor.
+* The scores shown are those of the saved version, the one your visitors actually get: typing in the editor updates the panel live, but the toolbar only changes once you save.
 
 = 2.8.1 =
 * Fix: the editor panel's live SEO and readability scores failed with a server error in 2.8.0 — the scoring class shipped in the package but was never loaded. Scores work again; nothing else was affected.
