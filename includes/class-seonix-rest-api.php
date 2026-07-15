@@ -1864,6 +1864,80 @@ class Seonix_REST_API {
 	}
 
 	/**
+	 * Attach the Seonix API key to a media download aimed at the Seonix engine.
+	 *
+	 * Seonix is not a CDN: /api/uploads is moving to authenticated-only so that
+	 * customer pages stop hotlinking it. This plugin sideloads those images into
+	 * the WP media library server-side, where no browser session exists, so the
+	 * fetch must carry the same sx_ secret the engine already knows.
+	 *
+	 * The header is attached ONLY when the request targets the configured engine
+	 * origin AND the path is under /api/uploads/. sideload_inline_images_in_post
+	 * also downloads third-party images referenced in the article body, and the
+	 * key must never leak to them. force_no_redirect_args is applied alongside
+	 * this filter, so a 30x cannot carry the header to another host mid-request.
+	 *
+	 * Harmless against an engine that still serves anonymously — an extra
+	 * Authorization header on a public file is simply ignored, which is what lets
+	 * the plugin ship before the engine flips the flag.
+	 *
+	 * @param array  $args HTTP request args.
+	 * @param string $url  Request URL.
+	 * @return array Modified args.
+	 */
+	public static function attach_seonix_media_auth_args( $args, $url = '' ) {
+		if ( ! self::is_seonix_media_url( $url ) ) {
+			return $args;
+		}
+
+		$key = Seonix_Auth::get_key();
+		if ( ! is_string( $key ) || '' === $key ) {
+			return $args;
+		}
+
+		if ( empty( $args['headers'] ) || ! is_array( $args['headers'] ) ) {
+			$args['headers'] = array();
+		}
+		$args['headers']['Authorization'] = 'Bearer ' . $key;
+
+		return $args;
+	}
+
+	/**
+	 * True when $url points at the configured Seonix engine's /api/uploads/ path.
+	 *
+	 * Host must match the stored engine origin exactly — a suffix match would let
+	 * "evil-seonix.ai" collect the key. Returns false when the engine URL was
+	 * never configured, which keeps the key off the wire entirely.
+	 *
+	 * @param string $url URL to test.
+	 * @return bool
+	 */
+	private static function is_seonix_media_url( $url ) {
+		if ( ! is_string( $url ) || '' === $url ) {
+			return false;
+		}
+
+		$engine = get_option( 'seonix_engine_url', '' );
+		if ( ! is_string( $engine ) || '' === $engine ) {
+			return false;
+		}
+
+		$engine_host = wp_parse_url( $engine, PHP_URL_HOST );
+		$url_host    = wp_parse_url( $url, PHP_URL_HOST );
+		$url_path    = wp_parse_url( $url, PHP_URL_PATH );
+
+		if ( ! is_string( $engine_host ) || ! is_string( $url_host ) || ! is_string( $url_path ) ) {
+			return false;
+		}
+		if ( strtolower( $url_host ) !== strtolower( $engine_host ) ) {
+			return false;
+		}
+
+		return 0 === strpos( $url_path, '/api/uploads/' );
+	}
+
+	/**
 	 * Wraps download_url() to disable HTTP redirects for the duration of the
 	 * call. Caller must have already validated $url via is_safe_url() — this
 	 * just closes the 30x bypass.
@@ -1876,7 +1950,11 @@ class Seonix_REST_API {
 	 */
 	private function safe_download_url( $url, $timeout = 60 ) {
 		add_filter( 'http_request_args', array( __CLASS__, 'force_no_redirect_args' ), 10, 1 );
+		// Authenticates the fetch when (and only when) it targets the Seonix
+		// engine's /api/uploads/ — see attach_seonix_media_auth_args.
+		add_filter( 'http_request_args', array( __CLASS__, 'attach_seonix_media_auth_args' ), 10, 2 );
 		$tmp = download_url( $url, $timeout );
+		remove_filter( 'http_request_args', array( __CLASS__, 'attach_seonix_media_auth_args' ), 10 );
 		remove_filter( 'http_request_args', array( __CLASS__, 'force_no_redirect_args' ), 10 );
 		return $tmp;
 	}
