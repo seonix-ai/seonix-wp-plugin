@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.6.0
+Stable tag: 2.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,14 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.7.0 =
+* New: built-in redirect manager. Redirects created by Seonix's one-click SEO fixes are now served by this plugin directly — no separate redirect plugin required (fixes applied by older versions stay reversible).
+* New: Redirects screen in wp-admin (Seonix → Redirects) — every rule with its hit count, plus add your own 301/302 redirects, disable or delete them.
+* New: redirects managed in the Seonix dashboard sync into the plugin over its REST API. The plugin is the source of truth for what's live: edit or delete a rule here and the dashboard adopts that on the next sync instead of overwriting you.
+* Improved: redirect matching ignores trailing slashes and letter case, carries the original query string over to the target, and never loops — self-redirects and two-rule cycles are detected and skipped, and chained rules are flattened to their final target in a single hop.
+* New: one-click fix for Chrome's new "Agentic Browsing" audit. Clickable cards that are only a link overlay, and dropdowns whose only cue is their first option, reach AI agents and screen readers with no readable name — Lighthouse fails the page for it. Seonix names them from the page itself: a card's heading where the link can be matched to it unambiguously, an image's alt text, or the link's own destination. Nothing visible on the page changes, and switching the fix off removes every added name.
+* New: your contact and search forms can describe themselves to AI browsing agents using the emerging WebMCP markup, so an assistant can tell what a form does and what each field expects. Markup only — no JavaScript is added to your pages, and browsers without WebMCP support simply ignore it.
 
 = 2.6.0 =
 * New: SEO titles and meta descriptions written by Seonix now land inside whichever SEO plugin your site runs, using each plugin's own native storage — so you keep editing them in the tools you already use.

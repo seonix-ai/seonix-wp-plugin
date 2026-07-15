@@ -108,6 +108,14 @@ class Seonix_SEO_Fix_Controller {
 				'engines' => Seonix_Cache_Purger::detect(),
 				'active'  => Seonix_Cache_Purger::active_engines(),
 			),
+			// Native redirect manager (2.7.0+): advertises that this site
+			// serves GET/POST /redirects(/sync) itself — the backend uses this
+			// to route redirect management to the plugin instead of requiring
+			// the third-party Redirection plugin. Bump `version` on breaking
+			// contract changes; the backend parses tolerantly.
+			'redirects' => array(
+				'version' => 1,
+			),
 		) );
 	}
 

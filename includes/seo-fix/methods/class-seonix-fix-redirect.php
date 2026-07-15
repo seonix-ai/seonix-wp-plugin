@@ -2,13 +2,24 @@
 /**
  * Fix method: redirect.
  *
- * Creates 301 redirects via the Redirection plugin's wp_redirection_items table.
- * Per the project decision (do not write to .htaccess), this method requires the
- * Redirection plugin to be installed and active. If it isn't, the dry-run /
- * apply path returns a 412 "redirection_plugin_required" so the Seonix UI can
- * surface a clear "install Redirection first" hint to the user.
+ * Creates 301 redirects in the plugin's OWN redirect manager
+ * ({$wpdb->prefix}seonix_redirects, served by Seonix_Redirects_Runner) — no
+ * third-party plugin required. Until 2.7.0 this method wrote into the
+ * Redirection plugin's wp_redirection_items table and returned a 412 when that
+ * plugin was missing; the native table removes the dependency entirely.
  *
- * Idempotent: skips insert if a redirect for the same source URL already exists.
+ * Rows created here are "Local" (seonix_id NULL): the fix flow has its own
+ * idempotency and rollback bookkeeping via fix history, separate from the
+ * /redirects/sync reconcile the Seonix service drives. The created row id is
+ * remembered in the fix history state (`native_redirect_id`) so rollback can
+ * delete precisely that row.
+ *
+ * Back-compat: rollback still understands history entries written by older
+ * plugin versions (their after_state carries `redirect_id`, the row id inside
+ * the Redirection plugin's table) and reverses them against that table.
+ *
+ * Idempotent: skips insert when an active redirect already claims the same
+ * source path.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -17,16 +28,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Seonix_Fix_Redirect implements Seonix_Fix_Method {
 
-	private const REDIRECTION_TABLE_SUFFIX = 'redirection_items';
+	/** Legacy (pre-2.7.0) storage: the Redirection plugin's table. Rollback-only. */
+	private const LEGACY_REDIRECTION_TABLE_SUFFIX = 'redirection_items';
 
 	private Seonix_SEO_Fix_History $history;
 
 	/** @var \wpdb */
 	private $wpdb;
 
-	public function __construct( Seonix_SEO_Fix_History $history, $wpdb = null ) {
+	/** @var Seonix_Redirects_Store */
+	private $store;
+
+	public function __construct( Seonix_SEO_Fix_History $history, $wpdb = null, Seonix_Redirects_Store $store = null ) {
 		$this->history = $history;
 		$this->wpdb    = $wpdb ?? $GLOBALS['wpdb'];
+		$this->store   = $store ?? new Seonix_Redirects_Store( $wpdb );
 	}
 
 	public function key(): string {
@@ -40,61 +56,89 @@ class Seonix_Fix_Redirect implements Seonix_Fix_Method {
 		if ( empty( $params['target_url'] ) ) {
 			return new WP_Error( 'missing_target_url', 'target_url is required.', array( 'status' => 400 ) );
 		}
+		// The native redirect manager matches exact paths; regex rules were a
+		// Redirection-plugin capability the Seonix backend never emits
+		// (translator + AI matcher always send match_type "url").
 		$match_type = $params['match_type'] ?? 'url';
-		if ( ! in_array( $match_type, array( 'url', 'regex' ), true ) ) {
-			return new WP_Error( 'invalid_match_type', 'match_type must be "url" or "regex".', array( 'status' => 400 ) );
+		if ( 'url' !== $match_type ) {
+			return new WP_Error(
+				'unsupported_match_type',
+				'The native Seonix redirect manager supports exact path matches only (match_type "url").',
+				array( 'status' => 422 )
+			);
 		}
 		return true;
 	}
 
 	public function dry_run( array $params ) {
-		$gate = $this->require_redirection();
-		if ( $gate instanceof WP_Error ) {
-			return $gate;
+		$plan = $this->prepare( $params );
+		if ( $plan instanceof WP_Error ) {
+			return $plan;
 		}
 
-		$existing = $this->find_existing_redirect( $params['source_url'] );
+		$existing = $this->store->find_active_conflict( $plan['from_path'] );
 		if ( $existing ) {
-			return $this->describe_existing( $params, $existing );
+			return $this->describe_existing( $existing );
 		}
 
-		return $this->describe_planned( $params );
-	}
-
-	public function apply( array $params ) {
-		$gate = $this->require_redirection();
-		if ( $gate instanceof WP_Error ) {
-			return $gate;
-		}
-
-		$existing = $this->find_existing_redirect( $params['source_url'] );
-		if ( $existing ) {
-			return $this->describe_existing( $params, $existing );
-		}
-
-		$row = $this->build_row( $params );
-		$ok  = $this->wpdb->insert( $this->table_name(), $row );
-		if ( ! $ok ) {
-			return new WP_Error(
-				'insert_failed',
-				sprintf( 'Could not create redirect row: %s', $this->wpdb->last_error ?? 'unknown error' ),
-				array( 'status' => 500 )
-			);
-		}
-
-		$id = (int) $this->wpdb->insert_id;
 		return array(
 			'before' => null,
 			'after'  => array(
-				'redirect_id' => $id,
+				'from_path'   => $plan['from_path'],
 				'source_url'  => $params['source_url'],
-				'target_url'  => $params['target_url'],
-				'match_type'  => $params['match_type'] ?? 'url',
+				'target_url'  => $plan['to_url'],
+				'status_code' => 301,
 			),
 			'no_op'  => false,
 			'target' => array(
 				'type' => 'redirect',
-				'id'   => $id,
+				'id'   => 0,
+			),
+		);
+	}
+
+	public function apply( array $params ) {
+		$plan = $this->prepare( $params );
+		if ( $plan instanceof WP_Error ) {
+			return $plan;
+		}
+
+		$existing = $this->store->find_active_conflict( $plan['from_path'] );
+		if ( $existing ) {
+			return $this->describe_existing( $existing );
+		}
+
+		$created = $this->store->create( array(
+			'seonix_id'   => null,
+			'from_path'   => $plan['from_path'],
+			'to_url'      => $plan['to_url'],
+			'status_code' => 301,
+			'enabled'     => true,
+		) );
+		if ( $created instanceof WP_Error ) {
+			return $created;
+		}
+		if ( ! is_int( $created ) || $created <= 0 ) {
+			return new WP_Error(
+				'insert_failed',
+				'Could not create the redirect row.',
+				array( 'status' => 500 )
+			);
+		}
+
+		return array(
+			'before' => null,
+			'after'  => array(
+				'native_redirect_id' => $created,
+				'from_path'          => $plan['from_path'],
+				'source_url'         => $params['source_url'],
+				'target_url'         => $plan['to_url'],
+				'status_code'        => 301,
+			),
+			'no_op'  => false,
+			'target' => array(
+				'type' => 'redirect',
+				'id'   => $created,
 			),
 		);
 	}
@@ -106,94 +150,112 @@ class Seonix_Fix_Redirect implements Seonix_Fix_Method {
 		}
 
 		$after = is_array( $entry['after_state'] ?? null ) ? $entry['after_state'] : array();
-		$redirect_id = (int) ( $after['redirect_id'] ?? 0 );
 
-		if ( $redirect_id <= 0 ) {
-			return new WP_Error( 'invalid_history_entry', 'History entry has no redirect_id to delete.', array( 'status' => 422 ) );
+		// Native rows (2.7.0+) carry native_redirect_id.
+		$native_id = (int) ( $after['native_redirect_id'] ?? 0 );
+		if ( $native_id > 0 ) {
+			$this->store->hard_delete( $native_id );
+			return array(
+				'before' => $after,
+				'after'  => null,
+			);
 		}
 
-		$this->wpdb->delete( $this->table_name(), array( 'id' => $redirect_id ) );
+		// Legacy entries (pre-2.7.0) carry redirect_id — a row id inside the
+		// Redirection plugin's table. Keep reversing those against that table.
+		$legacy_id = (int) ( $after['redirect_id'] ?? 0 );
+		if ( $legacy_id > 0 ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- reversing a row this plugin created in the Redirection plugin's table.
+			$this->wpdb->delete( $this->legacy_table_name(), array( 'id' => $legacy_id ) );
+			return array(
+				'before' => $after,
+				'after'  => null,
+			);
+		}
 
-		return array(
-			'before' => $after,
-			'after'  => null,
-		);
+		return new WP_Error( 'invalid_history_entry', 'History entry has no redirect id to delete.', array( 'status' => 422 ) );
 	}
 
 	// ─── Internals ───────────────────────────────────────────────────────
 
-	private function table_name(): string {
-		return $this->wpdb->prefix . self::REDIRECTION_TABLE_SUFFIX;
-	}
-
 	/**
-	 * Returns null when the Redirection plugin tables exist on this site,
-	 * otherwise a WP_Error the caller can return verbatim.
+	 * Reduce the incoming params to the native rule to create: from_path is
+	 * derived from source_url (which the backend may send as an absolute URL
+	 * or a site-relative path), target is validated as path-or-http(s).
 	 *
-	 * @return null|\WP_Error
+	 * Sources that only differ by query string cannot be represented — the
+	 * native manager matches on path alone, and silently widening
+	 * "/shop?orderby=price" into all of "/shop" could hijack a live page. The
+	 * same reasoning refuses the site root.
+	 *
+	 * @return array{from_path:string,to_url:string}|\WP_Error
 	 */
-	private function require_redirection() {
-		$table = $this->table_name();
-		// Plugin Check's NotPrepared rule does not recognise $this->wpdb
-		// (constructor-injected for testability). The prepare() call below
-		// IS used with a %s placeholder.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
-		$found = $this->wpdb->get_var(
-			$this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table )
-		);
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
-		if ( $found === $table ) {
-			return null;
+	private function prepare( array $params ) {
+		$source = trim( (string) $params['source_url'] );
+		$parts  = wp_parse_url( $source );
+		if ( ! is_array( $parts ) || empty( $parts['path'] ) ) {
+			return new WP_Error(
+				'invalid_source_url',
+				sprintf( 'source_url has no usable path: %s', $source ),
+				array( 'status' => 422 )
+			);
 		}
-		return new WP_Error(
-			'redirection_plugin_required',
-			'The Redirection plugin must be installed and active to manage redirects from Seonix. Install it from Plugins → Add New, then re-run this fix.',
-			array( 'status' => 412, 'install_url' => 'https://wordpress.org/plugins/redirection/' )
+		if ( ! empty( $parts['query'] ) ) {
+			return new WP_Error(
+				'source_query_unsupported',
+				'The native redirect manager matches paths only; a redirect scoped to a query string cannot be created. Remove the query from source_url or handle this URL manually.',
+				array( 'status' => 422 )
+			);
+		}
+
+		$from_path = Seonix_Redirects_Store::normalize_from_path( (string) $parts['path'] );
+		if ( null === $from_path ) {
+			return new WP_Error(
+				'invalid_source_url',
+				sprintf( 'source_url does not reduce to a valid site path: %s', $source ),
+				array( 'status' => 422 )
+			);
+		}
+		if ( '/' === Seonix_Redirects_Store::match_key( $from_path ) ) {
+			return new WP_Error(
+				'invalid_source_url',
+				'Refusing to create a redirect for the site root.',
+				array( 'status' => 422 )
+			);
+		}
+
+		$to_url = trim( (string) $params['target_url'] );
+		$check  = Seonix_Redirects_Store::validate_rule( $from_path, $to_url, 301 );
+		if ( ! $check['ok'] ) {
+			return new WP_Error( 'invalid_target_url', $check['error'], array( 'status' => 422 ) );
+		}
+
+		return array(
+			'from_path' => $check['from_path'],
+			'to_url'    => $check['to_url'],
 		);
 	}
 
 	/**
-	 * @return array<string,mixed>|null
-	 */
-	private function find_existing_redirect( string $source_url ): ?array {
-		// The Redirection plugin's table name is interpolated because $wpdb
-		// placeholders do not support identifiers. The value comes from
-		// table_name() which only ever concatenates $wpdb->prefix with the
-		// constant REDIRECTION_TABLE_SUFFIX, so it is safe.
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
-		$sql = $this->wpdb->prepare(
-			"SELECT id, url, action_data FROM {$this->table_name()} WHERE url = %s LIMIT 1",
-			$source_url
-		);
-		$row = $this->wpdb->get_row( $sql, ARRAY_A );
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
-		return $row ?: null;
-	}
-
-	/**
+	 * Summary for the no-op path (an active rule already claims the path).
+	 * Deliberately keyed `existing_redirect_id`, NOT `native_redirect_id`:
+	 * rollback only deletes rows whose history entry proves this fix created
+	 * them, and a no-op created nothing — rolling one back must refuse rather
+	 * than delete a rule that predates the fix.
+	 *
+	 * @param array<string,mixed> $existing Active native row claiming the path.
 	 * @return array<string,mixed>
 	 */
-	private function build_row( array $params ): array {
-		$is_regex = ( $params['match_type'] ?? 'url' ) === 'regex';
-		return array(
-			'url'         => $params['source_url'],
-			'match_url'   => $params['source_url'],
-			'match_type'  => $is_regex ? 'regex' : 'url',
-			'action_type' => 'url',
-			'action_data' => $params['target_url'],
-			'action_code' => 301,
-			'regex'       => $is_regex ? 1 : 0,
-			'position'    => 0,
-			'status'      => 'enabled',
-			'group_id'    => 1,
-			'last_count'  => 0,
+	private function describe_existing( array $existing ): array {
+		$summary = array(
+			'existing_redirect_id' => (int) $existing['id'],
+			'from_path'            => (string) $existing['from_path'],
+			'target_url'           => (string) $existing['to_url'],
+			'status_code'          => (int) $existing['status_code'],
 		);
-	}
-
-	private function describe_existing( array $params, array $existing ): array {
 		return array(
-			'before' => $existing,
-			'after'  => $existing,
+			'before' => $summary,
+			'after'  => $summary,
 			'no_op'  => true,
 			'target' => array(
 				'type' => 'redirect',
@@ -202,19 +264,7 @@ class Seonix_Fix_Redirect implements Seonix_Fix_Method {
 		);
 	}
 
-	private function describe_planned( array $params ): array {
-		return array(
-			'before' => null,
-			'after'  => array(
-				'source_url' => $params['source_url'],
-				'target_url' => $params['target_url'],
-				'match_type' => $params['match_type'] ?? 'url',
-			),
-			'no_op'  => false,
-			'target' => array(
-				'type' => 'redirect',
-				'id'   => 0,
-			),
-		);
+	private function legacy_table_name(): string {
+		return $this->wpdb->prefix . self::LEGACY_REDIRECTION_TABLE_SUFFIX;
 	}
 }
