@@ -144,6 +144,37 @@ class BootstrapRequiresTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Every $var->create_table() inside seonix_init() must be assigned before it
+	 * is called. A create_table() on a variable defined LATER in the function is
+	 * an undefined-variable fatal on the FIRST load after an update (the DB-upgrade
+	 * block runs before the redirect wiring). That exact ordering shipped once and
+	 * took a live site down: $redirects_log->create_table() ran above where
+	 * $redirects_log was created.
+	 */
+	public function test_create_table_calls_are_assigned_before_use(): void {
+		$src = self::bootstrap();
+		$start = strpos( $src, 'function seonix_init()' );
+		$this->assertNotFalse( $start, 'seonix_init() not found' );
+		// Body runs until the next top-level function declaration.
+		$end = strpos( $src, "\nfunction ", $start + 1 );
+		$body = false === $end ? substr( $src, $start ) : substr( $src, $start, $end - $start );
+
+		preg_match_all( '/\$(\w+)->create_table\(\)/', $body, $calls, PREG_OFFSET_CAPTURE );
+		$this->assertNotEmpty( $calls[1], 'expected create_table() calls in seonix_init()' );
+
+		foreach ( $calls[1] as $i => $m ) {
+			$var        = $m[0];
+			$callOffset = $calls[0][ $i ][1];
+			$assigned   = preg_match( '/\$' . preg_quote( $var, '/' ) . '\s*=\s*new\b/', substr( $body, 0, $callOffset ) );
+			$this->assertSame(
+				1,
+				$assigned,
+				'$' . $var . '->create_table() is called before $' . $var . ' is assigned — undefined-variable fatal on the first load after an update'
+			);
+		}
+	}
+
 	/** It must be included before the REST API that calls it. */
 	public function test_content_score_is_required_before_the_rest_api(): void {
 		$bootstrap = self::bootstrap();

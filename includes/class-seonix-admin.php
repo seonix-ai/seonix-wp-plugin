@@ -751,38 +751,46 @@ class Seonix_Admin {
 		$rows         = $this->tasks->all();
 		$synced_at    = $this->tasks->synced_at();
 
-		$open      = isset( $summary['open'] ) ? (int) $summary['open'] : 0;
-		$solved    = isset( $summary['solved'] ) ? (int) $summary['solved'] : 0;
-		$regressed = isset( $summary['regressed'] ) ? (int) $summary['regressed'] : 0;
+		// open / solved / regressed lifecycle FINDING totals from the synced
+		// summary are intentionally not read here any more — every count on this
+		// screen is a task-row count now (see the row loop below), so the screen
+		// speaks one unit. Only the score is still taken from the summary.
 		$score     = isset( $summary['score'] ) ? (int) $summary['score'] : 0;
 		$cats      = isset( $summary['categories'] ) && is_array( $summary['categories'] ) ? $summary['categories'] : array();
 
-		// "Active issues" headline — matches the dashboard's activeProblemPageTotal:
-		// affected pages across ACTIVE issue rows (open|regressed) whose severity is
-		// error/warning. Notice-level findings are "Recommendations" and are
-		// excluded from the headline — that exclusion is the ONLY reason the old
-		// plugin "open issues" number (raw open threads from the synced summary)
-		// differed from the dashboard's "active issues". Fixed / Came back / All
-		// keep using the synced lifecycle summary, which already matches the app.
-		$active_issues = 0;
+		// Every count on this screen — the headline, the KPI cards, the filter
+		// tabs — is a count of TASK ROWS, the grouped issue types the table shows
+		// (one row = one kind of problem, however many pages it touches).
+		//
+		// It used to mix three units in one view: the headline and one KPI showed
+		// affected PAGES (summary.active, e.g. 40), the other KPIs and the tabs
+		// showed lifecycle FINDINGS (summary.solved 603, the 1237 "All"), and the
+		// table itself listed ~50 grouped types. So the "All 1237" tab sat above a
+		// 50-row table and "Fixed 603" filtered down to 28 — the owner could not
+		// make the numbers add up, and asked what the missing 500 were (open
+		// notice-level findings the page-based "40" excludes). Counting rows makes
+		// the screen one unit and additive: active + fixed = all, came-back ⊆
+		// active. The tab math mirrors admin.js rowMatchesTab exactly.
+		//
+		// (Dropped with the old scheme: the "603 Resolved — Fixed by Seonix" KPI.
+		// Those are issues absent from the latest scan versus an earlier one, not
+		// necessarily anything Seonix fixed, so the label overclaimed.)
+		$row_active    = 0; // open + regressed — the things to fix now
+		$row_solved    = 0; // solved
+		$row_regressed = 0; // regressed — a fix that broke again (subset of active)
 		foreach ( $rows as $r ) {
 			$st = isset( $r['status'] ) ? (string) $r['status'] : 'open';
 			if ( 'solved' === $st ) {
-				continue;
+				$row_solved++;
+			} elseif ( 'regressed' === $st ) {
+				$row_regressed++;
+				$row_active++;
+			} else {
+				$row_active++;
 			}
-			$sev = isset( $r['severity'] ) ? (string) $r['severity'] : 'notice';
-			if ( 'error' !== $sev && 'warning' !== $sev ) {
-				continue;
-			}
-			$active_issues += isset( $r['affected_count'] ) ? (int) $r['affected_count'] : 0;
 		}
-		// Backend is the single source of truth: when it sends summary.active (the
-		// app's canonical activeProblemPageTotal), render it verbatim so the
-		// plugin's "Active issues" ALWAYS equals the dashboard's. The loop above is
-		// only a fallback for an older backend (-1 = field absent).
-		if ( isset( $summary['active'] ) && (int) $summary['active'] >= 0 ) {
-			$active_issues = (int) $summary['active'];
-		}
+		$row_all       = count( $rows );
+		$active_issues = $row_active;
 
 		$cat_labels = array(
 			'seo'       => __( 'SEO', 'seonix' ),
@@ -952,17 +960,17 @@ class Seonix_Admin {
 						</div>
 						<div class="seonix-kpi">
 							<div class="seonix-kpi__top">
-								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $solved ) ); ?></div>
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $row_solved ) ); ?></div>
 								<span class="seonix-kpi__ic seonix-kpi__ic--grn">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M8.4 12.2l2.6 2.6 4.6-5.2"/></svg>
 								</span>
 							</div>
 							<div class="seonix-kpi__l"><?php esc_html_e( 'Resolved', 'seonix' ); ?></div>
-							<div class="seonix-kpi__foot"><?php esc_html_e( 'Fixed by Seonix', 'seonix' ); ?></div>
+							<div class="seonix-kpi__foot"><?php esc_html_e( 'No longer flagged', 'seonix' ); ?></div>
 						</div>
 						<div class="seonix-kpi">
 							<div class="seonix-kpi__top">
-								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $regressed ) ); ?></div>
+								<div class="seonix-kpi__v"><?php echo esc_html( number_format_i18n( $row_regressed ) ); ?></div>
 								<span class="seonix-kpi__ic seonix-kpi__ic--acc">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 0 1 14.4-6.1L20.5 8"/><path d="M20.5 3.8V8h-4.2"/><path d="M20.5 12a8.5 8.5 0 0 1-14.4 6.1L3.5 16"/><path d="M3.5 20.2V16h4.2"/></svg>
 								</span>
@@ -1005,22 +1013,16 @@ class Seonix_Admin {
 							<p class="seonix-subtitle seonix-empty"><?php esc_html_e( 'No tasks yet. Run a scan from your Seonix dashboard to see tasks here.', 'seonix' ); ?></p>
 						<?php else : ?>
 							<?php
-							// Tab counts, computed in PHP from $rows. Rows are grouped by
-							// issue type (one row = many affected pages), so each tab badge
-							// shows the SUM of affected_count within its status bucket — the
-							// affected-page total, not the number of rows. Active = open +
-							// regressed, Fixed = solved, Came back = regressed, All =
-							// everything. Mirrors the web app's tab badge math.
-							// Tab badges mirror the dashboard's numbers exactly: Active =
-							// $active_issues (error/warning affected pages, notices excluded),
-							// while Fixed / Came back / All come from the synced lifecycle
-							// summary (the same source the dashboard uses), so the plugin's
-							// badges equal the web app's instead of summing affected pages.
+							// Tab badges = how many ROWS each tab reveals, so the number on
+							// the pill is exactly what you see when you click it. These
+							// mirror admin.js rowMatchesTab (active = open|regressed,
+							// solved = solved, regressed = regressed, all = everything) and
+							// add up: active + solved = all, regressed ⊆ active.
 							$tab_counts = array(
-								'active'    => $active_issues,
-								'solved'    => $solved,
-								'regressed' => $regressed,
-								'all'       => $open + $solved + $regressed,
+								'active'    => $row_active,
+								'solved'    => $row_solved,
+								'regressed' => $row_regressed,
+								'all'       => $row_all,
 							);
 							$tab_labels = array(
 								'active'    => __( 'Active issues', 'seonix' ),

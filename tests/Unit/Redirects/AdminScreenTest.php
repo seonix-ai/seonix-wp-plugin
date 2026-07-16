@@ -36,6 +36,9 @@ final class AdminScreenTest extends TestCase {
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_option' )->justReturn( '' );
 		Functions\when( 'wp_nonce_field' )->justReturn( '' );
+		Functions\when( 'wp_nonce_url' )->alias( function ( $url ) {
+			return $url;
+		} );
 		Functions\when( 'untrailingslashit' )->alias( function ( $s ) {
 			return rtrim( (string) $s, '/' );
 		} );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.11.0
+ * Version:     2.11.1
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.11.0' );
+define( 'SEONIX_VERSION', '2.11.1' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -51,7 +51,9 @@ require_once SEONIX_DIR . 'includes/class-seonix-webmcp.php';
 // Loaded before the SEO Fix methods because the redirect fix writes into the
 // redirects store.
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-store.php';
+require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-log.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-runner.php';
+require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-recorder.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-watcher.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-controller.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-admin.php';
@@ -102,6 +104,10 @@ function seonix_init() {
 	$tasks           = new Seonix_Tasks();
 	$rest_api        = new Seonix_REST_API( $sync, $tasks );
 	$redirects_store = new Seonix_Redirects_Store();
+	// The 404 log is created here, before the DB-upgrade block below installs its
+	// table — it is used there. (Its runtime wiring — the recorder, the admin
+	// screen — happens with the rest of the redirect stack further down.)
+	$redirects_log   = new Seonix_Redirects_Log();
 	$metabox         = new Seonix_Metabox( $tasks );
 	$schema          = new Seonix_Schema();
 
@@ -120,6 +126,7 @@ function seonix_init() {
 	if ( $db_version !== SEONIX_VERSION ) {
 		$tasks->create_table();
 		$redirects_store->create_table();
+		$redirects_log->create_table();
 		update_option( 'seonix_db_version', SEONIX_VERSION );
 
 		// Flush stale opcode cache for every plugin PHP file so updated code
@@ -287,10 +294,16 @@ function seonix_init() {
 	$redirects_runner = new Seonix_Redirects_Runner( $redirects_store );
 	$redirects_runner->register();
 
+	// 404 log recorder: logs the dead URLs visitors hit so the operator can turn
+	// a real miss into a redirect. ($redirects_log was created above, before the
+	// DB-upgrade block that installs its table.) The admin screen lists them.
+	$redirects_recorder = new Seonix_Redirects_Recorder( $redirects_log );
+	$redirects_recorder->register();
+
 	$redirects_controller = new Seonix_Redirects_Controller( $redirects_store );
 	add_action( 'rest_api_init', array( $redirects_controller, 'register_routes' ) );
 
-	$redirects_admin = new Seonix_Redirects_Admin( $redirects_store, $admin_shell );
+	$redirects_admin = new Seonix_Redirects_Admin( $redirects_store, $admin_shell, $redirects_log );
 	$redirects_admin->register();
 
 	// Renaming or trashing a published post silently breaks every link to it.
@@ -405,6 +418,10 @@ function seonix_activate() {
 	// Install the redirects table (native redirect manager).
 	$redirects_store = new Seonix_Redirects_Store();
 	$redirects_store->create_table();
+
+	// Install the 404 log table.
+	$redirects_log = new Seonix_Redirects_Log();
+	$redirects_log->create_table();
 
 	// Install the local tasks table and stamp the schema version so the
 	// version-gated upgrade in seonix_init() doesn't redundantly re-run dbDelta

@@ -202,3 +202,44 @@
   .sx-rdr .rdr-row > *:nth-child(n+3) { grid-column: 2; }
   .sx-rdr .rdr-actions { justify-content: flex-start; }
 }
+
+/* ── 404 log ──
+   Same card/table language as the rules table above, one row per dead URL:
+   path, hits, last-seen, then the two actions. */
+.sx-rdr .rdr-404 { margin-top: 4px; }
+.sx-rdr .rdr-404-th,
+.sx-rdr .rdr-404-row { display: grid; grid-template-columns: 1fr 70px 130px 210px; align-items: center; gap: 14px; padding: 12px 22px; }
+.sx-rdr .rdr-404-th { background: var(--paper-warm); border-bottom: 1px solid var(--border); }
+.sx-rdr .rdr-404-th span { font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--mute); }
+.sx-rdr .rdr-404-th .th-hits { text-align: right; }
+.sx-rdr .rdr-404-th .th-act { text-align: right; }
+.sx-rdr .rdr-404-row { border-bottom: 1px solid var(--border-soft); transition: background .1s; }
+.sx-rdr .rdr-404-row:last-child { border-bottom: none; }
+.sx-rdr .rdr-404-row:hover { background: var(--paper-warm); }
+.sx-rdr .rdr-404-path { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; }
+.sx-rdr .rdr-404-hits { font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.sx-rdr .rdr-404-seen { font-family: var(--sans); font-size: 11.5px; color: var(--mute-dim); font-weight: 500; }
+.sx-rdr .rdr-404-act { display: flex; align-items: center; gap: 14px; justify-content: flex-end; }
+.sx-rdr .rdr-404-act form { display: inline; margin: 0; padding: 0; }
+
+@media (max-width: 960px) {
+  .sx-rdr .rdr-404-th { display: none; }
+  .sx-rdr .rdr-404-row { grid-template-columns: 1fr; gap: 6px; padding: 16px 18px; }
+  .sx-rdr .rdr-404-hits, .sx-rdr .rdr-404-seen { text-align: left; }
+  .sx-rdr .rdr-404-act { justify-content: flex-start; }
+}
+
+/* Advanced disclosure in the add form — regex lives here, out of the common path. */
+.sx-rdr .rdr-advanced { margin-top: 2px; }
+.sx-rdr .rdr-advanced > summary { font-size: 12.5px; font-weight: 600; color: var(--mute); cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; padding: 2px 0; }
+.sx-rdr .rdr-advanced > summary::-webkit-details-marker { display: none; }
+.sx-rdr .rdr-advanced > summary::before { content: "›"; font-size: 15px; line-height: 1; transition: transform .12s; color: var(--mute-dim); }
+.sx-rdr .rdr-advanced[open] > summary::before { transform: rotate(90deg); }
+.sx-rdr .rdr-advanced > summary:hover { color: var(--ink-2); }
+.sx-rdr .rdr-advanced .regex-toggle { margin-top: 10px; padding-bottom: 0; }
+
+/* Export / Import controls, right side of the "Existing redirects" header. */
+.sx-rdr .rdr-io { display: flex; align-items: center; gap: 8px; flex: none; }
+.sx-rdr .rdr-io .rdr-import { margin: 0; display: inline-flex; }
+.sx-rdr .rdr-io label.btn { cursor: pointer; margin: 0; }
+.sx-rdr .rdr-io label.btn input[type="file"] { display: none; }

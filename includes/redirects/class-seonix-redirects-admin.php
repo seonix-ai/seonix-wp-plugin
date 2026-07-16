@@ -34,9 +34,13 @@ class Seonix_Redirects_Admin {
 	/** @var Seonix_Admin_Shell */
 	private $shell;
 
-	public function __construct( Seonix_Redirects_Store $store, Seonix_Admin_Shell $shell = null ) {
+	/** @var Seonix_Redirects_Log|null */
+	private $log;
+
+	public function __construct( Seonix_Redirects_Store $store, Seonix_Admin_Shell $shell = null, Seonix_Redirects_Log $log = null ) {
 		$this->store = $store;
 		$this->shell = $shell ?? new Seonix_Admin_Shell( $store );
+		$this->log   = $log;
 	}
 
 	/**
@@ -50,6 +54,10 @@ class Seonix_Redirects_Admin {
 		add_action( 'admin_post_seonix_redirects_delete', array( $this, 'handle_delete' ) );
 		add_action( 'admin_post_seonix_redirects_toggle', array( $this, 'handle_toggle' ) );
 		add_action( 'admin_post_seonix_redirects_bulk', array( $this, 'handle_bulk' ) );
+		add_action( 'admin_post_seonix_redirects_log_dismiss', array( $this, 'handle_log_dismiss' ) );
+		add_action( 'admin_post_seonix_redirects_log_clear', array( $this, 'handle_log_clear' ) );
+		add_action( 'admin_post_seonix_redirects_export', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_seonix_redirects_import', array( $this, 'handle_import' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 	}
 
@@ -120,7 +128,125 @@ class Seonix_Redirects_Admin {
 		if ( is_wp_error( $result ) ) {
 			$this->back( 'error', $result->get_error_message() );
 		}
+		// The path now redirects, so it is no longer a dead end — drop it from
+		// the 404 log (no-op if it was never logged, e.g. a regex rule).
+		if ( null !== $this->log && ! $is_regex ) {
+			$this->log->forget_path( $from_path );
+		}
 		$this->back( 'added' );
+	}
+
+	/**
+	 * Forget one logged 404 (the operator judged it not worth a redirect).
+	 */
+	public function handle_log_dismiss(): void {
+		$this->guard( 'seonix_redirects_log_dismiss' );
+		if ( null !== $this->log ) {
+			$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+			if ( $id > 0 ) {
+				$this->log->delete( $id );
+			}
+		}
+		$this->back( 'log_dismissed' );
+	}
+
+	/**
+	 * Empty the whole 404 log.
+	 */
+	public function handle_log_clear(): void {
+		$this->guard( 'seonix_redirects_log_clear' );
+		if ( null !== $this->log ) {
+			$this->log->clear();
+		}
+		$this->back( 'log_cleared' );
+	}
+
+	/**
+	 * Stream every rule as a CSV download — a backup, and the other half of a
+	 * migration between sites.
+	 */
+	public function handle_export(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to manage redirects.', 'seonix' ) );
+		}
+		check_admin_referer( 'seonix_redirects_export' );
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="seonix-redirects.csv"' );
+
+		$out = fopen( 'php://output', 'w' );
+		fputcsv( $out, array( 'from_path', 'to_url', 'status_code', 'is_regex', 'enabled' ) );
+		foreach ( $this->store->get_items() as $row ) {
+			fputcsv(
+				$out,
+				array(
+					(string) ( $row['from_path'] ?? '' ),
+					(string) ( $row['to_url'] ?? '' ),
+					(string) (int) ( $row['status_code'] ?? 301 ),
+					! empty( $row['is_regex'] ) ? '1' : '0',
+					! empty( $row['enabled'] ) ? '1' : '0',
+				)
+			);
+		}
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- php://output stream, not a file.
+		exit;
+	}
+
+	/**
+	 * Create rules from an uploaded CSV (the format handle_export writes).
+	 *
+	 * Every row goes through Seonix_Redirects_Store::create, so an import is
+	 * validated exactly like a hand-typed rule — a bad line is counted and
+	 * skipped, never inserted raw. A row whose From path already has a rule is
+	 * skipped as a duplicate rather than doubling it.
+	 */
+	public function handle_import(): void {
+		$this->guard( 'seonix_redirects_import' );
+
+		if ( empty( $_FILES['csv']['tmp_name'] ) || ! is_uploaded_file( sanitize_text_field( wp_unslash( $_FILES['csv']['tmp_name'] ) ) ) ) {
+			$this->back( 'error', __( 'No CSV file was uploaded.', 'seonix' ) );
+		}
+		$tmp = sanitize_text_field( wp_unslash( $_FILES['csv']['tmp_name'] ) );
+
+		$handle = fopen( $tmp, 'r' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- reading the just-uploaded temp file, not the WP filesystem.
+		if ( false === $handle ) {
+			$this->back( 'error', __( 'Could not read the uploaded file.', 'seonix' ) );
+		}
+
+		$added   = 0;
+		$skipped = 0;
+		$line    = 0;
+		while ( false !== ( $cols = fgetcsv( $handle ) ) ) {
+			$line++;
+			// Tolerate the header row this exporter writes.
+			if ( 1 === $line && isset( $cols[0] ) && 'from_path' === strtolower( trim( (string) $cols[0] ) ) ) {
+				continue;
+			}
+			if ( ! is_array( $cols ) || '' === trim( (string) ( $cols[0] ?? '' ) ) ) {
+				continue; // blank line
+			}
+			$from   = trim( (string) ( $cols[0] ?? '' ) );
+			$to     = trim( (string) ( $cols[1] ?? '' ) );
+			$code   = isset( $cols[2] ) ? (int) $cols[2] : 301;
+			$regex  = ! empty( $cols[3] ) && '0' !== trim( (string) $cols[3] );
+			$result = $this->store->create( array(
+				'seonix_id'   => null,
+				'from_path'   => $from,
+				'to_url'      => $to,
+				'status_code' => $code,
+				'is_regex'    => $regex,
+				'enabled'     => ! isset( $cols[4] ) || ( '0' !== trim( (string) $cols[4] ) ),
+			) );
+			if ( is_wp_error( $result ) ) {
+				$skipped++;
+			} else {
+				$added++;
+			}
+		}
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- temp upload stream.
+
+		$this->back( 'imported', $added . '/' . ( $added + $skipped ) );
 	}
 
 	/**
@@ -274,21 +400,117 @@ class Seonix_Redirects_Admin {
 					<h2 class="ih-title"><?php esc_html_e( 'Existing redirects', 'seonix' ); ?></h2>
 					<p class="ih-sub"><?php esc_html_e( 'Served automatically. Disable to pause a rule without deleting it.', 'seonix' ); ?></p>
 				</div>
+				<div class="rdr-io">
+					<a class="btn sm" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=seonix_redirects_export' ), 'seonix_redirects_export' ) ); ?>"><?php esc_html_e( 'Export CSV', 'seonix' ); ?></a>
+					<form class="rdr-import" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<input type="hidden" name="action" value="seonix_redirects_import" />
+						<?php wp_nonce_field( 'seonix_redirects_import' ); ?>
+						<label class="btn sm">
+							<?php esc_html_e( 'Import CSV', 'seonix' ); ?>
+							<input type="file" name="csv" accept=".csv,text/csv" onchange="this.form.submit()" hidden />
+						</label>
+					</form>
+				</div>
 			</div>
 
 			<?php $this->render_list_tools( $filter, $search, $counts ); ?>
 			<?php $this->render_table( $items, '' !== $search || 'all' !== $filter ); ?>
+
+			<?php $this->render_log(); ?>
 		</div>
 		<?php
 		$this->shell->close();
 	}
 
 	/**
+	 * The 404 log: dead URLs visitors hit, most-hit first, each a one-click
+	 * "Create redirect" that prefills the add form above. Only shown once there
+	 * is something to show — a clean site sees no empty panel.
+	 */
+	private function render_log(): void {
+		if ( null === $this->log ) {
+			return;
+		}
+		$entries = $this->log->get_top( 100 );
+		if ( empty( $entries ) ) {
+			return;
+		}
+		?>
+		<div class="issues-head">
+			<div>
+				<h2 class="ih-title"><?php esc_html_e( "Not found (404s)", 'seonix' ); ?></h2>
+				<p class="ih-sub"><?php esc_html_e( 'Dead URLs visitors actually landed on. Turn a real one into a redirect, or dismiss it if it is not worth keeping.', 'seonix' ); ?></p>
+			</div>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Clear the entire 404 log?', 'seonix' ) ); ?>');">
+				<input type="hidden" name="action" value="seonix_redirects_log_clear" />
+				<?php wp_nonce_field( 'seonix_redirects_log_clear' ); ?>
+				<button class="btn sm" type="submit"><?php esc_html_e( 'Clear log', 'seonix' ); ?></button>
+			</form>
+		</div>
+
+		<div class="rdrtable rdr-404">
+			<div class="rdr-404-th">
+				<span><?php esc_html_e( 'Dead URL', 'seonix' ); ?></span>
+				<span class="th-hits"><?php esc_html_e( 'Hits', 'seonix' ); ?></span>
+				<span class="th-seen"><?php esc_html_e( 'Last seen', 'seonix' ); ?></span>
+				<span class="th-act"></span>
+			</div>
+			<?php foreach ( $entries as $e ) : ?>
+				<?php
+				$path     = (string) $e['path'];
+				$hits     = (int) $e['hits'];
+				$seen_ago = $this->time_ago( (string) $e['last_seen_at'] );
+				$create   = add_query_arg(
+					array(
+						'page'    => self::PAGE_SLUG,
+						'sx_from' => rawurlencode( $path ),
+					),
+					admin_url( 'admin.php' )
+				) . '#sx-rdr-add';
+				?>
+				<div class="rdr-404-row">
+					<code class="rdr-404-path" title="<?php echo esc_attr( $path ); ?>"><?php echo esc_html( $path ); ?></code>
+					<span class="rdr-404-hits"><?php echo esc_html( number_format_i18n( $hits ) ); ?></span>
+					<span class="rdr-404-seen"><?php echo esc_html( $seen_ago ); ?></span>
+					<span class="rdr-404-act">
+						<a class="rdr-link on" href="<?php echo esc_url( $create ); ?>"><?php esc_html_e( 'Create redirect', 'seonix' ); ?></a>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+							<input type="hidden" name="action" value="seonix_redirects_log_dismiss" />
+							<input type="hidden" name="id" value="<?php echo esc_attr( (string) (int) $e['id'] ); ?>" />
+							<?php wp_nonce_field( 'seonix_redirects_log_dismiss' ); ?>
+							<button class="rdr-link" type="submit"><?php esc_html_e( 'Dismiss', 'seonix' ); ?></button>
+						</form>
+					</span>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Human "N minutes/hours/days ago" for a UTC datetime string.
+	 */
+	private function time_ago( string $mysql_utc ): string {
+		$ts = strtotime( $mysql_utc . ' UTC' );
+		if ( ! $ts ) {
+			return '';
+		}
+		/* translators: %s: human time difference, e.g. "2 hours". */
+		return sprintf( __( '%s ago', 'seonix' ), human_time_diff( $ts, time() ) );
+	}
+
+	/**
 	 * Add-redirect card.
 	 */
 	private function render_add_form(): void {
+		// Prefill the From field when the operator clicked "Create redirect" on a
+		// logged 404. Read-only view state from our own link, so no nonce.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$prefill_from = isset( $_GET['sx_from'] ) ? Seonix_Redirects_Store::normalize_from_path( wp_unslash( $_GET['sx_from'] ) ) : null;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$prefill_from = is_string( $prefill_from ) ? $prefill_from : '';
 		?>
-		<form class="card formcard" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<form id="sx-rdr-add" class="card formcard" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 			<input type="hidden" name="action" value="seonix_redirects_add" />
 			<?php wp_nonce_field( 'seonix_redirects_add' ); ?>
 			<div class="card-head">
@@ -300,7 +522,7 @@ class Seonix_Redirects_Admin {
 			<div class="form-grid">
 				<div class="field">
 					<label class="field-label" for="sx-rdr-from"><?php esc_html_e( 'From path', 'seonix' ); ?></label>
-					<input class="inp" id="sx-rdr-from" name="from_path" placeholder="/old-page/" required />
+					<input class="inp" id="sx-rdr-from" name="from_path" placeholder="/old-page/" value="<?php echo esc_attr( $prefill_from ); ?>"<?php echo '' !== $prefill_from ? ' autofocus' : ''; ?> required />
 					<span class="field-hint"><?php esc_html_e( 'Site-relative path starting with “/”. No domain, no query string. With “Regular expression” on, this is a pattern instead.', 'seonix' ); ?></span>
 				</div>
 				<div class="field">
@@ -318,16 +540,21 @@ class Seonix_Redirects_Admin {
 						<?php endforeach; ?>
 					</select>
 				</div>
-				<label class="regex-toggle">
-					<input type="checkbox" name="is_regex" value="1" />
-					<?php esc_html_e( 'Regular expression', 'seonix' ); ?>
-					<code><?php echo esc_html( '^/blog/(\d+)$ → /archive/$1' ); ?></code>
-				</label>
 				<button class="btn primary" type="submit">
 					<?php echo self::icon( 'plus', 15 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG. ?>
 					<?php esc_html_e( 'Add redirect', 'seonix' ); ?>
 				</button>
 			</div>
+
+			<?php // Regex is a power-user tool — almost every redirect is a plain path. Tucked behind a disclosure so the common case stays a two-field form, not an intimidating one. ?>
+			<details class="rdr-advanced">
+				<summary><?php esc_html_e( 'Advanced', 'seonix' ); ?></summary>
+				<label class="regex-toggle">
+					<input type="checkbox" name="is_regex" value="1" />
+					<?php esc_html_e( 'Match “From” as a regular expression', 'seonix' ); ?>
+					<code><?php echo esc_html( '^/blog/(\d+)$ → /archive/$1' ); ?></code>
+				</label>
+			</details>
 		</form>
 		<?php
 	}
@@ -640,6 +867,13 @@ class Seonix_Redirects_Admin {
 			'added'   => array( 'notice-success', __( 'Redirect added.', 'seonix' ) ),
 			'deleted' => array( 'notice-success', __( 'Redirect deleted.', 'seonix' ) ),
 			'saved'   => array( 'notice-success', __( 'Redirect updated.', 'seonix' ) ),
+			'log_dismissed' => array( 'notice-success', __( 'Removed from the 404 log.', 'seonix' ) ),
+			'log_cleared'   => array( 'notice-success', __( '404 log cleared.', 'seonix' ) ),
+			'imported'      => array(
+				'notice-success',
+				/* translators: %s: "added/total", e.g. "12/14". */
+				sprintf( __( 'Imported %s redirects from CSV.', 'seonix' ), '' !== $detail ? $detail : '0/0' ),
+			),
 			'bulk'    => array(
 				'notice-success',
 				sprintf(
