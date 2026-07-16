@@ -13,9 +13,10 @@
  *
  * Form handling goes through admin_post_* actions (nonce + manage_options on
  * every mutation) with a redirect back to the screen, so refresh never
- * re-submits. Rendering uses WP core admin styles (.wrap + widefat) rather
- * than the connected-dashboard app shell — the screen must work identically
- * on unconnected sites where none of the Seonix shell context exists.
+ * re-submits. Rendering opens the shared Seonix_Admin_Shell, the same chrome
+ * Site Health and Settings draw: this is a Seonix screen, and a screen that
+ * renders a bare .wrap reads as a different plugin. The shell degrades to brand
+ * + tabs when the site was never linked, so it works on unconnected sites too.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -30,8 +31,12 @@ class Seonix_Redirects_Admin {
 	/** @var Seonix_Redirects_Store */
 	private $store;
 
-	public function __construct( Seonix_Redirects_Store $store ) {
+	/** @var Seonix_Admin_Shell */
+	private $shell;
+
+	public function __construct( Seonix_Redirects_Store $store, Seonix_Admin_Shell $shell = null ) {
 		$this->store = $store;
+		$this->shell = $shell ?? new Seonix_Admin_Shell( $store );
 	}
 
 	/**
@@ -49,9 +54,13 @@ class Seonix_Redirects_Admin {
 	}
 
 	/**
-	 * The screen carries its own stylesheet: it is a standalone wp-admin page,
-	 * not part of the connected-dashboard shell, and must look right on a site
-	 * that has never been linked to Seonix.
+	 * This screen's own stylesheet, on top of the shell's.
+	 *
+	 * The chrome (brand webfonts, admin.css, admin.js) is enqueued for every
+	 * Seonix screen by Seonix_Admin::enqueue_assets — including this one — so
+	 * only the table and form styles are added here. Declaring `seonix-admin` as
+	 * a dependency is what pins the order: these rules refine the shell's and
+	 * have to be printed after it, not whenever the hooks happen to fire.
 	 *
 	 * @param string $hook Current admin page hook.
 	 */
@@ -60,19 +69,20 @@ class Seonix_Redirects_Admin {
 			return;
 		}
 		wp_enqueue_style(
-			'seonix-admin-fonts',
-			SEONIX_URL . 'assets/fonts/fonts.css',
-			array(),
-			SEONIX_VERSION
-		);
-		wp_enqueue_style(
 			'seonix-redirects',
 			SEONIX_URL . 'assets/redirects.css',
-			array( 'seonix-admin-fonts' ),
+			array( 'seonix-admin' ),
 			SEONIX_VERSION
 		);
 	}
 
+	/**
+	 * The Redirects entry in the Seonix menu.
+	 *
+	 * Positioned explicitly (Seonix_Admin owns the order) so the sidebar reads
+	 * Problems → Redirects → Settings, matching the nav row inside the page.
+	 * Without it this lands last, because it registers on a later hook.
+	 */
 	public function add_menu(): void {
 		add_submenu_page(
 			Seonix_Admin::MENU_SLUG,
@@ -80,7 +90,8 @@ class Seonix_Redirects_Admin {
 			__( 'Redirects', 'seonix' ),
 			'manage_options',
 			self::PAGE_SLUG,
-			array( $this, 'render_page' )
+			array( $this, 'render_page' ),
+			Seonix_Admin::POS_REDIRECTS
 		);
 	}
 
@@ -233,8 +244,10 @@ class Seonix_Redirects_Admin {
 
 		$items  = $this->filter_rows( $all, $filter, $search );
 		$active = $counts['all'] - $counts['disabled'];
+
+		$this->shell->open( 'redirects' );
 		?>
-		<div class="wrap sx-rdr">
+		<div class="sx-rdr">
 			<?php $this->render_notice(); ?>
 
 			<div class="pagehead">
@@ -267,6 +280,7 @@ class Seonix_Redirects_Admin {
 			<?php $this->render_table( $items, '' !== $search || 'all' !== $filter ); ?>
 		</div>
 		<?php
+		$this->shell->close();
 	}
 
 	/**
@@ -451,13 +465,15 @@ class Seonix_Redirects_Admin {
 
 			<div class="rdr-path">
 				<div class="rdr-from" title="<?php echo esc_attr( (string) $row['from_path'] ); ?>">
-					<?php echo esc_html( (string) $row['from_path'] ); ?>
+					<?php // Label each side. An arrow alone leaves the reader to infer direction from two URLs that both start with the same domain and may each be truncated — the one thing a redirect list must never leave ambiguous. ?>
+					<span class="rdr-side"><?php esc_html_e( 'From', 'seonix' ); ?></span>
+					<span class="rdr-url"><?php echo esc_html( (string) $row['from_path'] ); ?></span>
 					<?php if ( $is_regex ) : ?>
 						<span class="badge med" style="margin-left:6px;"><?php esc_html_e( 'Regex', 'seonix' ); ?></span>
 					<?php endif; ?>
 				</div>
 				<div class="rdr-to">
-					<span class="ar"><?php echo self::icon( 'arrowRight', 14 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG. ?></span>
+					<span class="rdr-side"><?php esc_html_e( 'To', 'seonix' ); ?></span>
 					<?php if ( $gone ) : ?>
 						<code class="gone-note"><?php esc_html_e( 'Gone — no target', 'seonix' ); ?></code>
 					<?php else : ?>

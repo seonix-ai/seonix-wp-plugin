@@ -25,15 +25,35 @@ class Seonix_Admin {
 	/** Settings submenu slug. */
 	const SETTINGS_SLUG = 'seonix-settings';
 
+	/**
+	 * Submenu order: Problems, Redirects, Settings — the same order as the nav
+	 * row inside the page.
+	 *
+	 * Redirects is registered by Seonix_Redirects_Admin on a later hook, so with
+	 * no position it appends after Settings while the tab row shows it second.
+	 *
+	 * These are INSERTION INDICES, not weights. add_submenu_page() appends
+	 * whenever `$position >= count($submenu[$parent])`, so the usual 10/20/30
+	 * spacing degrades to plain registration order — silently, and identically
+	 * to passing nothing at all. They must be the actual slots: 0, 1, 2.
+	 */
+	const POS_PROBLEMS  = 0;
+	const POS_REDIRECTS = 1;
+	const POS_SETTINGS  = 2;
+
 	/** @var Seonix_Sync|null */
 	private $sync;
 
 	/** @var Seonix_Tasks */
 	private $tasks;
 
-	public function __construct( Seonix_Sync $sync = null, Seonix_Tasks $tasks = null ) {
+	/** @var Seonix_Admin_Shell */
+	private $shell;
+
+	public function __construct( Seonix_Sync $sync = null, Seonix_Tasks $tasks = null, Seonix_Admin_Shell $shell = null ) {
 		$this->sync  = $sync;
 		$this->tasks = $tasks ?? new Seonix_Tasks();
+		$this->shell = $shell ?? new Seonix_Admin_Shell();
 	}
 
 	/**
@@ -62,7 +82,8 @@ class Seonix_Admin {
 			__( 'Problems', 'seonix' ),
 			'manage_options',
 			self::MENU_SLUG,
-			array( $this, 'render_dashboard' )
+			array( $this, 'render_dashboard' ),
+			self::POS_PROBLEMS
 		);
 
 		// Settings — the former Settings → Seonix screen.
@@ -72,7 +93,8 @@ class Seonix_Admin {
 			__( 'Settings', 'seonix' ),
 			'manage_options',
 			self::SETTINGS_SLUG,
-			array( $this, 'render_page' )
+			array( $this, 'render_page' ),
+			self::POS_SETTINGS
 		);
 	}
 
@@ -113,21 +135,18 @@ class Seonix_Admin {
 	}
 
 	/**
-	 * Enqueue admin assets on the Seonix Dashboard and Settings screens only.
+	 * Enqueue admin assets on the Seonix screens only.
 	 *
-	 * Top-level page hook = `toplevel_page_seonix`; the Settings submenu hook is
-	 * `seonix_page_seonix-settings` (WordPress derives subpage hooks from the
-	 * sanitised parent slug). Loading on both keeps every Seonix screen styled
-	 * and scripted while staying off every other admin page.
+	 * Which screens those are is Seonix_Admin_Shell's list, not a copy of it —
+	 * every screen that draws the chrome needs the chrome's stylesheet, and
+	 * admin.js is what points "Open in Seonix" at the right project. Everything
+	 * in admin.js is guarded on the element it drives, so a screen that owns none
+	 * of those controls simply runs nothing.
 	 *
 	 * @param string $hook The current admin page hook.
 	 */
 	public function enqueue_assets( $hook ) {
-		$seonix_hooks = array(
-			'toplevel_page_' . self::MENU_SLUG,
-			'seonix_page_' . self::SETTINGS_SLUG,
-		);
-		if ( ! in_array( $hook, $seonix_hooks, true ) ) {
+		if ( ! Seonix_Admin_Shell::is_seonix_screen( $hook ) ) {
 			return;
 		}
 
@@ -433,34 +452,17 @@ class Seonix_Admin {
 	// ─── Deep links into the Seonix app + plan ───────────────────
 
 	/**
-	 * Base origin of the Seonix dashboard SPA (e.g. https://app.seonix.ai).
-	 * The account endpoint records the exact origin in `seonix_app_url`; until
-	 * then we fall back to the production app (the origin the connect handoff
-	 * also targets). A filter lets self-hosted installs override it.
+	 * Deep link to this project's billing/upgrade page.
+	 *
+	 * The app origin itself lives on Seonix_Admin_Shell, which draws the
+	 * "Open in Seonix" button — one definition of where the app is.
 	 */
-	private function app_base_url(): string {
-		$saved = get_option( 'seonix_app_url', '' );
-		$base  = ! empty( $saved ) ? $saved : 'https://app.seonix.ai';
-		$base  = apply_filters( 'seonix_app_base_url', $base );
-		return untrailingslashit( $base );
-	}
-
-	/** Deep link to this project's overview in the Seonix dashboard. */
-	private function dashboard_url(): string {
-		$pid = get_option( 'seonix_project_id', '' );
-		if ( '' === $pid ) {
-			return $this->app_base_url();
-		}
-		return $this->app_base_url() . '/projects/' . rawurlencode( (string) $pid ) . '/overview';
-	}
-
-	/** Deep link to this project's billing/upgrade page. */
 	private function billing_url(): string {
 		$pid = get_option( 'seonix_project_id', '' );
 		if ( '' === $pid ) {
-			return $this->app_base_url();
+			return Seonix_Admin_Shell::app_base_url();
 		}
-		return $this->app_base_url() . '/projects/' . rawurlencode( (string) $pid ) . '/billing';
+		return Seonix_Admin_Shell::app_base_url() . '/projects/' . rawurlencode( (string) $pid ) . '/billing';
 	}
 
 	/** Scheme+host(+port) of a URL, or '' when it can't be parsed. */
@@ -642,115 +644,6 @@ class Seonix_Admin {
 		return in_array( $code, $fixable, true );
 	}
 
-	/**
-	 * Render the shared chrome: a white top bar (brand lockup + version on the
-	 * left, connection pill on the right) and a white nav row with Site Health /
-	 * Settings tabs — mirroring the Seonix app shell ("Seonix SEO.html"). The
-	 * tabs link to the two WordPress admin screens (Problems / Settings); the
-	 * active one is underlined in brand purple. Both render methods call this so
-	 * the chrome is identical across pages.
-	 *
-	 * @param string $active       Which tab is active: 'dashboard' | 'settings'.
-	 * @param bool   $is_connected Whether the site is linked to Seonix.
-	 * @param string $project_name Linked project name (for the connection pill).
-	 */
-	private function render_header( string $active = 'dashboard', bool $is_connected = false, string $project_name = '' ) {
-		$tabs = array(
-			'dashboard' => array(
-				'label' => __( 'Site Health', 'seonix' ),
-				'url'   => admin_url( 'admin.php?page=' . self::MENU_SLUG ),
-				'icon'  => 'grid',
-			),
-			'settings'  => array(
-				'label' => __( 'Settings', 'seonix' ),
-				'url'   => admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ),
-				'icon'  => 'sliders',
-			),
-		);
-		?>
-		<div class="seonix-app">
-			<header class="seonix-topbar">
-				<div class="seonix-shellbar seonix-topbar__inner">
-					<div class="seonix-brandlock">
-						<img class="seonix-brandlock__logo" src="<?php echo esc_url( plugins_url( 'assets/seonix-logo.png', SEONIX_FILE ) ); ?>" alt="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>" width="34" height="34" />
-						<span class="seonix-brandtext"><?php esc_html_e( 'Seonix', 'seonix' ); ?></span>
-						<span class="seonix-ver"><?php echo esc_html( 'v' . SEONIX_VERSION ); ?></span>
-					</div>
-					<?php if ( $is_connected ) : ?>
-						<div class="seonix-topbar__right">
-							<span class="seonix-connpill">
-								<span class="seonix-status__dot seonix-status__dot--green"></span>
-								<?php
-								if ( '' !== $project_name ) {
-									echo wp_kses(
-										sprintf(
-											/* translators: %s: Seonix project name */
-											__( 'Connected · %s', 'seonix' ),
-											'<b>' . esc_html( $project_name ) . '</b>'
-										),
-										array( 'b' => array() )
-									);
-								} else {
-									esc_html_e( 'Connected', 'seonix' );
-								}
-								?>
-							</span>
-							<!-- Jump into the Seonix dashboard for this project. PHP-side
-							     fallback href; admin.js swaps it for the exact backend URL. -->
-							<a class="seonix-btn seonix-btn--brand seonix-btn--sm seonix-openapp"
-								id="seonix-open-app"
-								href="<?php echo esc_url( $this->dashboard_url() ); ?>"
-								target="_blank" rel="noopener">
-								<span><?php esc_html_e( 'Open in Seonix', 'seonix' ); ?></span>
-								<span class="seonix-openapp__ico" aria-hidden="true">&#8599;</span>
-							</a>
-						</div>
-					<?php endif; ?>
-				</div>
-			</header>
-			<nav class="seonix-navrow" aria-label="<?php esc_attr_e( 'Seonix', 'seonix' ); ?>">
-				<div class="seonix-shellbar seonix-navrow__inner">
-					<?php foreach ( $tabs as $key => $tab ) : ?>
-						<a class="seonix-navtab<?php echo $key === $active ? ' is-active' : ''; ?>"
-							href="<?php echo esc_url( $tab['url'] ); ?>"
-							<?php echo $key === $active ? 'aria-current="page"' : ''; ?>>
-							<?php $this->nav_icon( $tab['icon'] ); ?>
-							<span><?php echo esc_html( $tab['label'] ); ?></span>
-						</a>
-					<?php endforeach; ?>
-				</div>
-			</nav>
-			<div class="seonix-content">
-				<div id="seonix-notices"></div>
-		<?php
-	}
-
-	/**
-	 * Close the app shell opened by render_header() (the .seonix-content and
-	 * .seonix-app wrappers). Every render method pairs render_header() with this.
-	 */
-	private function render_footer(): void {
-		?>
-			</div><!-- .seonix-content -->
-		</div><!-- .seonix-app -->
-		<?php
-	}
-
-	/**
-	 * Echo a small inline nav-tab icon (trusted static SVG, no user data).
-	 *
-	 * @param string $name Icon key: 'grid' | 'sliders'.
-	 */
-	private function nav_icon( string $name ): void {
-		$paths = array(
-			'grid'    => '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>',
-			'sliders' => '<path d="M4 8h9"/><path d="M17 8h3"/><circle cx="15" cy="8" r="2.2"/><path d="M4 16h3"/><path d="M11 16h9"/><circle cx="9" cy="16" r="2.2"/>',
-		);
-		$inner = isset( $paths[ $name ] ) ? $paths[ $name ] : '';
-		// Static, developer-authored SVG — safe to emit verbatim.
-		echo '<svg class="seonix-navtab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' . $inner . '</svg>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted static markup.
-	}
-
 	// ─── Render: standalone feature cards ────────────────────────
 
 	/**
@@ -899,11 +792,11 @@ class Seonix_Admin {
 		);
 
 		?>
-		<?php $this->render_header( 'dashboard', $is_connected, $project_name ); ?>
+		<?php $this->shell->open( 'dashboard' ); ?>
 
 				<?php if ( ! $is_connected ) : ?>
 					<!-- Connect CTA — shown until the site is linked. Once connected
-					     the status pill + Reconnect live in the header (see render_header). -->
+					     the status pill + Reconnect live in the shell (see Seonix_Admin_Shell). -->
 					<div class="seonix-connbar">
 						<div class="seonix-connbar__info">
 							<h2><?php esc_html_e( 'Connect to Seonix', 'seonix' ); ?></h2>
@@ -1320,7 +1213,7 @@ class Seonix_Admin {
 						</div>
 					</div>
 				<?php endif; ?>
-		<?php $this->render_footer(); ?>
+		<?php $this->shell->close(); ?>
 		<?php
 	}
 
@@ -1745,7 +1638,7 @@ class Seonix_Admin {
 		) );
 
 		?>
-		<?php $this->render_header( 'settings', $is_connected, $project_name ); ?>
+		<?php $this->shell->open( 'settings' ); ?>
 
 				<?php if ( $is_connected ) : ?>
 					<!-- Status card -->
@@ -1975,7 +1868,7 @@ class Seonix_Admin {
 										<?php esc_html_e( 'Upgrade this project', 'seonix' ); ?>
 									</a>
 									<a class="seonix-btn seonix-btn--secondary seonix-btn--sm" id="seonix-plan-open"
-										href="<?php echo esc_url( $this->dashboard_url() ); ?>"
+										href="<?php echo esc_url( Seonix_Admin_Shell::dashboard_url() ); ?>"
 										target="_blank" rel="noopener">
 										<?php esc_html_e( 'Open in Seonix', 'seonix' ); ?>
 									</a>
@@ -2045,7 +1938,7 @@ class Seonix_Admin {
 						</div>
 					</div>
 				</div>
-		<?php $this->render_footer(); ?>
+		<?php $this->shell->close(); ?>
 		<?php
 	}
 }

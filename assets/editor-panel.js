@@ -52,28 +52,17 @@
 	// The verdict line describes the last SITE SCAN ("6 issues on this page",
 	// "Not scanned yet"), not the live score — the two answer different
 	// questions and the gauges below already carry the score.
-	function brandHeader( score ) {
+	function brandHeader() {
 		return el(
 			'div',
 			{ className: 'sx-ph-head' },
-			el( 'span', { className: 'sx-ph-logo' }, makeIcon( eyeColors( score ) ) ),
+			el( 'span', { className: 'sx-ph-logo' }, makeIcon( BRAND_EYES ) ),
 			el(
 				'div',
 				{ className: 'sx-ph-headtext' },
 				el( 'div', { className: 'sx-ph-brand' }, 'Seonix' ),
 				data.verdict ? el( 'div', { className: 'sx-ph-sub' }, data.verdict ) : null
 			)
-		);
-	}
-
-	// A single Seonix "eye" (one sparkle on the dark face) tinted to the track's
-	// status colour — this replaces Yoast's smiley as the section indicator.
-	function eyeGlyph( color ) {
-		return el(
-			'svg',
-			{ className: 'sx-acc-eye', width: 20, height: 20, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
-			el( 'rect', { width: 24, height: 24, rx: 6, fill: '#191530' } ),
-			el( 'path', { d: 'M12 3.4L13.7 10.3L20.6 12L13.7 13.7L12 20.6L10.3 13.7L3.4 12L10.3 10.3Z', fill: color } )
 		);
 	}
 
@@ -154,13 +143,19 @@
 		return el( 'div', { className: 'sx-iss is-open' }, head, el( 'div', { className: 'sx-iss-detail' }, detail ) );
 	}
 
-	// Collapsible analysis section (Yoast-style). Header = coloured Seonix eye +
-	// label + count + chevron; body (when open) = the track's issue rows.
+	// Collapsible analysis section. Header = leading indicator + label + chevron;
+	// body (when open) = the track's issue rows.
+	//
+	// The indicator is a count pill rather than a score: this section lists what
+	// the site scan found on the page, which has no score to show. It sits in the
+	// same 34px slot the scored sections put their gauge in, so every row's label
+	// starts at the same place.
 	function Section( props ) {
 		var st = useState( false );
 		var open = st[0];
 		var setOpen = st[1];
 		var items = props.items || [];
+		var tone = items.length ? ( hasSeverity( items, 'error' ) ? 'bad' : 'warn' ) : 'good';
 		return el(
 			'div',
 			{ className: 'sx-acc' },
@@ -172,9 +167,10 @@
 					'aria-expanded': open ? 'true' : 'false',
 					onClick: function () { setOpen( ! open ); }
 				},
-				eyeGlyph( props.color ),
+				el( 'span', { className: 'sx-acc-lead' },
+					el( 'span', { className: 'sx-ind-soft sx-ind-soft--' + tone }, items.length ? String( items.length ) : '✓' )
+				),
 				el( 'span', { className: 'sx-acc-label' }, props.label ),
-				el( 'span', { className: 'sx-acc-count' }, String( items.length ) ),
 				el(
 					'svg',
 					{ className: 'sx-acc-chev' + ( open ? ' is-open' : '' ), width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
@@ -202,26 +198,111 @@
 		);
 	}
 
-	// --- The two "eyes" of the Seonix mark = two Yoast-style tracks ----------
-	// Left eye  = SEO         (live SEO score of the text, plus any SEO/technical/
-	//                          AI issues the last site scan found on this URL)
-	// Right eye = Readability (live readability score of the text)
+	// --- The mark ------------------------------------------------------------
+	// The two sparkle "eyes" used to be a traffic light: left = SEO, right =
+	// Readability, recoloured on every keystroke. They are brand-coloured now and
+	// stay that way. A logo that changes colour with the text is a logo people
+	// stop recognising, and it could only ever say "amber" — the badge says "6",
+	// and the gauges below say 92 and 100.
 	//
-	// The scores come from the Seonix engine — the same scoring pass the
-	// dashboard editor runs (EvaluateSEOWithContext), reached through this
-	// plugin's own /score route. Scan issues are a second, independent signal:
-	// they describe the PAGE (redirects, canonicals, structured data), which no
-	// amount of editing the text fixes, so they colour the SEO eye but are
-	// listed in their own section.
-	var EYE_RED = '#FF5468';
-	var EYE_AMBER = '#FBB024';
-	var EYE_GREEN = '#27D49A';
+	// The two signals behind those numbers are still distinct and still separate
+	// in the panel: the SCORE comes from the Seonix engine (the same pass the
+	// dashboard editor runs, via this plugin's /score route) and answers "how is
+	// this text?", while SCAN ISSUES describe the PAGE — redirects, canonicals,
+	// structured data — which no amount of editing the prose fixes.
+	var EYE_BRAND = '#F4EEFF';
 	var EYE_MUTE = '#8B8AA3';
+	var BRAND_EYES = { left: EYE_BRAND, right: EYE_BRAND };
 
-	function worstColor( severities ) {
-		if ( severities.indexOf( 'error' ) !== -1 ) { return EYE_RED; }
-		if ( severities.indexOf( 'warning' ) !== -1 || severities.indexOf( 'notice' ) !== -1 ) { return EYE_AMBER; }
-		return EYE_GREEN;
+	/** @return {boolean} whether any item carries the given severity. */
+	function hasSeverity( items, severity ) {
+		return ( items || [] ).some( function ( it ) { return severity === it.severity; } );
+	}
+
+	/**
+	 * Every scan issue found on this URL, flattened out of its category groups.
+	 *
+	 * The badge, the header verdict and the Page issues section all count THIS
+	 * list — the counts are only trustworthy while they share one source.
+	 */
+	function scanIssues() {
+		var out = [];
+		( data.groups || [] ).forEach( function ( g ) {
+			( g.items || [] ).forEach( function ( it ) { out.push( it ); } );
+		} );
+		return out;
+	}
+
+	/**
+	 * The page's overall verdict, from the two SCORES.
+	 *
+	 * The worse of the two, because it is a summary and a summary that hides the
+	 * weaker half is worth nothing: text that reads beautifully and ranks for
+	 * nothing is not "green".
+	 *
+	 * A missing score is not a good one. While the first pass is still running,
+	 * or after it failed, the answer is "don't know" — never a green the page
+	 * hasn't earned.
+	 *
+	 * @return {string} 'good' | 'warn' | 'bad' | 'mute'
+	 */
+	function overallTone( score ) {
+		var seo = scoreTone( score.seo );
+		var rd = scoreTone( score.readability );
+		if ( 'mute' === seo || 'mute' === rd ) { return 'mute'; }
+		if ( 'bad' === seo || 'bad' === rd ) { return 'bad'; }
+		if ( 'warn' === seo || 'warn' === rd ) { return 'warn'; }
+		return 'good';
+	}
+
+	/**
+	 * The badge on the mark: is this page green yet?
+	 *
+	 * It reads the SCORES, not the issue count. A count answered the wrong
+	 * question: a page can carry eight speed recommendations and still be the
+	 * best page on the site, while a page with one real error and nothing else
+	 * shows a smaller, friendlier number. "8" told the author how much text was
+	 * below, not whether the page was in good shape.
+	 *
+	 * Page issues keep their own section. They describe the PAGE — redirects,
+	 * canonicals, structured data — which no amount of editing the text fixes,
+	 * so folding them into the writing verdict would only make it unactionable.
+	 */
+	function badgeState( score ) {
+		var i18n = data.i18n || {};
+		var tone = overallTone( score );
+		var glyph = { good: '✓', warn: '!', bad: '!', mute: '·' };
+
+		// Spell the numbers out for screen readers — the glyph alone says
+		// "something", and the colour says nothing at all.
+		var parts = [];
+		if ( null !== score.seo && undefined !== score.seo ) {
+			parts.push( ( i18n.seoLabel || 'SEO' ) + ' ' + score.seo );
+		}
+		if ( null !== score.readability && undefined !== score.readability ) {
+			parts.push( ( i18n.readabilityLabel || 'Readability' ) + ' ' + score.readability );
+		}
+
+		return {
+			tone: tone,
+			text: glyph[ tone ],
+			label: parts.length ? parts.join( ' · ' ) : ( i18n.analyzing || 'Analyzing…' )
+		};
+	}
+
+	/** The Seonix mark wearing its status badge. */
+	function MarkWithBadge( props ) {
+		var b = props.badge;
+		return el(
+			'span',
+			{ className: 'seonix-mark' },
+			makeIcon( BRAND_EYES ),
+			el( 'span', { className: 'seonix-mark__badge seonix-mark__badge--' + b.tone, 'aria-hidden': 'true' }, b.text ),
+			// The glyph says "something" and the colour says nothing at all, so
+			// the scores go in as text. screen-reader-text is core's own utility
+			// class — visually hidden, read aloud.
+			el( 'span', { className: 'screen-reader-text' }, b.label )
+		);
 	}
 
 	// Score → traffic light. Thresholds mirror the dashboard editor's
@@ -237,51 +318,7 @@
 	// The EYE_* palette is tuned for the sparkles on the mark's DARK face and is
 	// too light to read on the panel's white background — anything drawn on the
 	// panel itself takes its colour from the CSS tokens via a tone class instead.
-	function scoreColor( score ) {
-		var tone = scoreTone( score );
-		if ( 'good' === tone ) { return EYE_GREEN; }
-		if ( 'warn' === tone ) { return EYE_AMBER; }
-		if ( 'bad' === tone ) { return EYE_RED; }
-		return EYE_MUTE;
-	}
-
 	// Severity ordering helper: pick the more alarming of two eye colours.
-	function worseOf( a, b ) {
-		var rank = {};
-		rank[ EYE_MUTE ] = 0;
-		rank[ EYE_GREEN ] = 1;
-		rank[ EYE_AMBER ] = 2;
-		rank[ EYE_RED ] = 3;
-		return ( rank[ b ] > rank[ a ] ) ? b : a;
-	}
-
-	// Scan-issue severities for this URL, split off the payload once.
-	var scanSev = [];
-	( data.groups || [] ).forEach( function ( g ) {
-		( g.items || [] ).forEach( function ( it ) { scanSev.push( it.severity ); } );
-	} );
-	var scanEye = scanSev.length ? worstColor( scanSev ) : null;
-
-	// The mark's two eyes for a given score state.
-	//
-	// Left (SEO) folds in the page's scan issues: both are things that hold the
-	// page back in search, and a page with a broken canonical should not look
-	// clean just because its text scores well. Right (Readability) is the text
-	// alone — nothing a site scan reports says anything about how the prose
-	// reads. Before the first score lands, the eyes fall back to the scan
-	// signal, and to neutral grey when there is nothing to report at all —
-	// never a green that hasn't been earned.
-	function eyeColors( score ) {
-		var left = ( null === score.seo || undefined === score.seo ) ? ( scanEye || EYE_MUTE ) : scoreColor( score.seo );
-		if ( null !== score.seo && undefined !== score.seo && scanEye ) {
-			left = worseOf( left, scanEye );
-		}
-		var right = ( null === score.readability || undefined === score.readability )
-			? EYE_MUTE
-			: scoreColor( score.readability );
-		return { left: left, right: right };
-	}
-
 	// --- Live score store ---------------------------------------------------
 	// One worker per page load, many subscribers (the panel, the document
 	// panel, and each copy of the toolbar icon). The icon is rendered outside
@@ -676,7 +713,6 @@
 		var open = st[0];
 		var setOpen = st[1];
 		var score = props.score;
-		var color = scoreColor( score );
 		var i18n = data.i18n || {};
 
 		var bodyRows = [];
@@ -739,9 +775,8 @@
 					'aria-expanded': open ? 'true' : 'false',
 					onClick: function () { setOpen( ! open ); }
 				},
-				eyeGlyph( color ),
+				el( 'span', { className: 'sx-acc-lead' }, el( Gauge, { score: score } ) ),
 				el( 'span', { className: 'sx-acc-label' }, props.label ),
-				el( Gauge, { score: score } ),
 				el(
 					'svg',
 					{ className: 'sx-acc-chev' + ( open ? ' is-open' : '' ), width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
@@ -760,10 +795,7 @@
 		// category server-side (SEO / Technical / AI Search), but that split is
 		// about which part of the platform found them — for someone editing the
 		// page they are one list: things wrong with the page itself.
-		var scanItems = [];
-		( data.groups || [] ).forEach( function ( g ) {
-			( g.items || [] ).forEach( function ( it ) { scanItems.push( it ); } );
-		} );
+		var scanItems = scanIssues();
 
 		var hasKeyphrase = ( score.seoChecks || [] ).some( function ( c ) {
 			return 'keyphraseInTitle' === c.id && 'good' !== c.severity;
@@ -772,7 +804,7 @@
 		return el(
 			'div',
 			{ className: 'seonix-metabox seonix-metabox--panel' },
-			brandHeader( score ),
+			brandHeader(),
 			// Above the analysis, Yoast-style: the keyphrase is the input the
 			// SEO checks below are judging against, so it reads top-down — and
 			// it is what the "fill in the field above" hint points at.
@@ -796,7 +828,7 @@
 			} ),
 			// Page issues only exist once the platform has scanned this URL.
 			scanItems.length
-				? el( Section, { key: 'page', label: i18n.pageIssuesLabel || 'Page issues', color: scanEye || EYE_GREEN, items: scanItems } )
+				? el( Section, { key: 'page', label: i18n.pageIssuesLabel || 'Page issues', items: scanItems } )
 				: null,
 			foot()
 		);
@@ -865,34 +897,34 @@
 	// just the brand (like Yoast's "Yoast SEO"); the count lives in the body header.
 	var tipText = 'Seonix';
 
-	// The toolbar icon, subscribed to the live score so its eyes track the text
-	// as it is edited. Passed as a COMPONENT (not a rendered element) wherever
-	// the editor accepts one — that is what lets it re-render on its own; an
-	// element built once at registration time would be frozen at the colours it
-	// had on page load.
+	// The icon the editor shows for this plugin (its toolbar button and the
+	// Options → Plugins entry). Passed as a COMPONENT (not a rendered element)
+	// wherever the editor accepts one — that is what lets it re-render on its
+	// own; an element built once at registration time would be frozen at whatever
+	// it had on page load.
 	function LiveIcon() {
-		return makeIcon( eyeColors( useScore() ) );
+		// Subscribing is what makes the badge follow the text as it is edited.
+		// The mark itself stays brand — only the badge moves.
+		return el( MarkWithBadge, { badge: badgeState( useScore() ) } );
 	}
 
 	function SeonixAuditPanel() {
 		var children = [];
-		var eyes = eyeColors( useScore() );
 
-		// Primary entry point: a dedicated, pinnable sidebar whose icon sits in the
-		// top editor toolbar (exactly like Yoast / Rank Math), plus its entry in the
-		// editor's "Options → Plugins" menu. This is what makes the audit visible —
-		// without it the panel only lived inside the (often closed) Document
-		// settings sidebar, with no toolbar icon, so users never found it.
+		// The audit is a pinnable sidebar: its icon sits in the top editor toolbar
+		// and clicking it opens the panel down the right-hand side, next to the
+		// post's own settings. The status badge rides on that icon, so the count is
+		// readable without opening anything.
 		if ( Sidebar ) {
 			if ( SidebarMoreMenuItem ) {
 				children.push(
-					el( SidebarMoreMenuItem, { key: 'more', target: 'seonix-page-audit', icon: makeIcon( eyes ) }, panelTitle )
+					el( SidebarMoreMenuItem, { key: 'more', target: 'seonix-page-audit', icon: LiveIcon }, panelTitle )
 				);
 			}
 			children.push(
 				el(
 					Sidebar,
-					{ key: 'sidebar', name: 'seonix-page-audit', title: tipText, icon: makeIcon( eyes ), className: 'seonix-audit-panel' },
+					{ key: 'sidebar', name: 'seonix-page-audit', title: tipText, icon: LiveIcon, className: 'seonix-audit-panel' },
 					el( PanelBody )
 				)
 			);

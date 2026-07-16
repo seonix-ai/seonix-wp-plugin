@@ -46,6 +46,9 @@ final class ScoreRouteTest extends TestCase {
 			static fn ( $value ) => strip_tags( (string) $value )
 		);
 		Functions\when( 'get_locale' )->justReturn( 'de_DE' );
+		// The route reads the post type off the server so the engine can tell a
+		// page from an article. Tests that don't care about it still hit it.
+		Functions\when( 'get_post_type' )->justReturn( 'post' );
 		Functions\when( 'get_current_user_id' )->justReturn( 1 );
 		TransientStub::$store = array();
 		Functions\when( 'sanitize_title' )->alias(
@@ -208,6 +211,53 @@ final class ScoreRouteTest extends TestCase {
 		// A different author must still be able to work.
 		Functions\when( 'get_current_user_id' )->justReturn( 8 );
 		$this->assertSame( 'not_connected', $this->scoreErrorCode() );
+	}
+
+	// ─── Content type ─────────────────────────────────────────────
+
+	/**
+	 * The engine scores a page differently from an article, and it can only do
+	 * that if the route tells it which one this is.
+	 *
+	 * Read server-side from the post rather than taken from the editor: the post
+	 * type is WordPress's own fact, and a payload field the editor controls is a
+	 * field the editor can get wrong.
+	 */
+	public function test_sends_the_post_type_so_pages_are_scored_as_pages(): void {
+		$this->stubMeta( array() );
+		Functions\when( 'get_post_type' )->justReturn( 'page' );
+
+		$this->api->handle_score( new WP_REST_Request( array(
+			'post_id'      => 42,
+			'html_content' => '<p>Unsere Leistungen.</p>',
+			'slug'         => 'leistungen',
+		) ) );
+
+		$this->assertSame( 'page', $this->sent['content_type'] );
+	}
+
+	public function test_sends_post_for_an_article(): void {
+		$this->stubMeta( array() );
+		Functions\when( 'get_post_type' )->justReturn( 'post' );
+
+		$this->api->handle_score( new WP_REST_Request( array(
+			'post_id'      => 42,
+			'html_content' => '<p>Body copy.</p>',
+			'slug'         => 'x',
+		) ) );
+
+		$this->assertSame( 'post', $this->sent['content_type'] );
+	}
+
+	/** An unsaved draft has no post yet — the engine falls back to article rules. */
+	public function test_sends_no_type_for_an_unsaved_draft(): void {
+		$this->stubMeta( array() );
+		$this->api->handle_score( new WP_REST_Request( array(
+			'html_content' => '<p>Draft.</p>',
+			'title'        => 'Draft',
+		) ) );
+
+		$this->assertSame( '', $this->sent['content_type'] );
 	}
 
 	// ─── Fallbacks ────────────────────────────────────────────────

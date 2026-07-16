@@ -376,6 +376,24 @@ class Seonix_Redirects_Store {
 	}
 
 	/**
+	 * How many rules are currently being served.
+	 *
+	 * Counted in SQL rather than by measuring get_active_rows(): this runs on
+	 * every Seonix admin screen to fill the nav-tab badge, and a badge is not
+	 * worth pulling every row across the wire for.
+	 */
+	public function count_active(): int {
+		$wpdb = $this->db();
+		// Internal identifier interpolation — see get_items().
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$count = $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$this->table_name()} WHERE deleted_at IS NULL AND enabled = 1"
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		return null === $count ? 0 : (int) $count;
+	}
+
+	/**
 	 * Enabled, non-tombstoned rows — the input for the runtime redirect map.
 	 *
 	 * @return array<int,array<string,mixed>>

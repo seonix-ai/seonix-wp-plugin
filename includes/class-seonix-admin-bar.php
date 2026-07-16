@@ -216,6 +216,17 @@ class Seonix_Admin_Bar {
 			);
 		}
 
+		// "Site Health" goes in the dropdown only when the dropdown has other
+		// rows to keep it company. In wp-admin there is no post and no front-end
+		// URL, so the scores and the issue count are all skipped — and this row
+		// alone left the node opening a one-item dropdown that pointed exactly
+		// where the node itself already pointed. Hovering the brand produced a
+		// small dark box repeating the label: it reads as a rendering fault, not
+		// as a menu. With no rows the node is simply a link.
+		if ( ! $this->has_page_context( $post_id ) ) {
+			return;
+		}
+
 		$bar->add_node(
 			array(
 				'parent' => 'seonix-bar',
@@ -224,6 +235,15 @@ class Seonix_Admin_Bar {
 				'href'   => admin_url( 'admin.php?page=seonix' ),
 			)
 		);
+	}
+
+	/**
+	 * Whether this request is about one page we can say anything about — the
+	 * only case where the dropdown carries scores, an issue count, or a link to
+	 * analyze. Mirrors the guards on add_score_nodes / add_issue_node.
+	 */
+	private function has_page_context( int $post_id ): bool {
+		return $post_id > 0 || '' !== $this->current_url();
 	}
 
 	// ─── Helpers ─────────────────────────────────────────────────────────
@@ -296,6 +316,11 @@ class Seonix_Admin_Bar {
 	}
 
 	private function logo(): string {
-		return '<img class="seonix-bar-logo" src="' . esc_url( SEONIX_URL . 'assets/seonix-logo-small.png' ) . '" alt="" />';
+		// The MARK (the tile with the two sparkles), not the mascot. This used to
+		// point at seonix-logo-small.png, which is the robot — a different image
+		// from the one the plugin menu, the editor icon and the app itself all
+		// use, so the brand read as two unrelated products depending on where you
+		// looked. menu-icon.png is the same asset the admin menu renders.
+		return '<img class="seonix-bar-logo" src="' . esc_url( SEONIX_URL . 'assets/menu-icon.png' ) . '" alt="" />';
 	}
 }

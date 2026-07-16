@@ -33,6 +33,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-tasks.php';
 require_once SEONIX_DIR . 'includes/class-seonix-content-score.php';
 require_once SEONIX_DIR . 'includes/class-seonix-rest-api.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin.php';
+require_once SEONIX_DIR . 'includes/class-seonix-admin-shell.php';
 require_once SEONIX_DIR . 'includes/class-seonix-onboarding.php';
 require_once SEONIX_DIR . 'includes/class-seonix-metabox.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin-bar.php';
@@ -100,10 +101,16 @@ function seonix_init() {
 	$sync            = new Seonix_Sync();
 	$tasks           = new Seonix_Tasks();
 	$rest_api        = new Seonix_REST_API( $sync, $tasks );
-	$admin           = new Seonix_Admin( $sync, $tasks );
+	$redirects_store = new Seonix_Redirects_Store();
 	$metabox         = new Seonix_Metabox( $tasks );
 	$schema          = new Seonix_Schema();
-	$redirects_store = new Seonix_Redirects_Store();
+
+	// One shell for every Seonix screen — the top bar and the Site Health /
+	// Redirects / Settings tabs. It takes the store because the Redirects tab
+	// carries a count of the rules being served.
+	$admin_shell = new Seonix_Admin_Shell( $redirects_store );
+	$admin_shell->register();
+	$admin       = new Seonix_Admin( $sync, $tasks, $admin_shell );
 
 	// Version-gated DB upgrade: when the stored db version differs from the
 	// plugin version, (re)apply dbDelta for the plugin tables. dbDelta is
@@ -283,7 +290,7 @@ function seonix_init() {
 	$redirects_controller = new Seonix_Redirects_Controller( $redirects_store );
 	add_action( 'rest_api_init', array( $redirects_controller, 'register_routes' ) );
 
-	$redirects_admin = new Seonix_Redirects_Admin( $redirects_store );
+	$redirects_admin = new Seonix_Redirects_Admin( $redirects_store, $admin_shell );
 	$redirects_admin->register();
 
 	// Renaming or trashing a published post silently breaks every link to it.

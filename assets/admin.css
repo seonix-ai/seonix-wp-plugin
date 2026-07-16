@@ -9,9 +9,17 @@
  * the system stack, so the panel is never blocked on a remote request.
  */
 
-/* ── Design tokens ── */
+/* ── Design tokens ──
+   Every Seonix surface must be listed here. The badge is the one that bites:
+   it renders inside CORE's toolbar button (PluginSidebar's icon slot), nowhere
+   near .seonix-app / .seonix-metabox. CSS variables inherit, so a surface left
+   out of this list resolves `var(--sx-green)` to nothing and the declaration
+   evaporates — no error, no fallback. That shipped once: the "clean" badge came
+   out transparent with a white tick floating on it instead of a solid green dot.
+   AdminScreenListTest pins this list. */
 .seonix-app,
-.seonix-metabox {
+.seonix-metabox,
+.seonix-mark {
   --sx-ink: #0f0a24;
   --sx-ink-2: #1f1840;
   --sx-mute: #7a7693;
@@ -63,44 +71,41 @@
 
 .seonix-app a { text-decoration: none; }
 
-/* WordPress chrome overrides — scoped to the Seonix admin screens ONLY (by
-   body class) so the post editor (which also loads this stylesheet for the
-   meta box) is never touched. Drop #wpcontent's left padding so the bands sit
-   flush to the admin menu, and paint the whole area the warm surface so the
-   full-width bands read as an app header. */
-/* Paint the whole admin content area the warm surface so the white bands +
-   cards read as an app shell. LITERAL hex (not var(--sx-paper-warm)) — the
-   tokens live on .seonix-app, which is a DESCENDANT of these wrappers, so the
-   variable doesn't reach body/#wpcontent. !important beats the active admin
-   colour-scheme stylesheet. */
-body.toplevel_page_seonix,
-body.seonix_page_seonix-settings,
-body.toplevel_page_seonix #wpwrap,
-body.toplevel_page_seonix #wpbody,
-body.toplevel_page_seonix #wpbody-content,
-body.toplevel_page_seonix #wpcontent,
-body.seonix_page_seonix-settings #wpwrap,
-body.seonix_page_seonix-settings #wpbody,
-body.seonix_page_seonix-settings #wpbody-content,
-body.seonix_page_seonix-settings #wpcontent {
+/* WordPress chrome overrides — scoped to the Seonix admin screens ONLY, via the
+   single `seonix-screen` body class Seonix_Admin_Shell puts on every screen it
+   draws. The post editor (which also loads this stylesheet for the meta box) is
+   never touched.
+
+   ONE class, deliberately: this used to name each screen's own body class, and
+   a screen added to the menu but not to these lists (Redirects, 2.10.0) kept
+   wp-admin's grey background and left gutter — visibly a different plugin. Do
+   not reintroduce per-screen selectors here; a new screen belongs in the shell's
+   screens() list, which is what mints this class.
+
+   Drop #wpcontent's left padding so the bands sit flush to the admin menu, and
+   paint the whole area the warm surface so the full-width bands read as an app
+   header. LITERAL hex (not var(--sx-paper-warm)) — the tokens live on
+   .seonix-app, a DESCENDANT of these wrappers, so the variable doesn't reach
+   body/#wpcontent. !important beats the active admin colour-scheme stylesheet. */
+body.seonix-screen,
+body.seonix-screen #wpwrap,
+body.seonix-screen #wpbody,
+body.seonix-screen #wpbody-content,
+body.seonix-screen #wpcontent {
   background: #f8f7fc !important;
 }
 
-body.toplevel_page_seonix #wpcontent,
-body.seonix_page_seonix-settings #wpcontent {
+body.seonix-screen #wpcontent {
   padding-left: 0;
 }
 
-body.toplevel_page_seonix #wpbody-content,
-body.seonix_page_seonix-settings #wpbody-content {
+body.seonix-screen #wpbody-content {
   padding-bottom: 0;
 }
 
 /* WordPress admin notices keep a tidy inset that lines up with the bands. */
-body.toplevel_page_seonix #wpbody-content > .notice,
-body.toplevel_page_seonix #wpbody-content > .update-nag,
-body.seonix_page_seonix-settings #wpbody-content > .notice,
-body.seonix_page_seonix-settings #wpbody-content > .update-nag {
+body.seonix-screen #wpbody-content > .notice,
+body.seonix-screen #wpbody-content > .update-nag {
   margin: 14px 32px 0;
   border-radius: 10px;
 }
@@ -219,6 +224,24 @@ body.seonix_page_seonix-settings #wpbody-content > .update-nag {
 
 .seonix-navtab__icon {
   flex-shrink: 0;
+}
+
+/* Count pill on a tab (Redirects). Only rendered when there is something to
+   count, so it never reads "0" on a site that has never needed one. */
+.seonix-navtab__count {
+  font-family: var(--sx-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--sx-mute-dim);
+  background: var(--sx-track);
+  border-radius: 99px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seonix-navtab.is-active .seonix-navtab__count {
+  background: var(--sx-ac-soft);
+  color: var(--sx-ac-deep);
 }
 
 .seonix-connpill {
@@ -2689,6 +2712,82 @@ body.seonix-modal-open {
   text-decoration: underline;
 }
 .sx-chk-retry:hover { color: var(--sx-ac-deep); }
+
+/* ══ Editor: status badge on the toolbar icon ══
+   The audit opens as a sidebar (its icon is pinned in the editor toolbar). The
+   icon carries a count badge so the page's state is readable without opening
+   anything, and the mark's eyes stay BRAND at all times: they used to be a
+   traffic light that recoloured the logo on every keystroke. */
+
+/* Count badge on the mark.
+
+   NOT .seonix-badge — that class already exists above as the dashboard's
+   priority pill (HIGH / MED / LOW). This is one stylesheet, so the later rule
+   wins: naming it that turned every priority pill in the task list into an
+   absolutely-positioned dot. Different thing, different name.
+
+   Sized against the 24px mark. The design's badge is 17px on a 28px tile — the
+   same RATIO, not the same pixels; at 17px here it covered one of the eyes.
+   min-width keeps "1" and "12" both centred without nudging the icon. */
+.seonix-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.seonix-mark__badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  color: #fff;
+  font-family: var(--sx-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 1.5px #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.seonix-mark__badge--good { background: var(--sx-green); }
+.seonix-mark__badge--warn { background: var(--sx-amber); }
+.seonix-mark__badge--bad { background: var(--sx-red); }
+/* No score yet, or the pass failed: "don't know" — never a green the page
+   hasn't earned. */
+.seonix-mark__badge--mute { background: var(--sx-mute-dim); }
+
+/* Leading indicator slot in an accordion header: holds the score gauge (SEO /
+   Readability) or the count pill (Page issues), so every row's label starts at
+   the same x. */
+.sx-acc-lead {
+  width: 34px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+/* Count pill for a section that has no score, only a number of findings. */
+.sx-ind-soft {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sx-ind-soft--good { background: var(--sx-green-soft); color: var(--sx-green-ink); }
+.sx-ind-soft--warn { background: var(--sx-amber-soft); color: var(--sx-amber-ink); }
+.sx-ind-soft--bad { background: var(--sx-red-soft); color: var(--sx-red-ink); }
 
 /* Seonix's own focus keyphrase field — rendered only on sites where no SEO
    plugin offers one (Seonix_SEO_Engine::has_native_focus_kw_ui). One band,

@@ -1,11 +1,15 @@
 /**
- * Redirects screen — Seonix design system inside wp-admin.
+ * Redirects screen — the table and add-form, inside the Seonix admin shell.
  *
- * Everything is scoped under .sx-rdr so nothing here can leak into the rest of
- * wp-admin, and so core's own .wrap/.widefat rules (which would otherwise fight
- * the layout) stop at the boundary. Values come from the Seonix design tokens;
- * they are inlined rather than imported because this screen must render on sites
- * that never load the dashboard shell.
+ * The chrome (top bar, nav row, centered content column) comes from admin.css,
+ * which this file declares as a dependency; everything here is scoped under
+ * .sx-rdr so nothing leaks into the rest of wp-admin and core's .wrap/.widefat
+ * rules stop at the boundary.
+ *
+ * The tokens are re-declared rather than inherited from admin.css's :root block
+ * on purpose: this file is meaningless without them, and a screen that silently
+ * loses every colour because a stylesheet upstream was renamed is worse than a
+ * few duplicated hex values.
  */
 
 .sx-rdr {
@@ -38,9 +42,8 @@
   font-family: var(--sans);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
-  max-width: 1280px;
-  /* wp-admin gives .wrap a 20px right gutter but only 2px on the left */
-  margin: 20px 20px 64px 2px;
+  /* Width, centering and gutters belong to .seonix-content — this is a column
+     inside the shell, not a page. */
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -152,9 +155,19 @@
 .sx-rdr .rdr-row:hover { background: var(--paper-warm); }
 .sx-rdr .rdr-row.off { opacity: .6; }
 .sx-rdr .rdr-path { min-width: 0; }
-.sx-rdr .rdr-from { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sx-rdr .rdr-to { display: flex; align-items: center; gap: 8px; margin-top: 4px; min-width: 0; }
-.sx-rdr .rdr-to .ar { color: var(--ac); flex: none; display: flex; }
+/* From / To rows. Each is a fixed label + the URL, on its own line: the two
+   URLs are often long, often share a domain, and get truncated — an arrow
+   between them leaves the reader guessing which way the redirect runs. The
+   label column is fixed-width so both URLs start at the same x. */
+.sx-rdr .rdr-from,
+.sx-rdr .rdr-to { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.sx-rdr .rdr-to { margin-top: 4px; }
+.sx-rdr .rdr-side {
+  flex: none; width: 34px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: .8px; text-transform: uppercase; color: var(--mute-dim);
+}
+.sx-rdr .rdr-from .rdr-url { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sx-rdr .rdr-to code { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; }
 .sx-rdr .rdr-to code.gone-note { color: var(--red-ink); font-style: normal; }
 .sx-rdr .rdr-meta { font-family: var(--sans); font-size: 11px; color: var(--mute-dim); font-weight: 500; margin-top: 5px; }

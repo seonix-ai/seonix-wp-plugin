@@ -301,6 +301,16 @@ class Seonix_REST_API {
 				'title'            => $request->get_param( 'title' ),
 				'meta_description' => $description,
 				'slug'             => $slug,
+				/*
+				 * What is being scored — a post or a page.
+				 *
+				 * Read here rather than taken from the editor: the post type is
+				 * the server's own fact, and the engine's thresholds hang off it
+				 * (a 500-word service page is a good page; the same length in an
+				 * article is thin). An unsaved draft has no post yet, so it
+				 * scores as a post — the stricter default.
+				 */
+				'content_type'     => $post_id > 0 ? (string) get_post_type( $post_id ) : '',
 				/**
 				 * Filters the language the content is scored against.
 				 *

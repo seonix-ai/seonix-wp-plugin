@@ -90,6 +90,7 @@ class Seonix_Content_Score {
 			'meta_description' => self::str( $input, 'meta_description' ),
 			'slug'             => self::str( $input, 'slug' ),
 			'language'         => self::str( $input, 'language' ),
+			'content_type'     => self::str( $input, 'content_type' ),
 		);
 
 		$response = wp_remote_post(
