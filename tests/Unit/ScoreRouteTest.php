@@ -49,6 +49,8 @@ final class ScoreRouteTest extends TestCase {
 		// The route reads the post type off the server so the engine can tell a
 		// page from an article. Tests that don't care about it still hit it.
 		Functions\when( 'get_post_type' )->justReturn( 'post' );
+		// The score route caches its result in post meta; a no-op is enough here.
+		Functions\when( 'update_post_meta' )->justReturn( true );
 		Functions\when( 'get_current_user_id' )->justReturn( 1 );
 		TransientStub::$store = array();
 		Functions\when( 'sanitize_title' )->alias(
@@ -258,6 +260,62 @@ final class ScoreRouteTest extends TestCase {
 		) ) );
 
 		$this->assertSame( '', $this->sent['content_type'] );
+	}
+
+	// ─── Caching ──────────────────────────────────────────────────
+
+	/**
+	 * A saved post scored once, then re-opened unchanged, must not round-trip to
+	 * the backend again — the whole point of the cache. An edit changes the hash,
+	 * so the next score is a real request.
+	 */
+	public function test_unchanged_repeat_is_served_from_cache_without_the_backend(): void {
+		// A real in-memory post-meta store, so the cache genuinely round-trips
+		// through storage (write on the miss, read on the repeat).
+		$meta = array();
+		Functions\when( 'get_post_meta' )->alias(
+			static function ( $post_id, $key, $single = false ) use ( &$meta ) {
+				return $meta[ $key ] ?? '';
+			}
+		);
+		Functions\when( 'update_post_meta' )->alias(
+			static function ( $post_id, $key, $value ) use ( &$meta ) {
+				$meta[ $key ] = $value;
+				return true;
+			}
+		);
+
+		$calls = 0;
+		Functions\when( 'wp_remote_post' )->alias(
+			static function ( $url, $args ) use ( &$calls ) {
+				$calls++;
+				return array(
+					'response' => array( 'code' => 200 ),
+					'body'     => wp_json_encode( array( 'data' => array( 'seo_score' => 70, 'readability_score' => 80 ) ) ),
+				);
+			}
+		);
+
+		$args = array(
+			'post_id'      => 42,
+			'html_content' => '<p>Body copy about desks.</p>',
+			'title'        => 'Desks',
+			'slug'         => 'desks',
+		);
+
+		// First score: cache miss → backend called once → result cached to meta.
+		$this->api->handle_score( new WP_REST_Request( $args ) );
+		$this->assertSame( 1, $calls, 'the first score must hit the backend' );
+		$this->assertArrayHasKey( '_seonix_score_cache', $meta, 'the result must be cached' );
+
+		// Same content again: cache hit → backend NOT called a second time.
+		$this->api->handle_score( new WP_REST_Request( $args ) );
+		$this->assertSame( 1, $calls, 'an unchanged repeat must be served from cache, not the backend' );
+
+		// Change the text: hash changes → cache miss → backend called again.
+		$args['html_content'] = '<p>Body copy about desks, now edited.</p>';
+		$this->api->handle_score( new WP_REST_Request( $args ) );
+		$this->assertSame( 2, $calls, 'an edit must re-score against the backend' );
 	}
 
 	// ─── Fallbacks ────────────────────────────────────────────────

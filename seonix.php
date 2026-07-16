@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.11.1
+ * Version:     2.11.2
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.11.1' );
+define( 'SEONIX_VERSION', '2.11.2' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -37,6 +37,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-admin-shell.php';
 require_once SEONIX_DIR . 'includes/class-seonix-onboarding.php';
 require_once SEONIX_DIR . 'includes/class-seonix-metabox.php';
 require_once SEONIX_DIR . 'includes/class-seonix-admin-bar.php';
+require_once SEONIX_DIR . 'includes/class-seonix-post-columns.php';
 require_once SEONIX_DIR . 'includes/class-seonix-llmtxt.php';
 require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
 
@@ -176,6 +177,11 @@ function seonix_init() {
 	// produced; adds no work of its own.
 	$admin_bar = new Seonix_Admin_Bar( $tasks );
 	$admin_bar->register();
+
+	// A "Seonix" score column in the Posts / Pages list tables — the same saved
+	// score, read from post meta, no backend call per row.
+	$post_columns = new Seonix_Post_Columns();
+	$post_columns->register();
 
 	// Front-end stylesheet for content blocks injected by the plugin
 	// (currently the key-takeaways callout). Loaded on singular post pages

@@ -49,6 +49,12 @@ class Seonix_REST_API {
 	private const SCORE_MAX_PER_MINUTE = 30;
 
 	/**
+	 * Post meta holding the last /score result and the hash of the inputs that
+	 * produced it. A cache hit skips the backend round-trip entirely.
+	 */
+	private const SCORE_CACHE_META = '_seonix_score_cache';
+
+	/**
 	 * Legacy REST namespace from the previous "Content Engine Connector" plugin.
 	 * All routes are mirrored under this namespace so existing clients continue to work.
 	 * Will be removed in a future major version.
@@ -294,39 +300,60 @@ class Seonix_REST_API {
 			}
 		}
 
-		$result = Seonix_Content_Score::score(
-			array(
-				'html_content'     => $request->get_param( 'html_content' ),
-				'focus_keyphrase'  => $keyphrase,
-				'title'            => $request->get_param( 'title' ),
-				'meta_description' => $description,
-				'slug'             => $slug,
-				/*
-				 * What is being scored — a post or a page.
-				 *
-				 * Read here rather than taken from the editor: the post type is
-				 * the server's own fact, and the engine's thresholds hang off it
-				 * (a 500-word service page is a good page; the same length in an
-				 * article is thin). An unsaved draft has no post yet, so it
-				 * scores as a post — the stricter default.
-				 */
-				'content_type'     => $post_id > 0 ? (string) get_post_type( $post_id ) : '',
-				/**
-				 * Filters the language the content is scored against.
-				 *
-				 * Defaults to the site locale ("de_DE"; the engine normalizes it
-				 * to "de"). Multilingual sites that vary language per post can
-				 * return the post's own locale here.
-				 *
-				 * @param string $locale  Locale to score against.
-				 * @param int    $post_id Post being scored, 0 for an unsaved draft.
-				 */
-				'language'         => apply_filters( 'seonix_score_language', get_locale(), $post_id ),
-			)
+		$score_input = array(
+			'html_content'     => $request->get_param( 'html_content' ),
+			'focus_keyphrase'  => $keyphrase,
+			'title'            => $request->get_param( 'title' ),
+			'meta_description' => $description,
+			'slug'             => $slug,
+			/*
+			 * What is being scored — a post or a page.
+			 *
+			 * Read here rather than taken from the editor: the post type is
+			 * the server's own fact, and the engine's thresholds hang off it
+			 * (a 500-word service page is a good page; the same length in an
+			 * article is thin). An unsaved draft has no post yet, so it
+			 * scores as a post — the stricter default.
+			 */
+			'content_type'     => $post_id > 0 ? (string) get_post_type( $post_id ) : '',
+			/**
+			 * Filters the language the content is scored against.
+			 *
+			 * Defaults to the site locale ("de_DE"; the engine normalizes it
+			 * to "de"). Multilingual sites that vary language per post can
+			 * return the post's own locale here.
+			 *
+			 * @param string $locale  Locale to score against.
+			 * @param int    $post_id Post being scored, 0 for an unsaved draft.
+			 */
+			'language'         => apply_filters( 'seonix_score_language', get_locale(), $post_id ),
 		);
 
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		// Cache the score against a hash of exactly what it depends on, so a post
+		// re-opened without an edit doesn't round-trip to the backend every time
+		// the editor mounts. The engine result is a pure function of these inputs;
+		// change the text (or the keyphrase, meta, slug, type, language) and the
+		// hash changes, so the cache invalidates itself — no stale score ever
+		// survives an edit. SEONIX_VERSION is folded in so a plugin update, which
+		// may change the scoring contract, busts every cache. Only saved posts are
+		// cached (a draft has no row to attach meta to, and is being edited anyway).
+		$cache_key = ( $post_id > 0 ) ? md5( SEONIX_VERSION . '|' . (string) wp_json_encode( $score_input ) ) : '';
+		$result    = null;
+		if ( '' !== $cache_key ) {
+			$cached = get_post_meta( $post_id, self::SCORE_CACHE_META, true );
+			if ( is_array( $cached ) && isset( $cached['hash'], $cached['payload'] ) && hash_equals( (string) $cached['hash'], $cache_key ) ) {
+				$result = $cached['payload'];
+			}
+		}
+
+		if ( null === $result ) {
+			$result = Seonix_Content_Score::score( $score_input );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			if ( '' !== $cache_key ) {
+				update_post_meta( $post_id, self::SCORE_CACHE_META, array( 'hash' => $cache_key, 'payload' => $result ) );
+			}
 		}
 
 		// Park the numbers for the toolbar. NOT written to post meta here: this
