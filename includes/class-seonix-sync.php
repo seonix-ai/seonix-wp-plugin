@@ -32,6 +32,49 @@ class Seonix_Sync {
 	}
 
 	/**
+	 * Stamp outbound Seonix API calls with the running plugin version.
+	 *
+	 * Hooked on `http_request_args`, which WordPress fires for every wp_remote_*
+	 * call made anywhere on the site — including other plugins' — so the URL
+	 * prefix guard below is what keeps the header off third-party requests. It
+	 * is deliberately a single filter rather than an edit to each of the seven
+	 * call sites: any future outbound route is stamped for free.
+	 *
+	 * The backend reads the header off any authenticated /api/plugin/* call and
+	 * records it on the channel. That is what lets the dashboard show which
+	 * plugin version a site runs, and flag an available update, without us
+	 * having to poll the site.
+	 *
+	 * @param array  $args HTTP request args.
+	 * @param string $url  Request URL.
+	 * @return array Args, unchanged for anything that is not a Seonix API call.
+	 */
+	public static function stamp_plugin_version( $args, $url ) {
+		$engine_url = get_option( 'seonix_engine_url', '' );
+		if ( empty( $engine_url ) || ! is_string( $url ) ) {
+			return $args;
+		}
+
+		if ( 0 !== strpos( $url, trailingslashit( $engine_url ) . 'api/plugin/' ) ) {
+			return $args;
+		}
+
+		// `headers` is documented as an array but WP_Http also accepts a raw
+		// string; overwriting that with an array would drop whatever the caller
+		// set, so leave those requests alone rather than corrupt them.
+		if ( isset( $args['headers'] ) && ! is_array( $args['headers'] ) ) {
+			return $args;
+		}
+		if ( ! isset( $args['headers'] ) ) {
+			$args['headers'] = array();
+		}
+
+		$args['headers']['X-Seonix-Plugin-Version'] = SEONIX_VERSION;
+
+		return $args;
+	}
+
+	/**
 	 * Collect all published content from the site.
 	 *
 	 * @return array Array of content items grouped by type.

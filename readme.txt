@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.10.0
+Stable tag: 2.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,11 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.11.0 =
+* New: the plugin now tells your Seonix dashboard which version it is running, so the Integrations page shows the installed version for every connected site and points out when a newer one is available.
+* The version travels on the calls the plugin already makes to Seonix — no extra requests, nothing about your content, and nothing sent anywhere else.
+* Updates themselves are unchanged: WordPress installs them from the plugin directory as it always has.
 
 = 2.10.0 =
 * New: rename a published post and the old link keeps working — Seonix records the redirect for you, as a real rule you can see and edit. Trash a post and its URL stops pretending: a child page points at its parent, anything else returns "410 Gone" so search engines drop it quickly instead of retrying a dead link for months.

@@ -990,16 +990,22 @@ class Seonix_REST_API {
 			update_option( 'seonix_project_name', $project_name );
 		}
 
-		// Trimmed in 2.2.5: backend reads only `{site_name, site_url}` (see
-		// channel_handler::Connect). `success`, `version`, `php_version`,
-		// `wp_version` were dropped — they were never consumed.
+		// Trimmed in 2.2.5: backend read only `{site_name, site_url}` (see
+		// channel_handler::Connect), so `success`, `version`, `php_version`,
+		// `wp_version` were dropped as unconsumed.
 		// 2.6.0: + the SEO environment report (which SEO plugin(s) own head
 		// meta, and Seonix's own meta-render mode) so the dashboard can show
 		// "synced with Yoast" vs "Seonix renders meta tags". Older backends
 		// ignore the extra fields.
+		// 2.11.0: `version` is back, and consumed this time — the dashboard
+		// shows the installed version on the integrations page and flags an
+		// available update. Connect/Verify read it here for an immediate
+		// answer; steady-state refresh rides the X-Seonix-Plugin-Version
+		// header on outbound calls (Seonix_Sync::stamp_plugin_version).
 		return rest_ensure_response( array(
 			'site_name'   => get_bloginfo( 'name' ),
 			'site_url'    => home_url(),
+			'version'     => SEONIX_VERSION,
 			'seo_engines' => Seonix_Sync::seo_engines_report(),
 			'meta_mode'   => Seonix_Meta_Renderer::mode(),
 		) );

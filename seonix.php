@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.10.0
+ * Version:     2.11.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.10.0' );
+define( 'SEONIX_VERSION', '2.11.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -210,6 +210,11 @@ function seonix_init() {
 	// Content sync hooks.
 	add_action( 'save_post', array( $sync, 'on_save_post' ), 10, 3 );
 	add_action( 'before_delete_post', array( $sync, 'on_delete_post' ) );
+
+	// Tell the backend which plugin version this site runs, on every outbound
+	// Seonix API call. Registered globally because `http_request_args` is a
+	// global filter; the callback itself only touches Seonix API URLs.
+	add_filter( 'http_request_args', array( 'Seonix_Sync', 'stamp_plugin_version' ), 10, 2 );
 
 	// Serve the IndexNow verification key at its root URL (/{key}.txt).
 	add_action( 'template_redirect', array( 'Seonix_IndexNow', 'serve_key' ) );

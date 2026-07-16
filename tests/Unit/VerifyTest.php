@@ -117,9 +117,14 @@ final class VerifyTest extends TestCase {
         // backend can decide whether the reverse SEO-meta sync is usable.
         // FakeYoast makes Yoast the sole active engine; meta_mode defaults to
         // 'auto' (get_option is stubbed to return the default here).
+        // 2.11.0: `version` — the dashboard's integrations page reads it to
+        // show the installed version and flag an available update. Note the
+        // two distinct `version` keys: the top-level one is OUR plugin, the
+        // nested one belongs to the detected third-party SEO engine.
         $this->assertSame( [
             'site_name'   => 'Example Studio',
             'site_url'    => 'https://example.com',
+            'version'     => SEONIX_VERSION,
             'seo_engines' => [
                 [ 'key' => 'yoast', 'version' => '99.9-test', 'primary' => true ],
             ],
