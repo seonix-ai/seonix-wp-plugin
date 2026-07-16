@@ -34,6 +34,16 @@ final class SingleMetaTest extends TestCase {
         Functions\when( 'is_plugin_active' )->justReturn( false );
         Functions\when( 'wp_cache_flush' )->justReturn( true );
         Functions\when( 'rocket_clean_domain' )->justReturn( null );
+        // Meta_Bridge::sanitize_value() strips markup before a value reaches any
+        // engine's postmeta; mirror core's strip-then-collapse rather than
+        // passing through, so these writes are asserted on realistic values.
+        Functions\when( 'sanitize_text_field' )->alias(
+            static function ( $value ) {
+                $value = strip_tags( (string) $value );
+                $value = (string) preg_replace( '/[\r\n\t ]+/', ' ', $value );
+                return trim( $value );
+            }
+        );
         $this->history = Mockery::mock( Seonix_SEO_Fix_History::class );
         $this->method  = new Seonix_Fix_Meta_Title( $this->history );
     }

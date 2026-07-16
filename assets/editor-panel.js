@@ -350,11 +350,56 @@
 		return '';
 	}
 
+	// Canonical key for Seonix's own keyphrase, passed from PHP so the bridge
+	// stays its single definition; the literal is a last resort for a stale
+	// localized payload.
+	var OWN_KW_META = data.focusKeywordMetaKey || '_seonix_focus_keyword';
+
+	// Does Seonix put its own keyphrase field on screen here?
+	//
+	// Only when nothing else does (hasNativeKeyphraseUi) AND the post type
+	// actually carries meta over REST (keyphraseMetaInRest) — a field whose
+	// value core would drop on save is worse than no field, because the author
+	// watches it accept the text.
+	//
+	// Truthiness, NOT `false !== …`: wp_localize_script() casts every scalar it
+	// ships with (string), so PHP true arrives as "1" and PHP false as "" — a
+	// strict compare against the boolean can never match either, and the guard
+	// would be dead code that always shows the field.
+	var showKeyphraseField = ! data.hasNativeKeyphraseUi && !! data.keyphraseMetaInRest;
+
+	// Seonix's own keyphrase field, read from the post's EDITED meta — the same
+	// "live, including unsaved" contract as the Yoast / Rank Math store probes
+	// above, since editPost() lands the value here long before a save does.
+	function ownKeyphrase() {
+		try {
+			var editor = wp.data.select( 'core/editor' );
+			if ( ! editor || ! editor.getEditedPostAttribute ) { return ''; }
+			var meta = editor.getEditedPostAttribute( 'meta' );
+			var value = meta && meta[ OWN_KW_META ];
+			if ( value ) { return String( value ); }
+		} catch ( e ) {}
+		return '';
+	}
+
+	// Whichever field the author actually has in front of them owns the value:
+	// the SEO plugin's when one is installed, ours when none is.
+	//
+	// The engine's EMPTY value is still its answer, so we must not fall through
+	// to ours behind it: liveSeoField() can't tell "author cleared this field"
+	// from "no such store", and our field is invisible while an engine is active.
+	// A post that carried a Seonix keyphrase before Yoast was installed would
+	// otherwise keep scoring against that old value forever — the author clears
+	// Yoast's field, sees nothing on screen, and the panel silently keeps judging
+	// against a phrase they cannot see or delete (read_effective() only copies
+	// non-empty engine values back, so it never clears either).
 	function liveKeyphrase() {
-		return liveSeoField( [
+		var live = liveSeoField( [
 			[ 'yoast-seo/editor', 'getFocusKeyphrase' ],
 			[ 'rank-math', 'getKeyword' ]
 		] );
+		if ( live ) { return live; }
+		return data.hasNativeKeyphraseUi ? '' : ownKeyphrase();
 	}
 
 	// The meta description matters more than it looks: it carries weight 10 in
@@ -589,6 +634,42 @@
 		return out;
 	}
 
+	function KeyphraseField() {
+		var TextControl = wp.components && wp.components.TextControl;
+		var useSelect = wp.data && wp.data.useSelect;
+		var useDispatch = wp.data && wp.data.useDispatch;
+		// Bail before any hook runs, on a condition that cannot change between
+		// renders — the alternative is a conditional hook call.
+		if ( ! TextControl || ! useSelect || ! useDispatch ) { return null; }
+
+		var value = useSelect( function ( select ) {
+			try {
+				var editor = select( 'core/editor' );
+				var meta = ( editor && editor.getEditedPostAttribute ) ? editor.getEditedPostAttribute( 'meta' ) : null;
+				return ( meta && meta[ OWN_KW_META ] ) || '';
+			} catch ( e ) {}
+			return '';
+		}, [] );
+		var dispatcher = useDispatch( 'core/editor' );
+		var i18n = data.i18n || {};
+
+		return el(
+			'div',
+			{ className: 'seonix-mb-kw' },
+			el( TextControl, {
+				label: i18n.focusKeyphrase || 'Focus keyphrase',
+				help: i18n.focusKeyphraseHelp || '',
+				value: value,
+				onChange: function ( next ) {
+					if ( ! dispatcher || ! dispatcher.editPost ) { return; }
+					var meta = {};
+					meta[ OWN_KW_META ] = next;
+					dispatcher.editPost( { meta: meta } );
+				}
+			} )
+		);
+	}
+
 	// A live-scored track (SEO or Readability): gauge + grouped checks.
 	function ScoreSection( props ) {
 		var st = useState( false );
@@ -619,7 +700,22 @@
 			bodyRows.push( el( 'div', { className: 'sx-acc-empty', key: 'load' }, i18n.analyzing || 'Analyzing…' ) );
 		} else {
 			if ( props.showKeyphraseHint ) {
-				bodyRows.push( el( 'div', { className: 'sx-chk-hint', key: 'kw' }, i18n.noKeyphrase || 'No focus keyphrase set — keyphrase checks are skipped.' ) );
+				// Name the way out, where there is one. "Checks are skipped" and
+				// nothing else is a dead end: it tells the author what they lost
+				// without saying what to do, and the field it means may not even
+				// be on this screen.
+				var hint;
+				if ( showKeyphraseField ) {
+					hint = i18n.noKeyphraseOwn || 'No focus keyphrase set — fill in the field above to turn on keyphrase checks.';
+				} else if ( data.hasNativeKeyphraseUi ) {
+					hint = i18n.noKeyphrase || 'No focus keyphrase set — add one in your SEO plugin to turn on keyphrase checks.';
+				} else {
+					// No engine and no field of ours (a post type whose meta core
+					// drops over REST) — nothing to point at, so the old wording is
+					// still the honest one.
+					hint = i18n.noKeyphraseSkipped || 'No focus keyphrase set — keyphrase checks are skipped.';
+				}
+				bodyRows.push( el( 'div', { className: 'sx-chk-hint', key: 'kw' }, hint ) );
 			}
 			checkGroups( props.checks ).forEach( function ( g, gi ) {
 				bodyRows.push( el( 'div', { className: 'sx-chk-group', key: 'g' + gi },
@@ -677,6 +773,10 @@
 			'div',
 			{ className: 'seonix-metabox seonix-metabox--panel' },
 			brandHeader( score ),
+			// Above the analysis, Yoast-style: the keyphrase is the input the
+			// SEO checks below are judging against, so it reads top-down — and
+			// it is what the "fill in the field above" hint points at.
+			showKeyphraseField ? el( KeyphraseField, { key: 'kw' } ) : null,
 			el( ScoreSection, {
 				key: 'seo',
 				label: i18n.seoLabel || 'SEO',

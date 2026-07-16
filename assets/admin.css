@@ -2689,3 +2689,27 @@ body.seonix-modal-open {
   text-decoration: underline;
 }
 .sx-chk-retry:hover { color: var(--sx-ac-deep); }
+
+/* Seonix's own focus keyphrase field — rendered only on sites where no SEO
+   plugin offers one (Seonix_SEO_Engine::has_native_focus_kw_ui). One band,
+   both surfaces: the classic meta box builds it in PHP, the block editor as a
+   wp-components TextControl, so the padding follows the same edge-bleed rule
+   as .seonix-mb-head / .seonix-mb-group above. */
+.seonix-mb-kw {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--sx-border-soft);
+}
+.seonix-metabox--panel .seonix-mb-kw { padding: 12px 0; }
+.seonix-mb-kw-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sx-ink);
+}
+.seonix-mb-kw-help {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sx-ink-2);
+}

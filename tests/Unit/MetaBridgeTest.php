@@ -25,6 +25,17 @@ final class MetaBridgeTest extends TestCase {
 		parent::setUp();
 		Monkey\setUp();
 		Functions\when( 'is_plugin_active' )->justReturn( false );
+		// Mirrors core's strip-then-collapse order. Deliberately NOT returnArg():
+		// sanitize_value() leans on this to keep markup out of the values it fans
+		// into other plugins' postmeta, so a passthrough stub would make the
+		// stripping assertions below pass without stripping anything.
+		Functions\when( 'sanitize_text_field' )->alias(
+			static function ( $value ) {
+				$value = strip_tags( (string) $value );
+				$value = (string) preg_replace( '/[\r\n\t ]+/', ' ', $value );
+				return trim( $value );
+			}
+		);
 	}
 
 	protected function tearDown(): void {
@@ -33,6 +44,30 @@ final class MetaBridgeTest extends TestCase {
 	}
 
 	// ─── sanitize_value ───────────────────────────────────────────────────
+
+	// Every value that passes through here is written verbatim into OTHER
+	// plugins' postmeta (_yoast_wpseo_focuskw, rank_math_focus_keyword,
+	// _seopress_analysis_target_kw, AIOSEO's keyphrases model), bypassing the
+	// save-time handling those plugins apply to their own input. What they do
+	// with it afterwards — their admin screens, their REST output, their
+	// rendered tags — is outside this codebase. So the markup has to die here.
+	// The REST/block-editor write path reaches storage through this function
+	// alone; only the classic form sanitises upstream.
+	public function test_sanitize_strips_markup_before_it_reaches_another_plugins_meta(): void {
+		$this->assertSame(
+			'standing desk',
+			Seonix_Meta_Bridge::sanitize_value( '<b>standing</b> desk' )
+		);
+
+		// The classic attribute-breakout payload. What matters is that the
+		// executable element is gone; the leftover `">` is inert text that the
+		// render path escapes anyway (esc_attr), and asserting on the exact
+		// remainder documents that we strip tags rather than mangle punctuation.
+		$payload = Seonix_Meta_Bridge::sanitize_value( '"><img src=x onerror=alert(document.domain)>' );
+		$this->assertSame( '">', $payload );
+		$this->assertStringNotContainsString( 'onerror', $payload );
+		$this->assertStringNotContainsString( '<img', $payload );
+	}
 
 	public function test_sanitize_strips_yoast_template_variables(): void {
 		$this->assertSame(

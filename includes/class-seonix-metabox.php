@@ -37,6 +37,24 @@ class Seonix_Metabox {
 		// Late: let the content settle (other plugins' save_post work included)
 		// before deciding the saved revision's scores are the ones to keep.
 		add_action( 'save_post', array( __CLASS__, 'persist_scores_on_save' ), 100, 3 );
+
+		// Focus keyphrase field (see render_focus_keyword_field). Registered on
+		// `init` rather than here on plugins_loaded because register_post_meta
+		// needs the post types to exist, and at 20 so custom types registered at
+		// the default priority are covered. Deliberately NOT gated on
+		// Seonix_Auth::is_connected(): the registration is what makes the key
+		// readable and writable over REST, and a connection that lapses
+		// mid-session must not turn the author's next save into a 400. It is
+		// inert on its own — the field itself only renders where the meta box
+		// and panel do, which IS gated on the connection.
+		add_action( 'init', array( $this, 'register_meta' ), 20 );
+		add_action( 'save_post', array( $this, 'save_focus_keyword' ), 10, 1 );
+		// Block editor: WordPress's own REST meta handler writes the canonical
+		// key straight from the panel's field, never touching the bridge. Watch
+		// the key itself so the value still fans out to the active engines from
+		// every path (REST, quick edit, WP-CLI), not just the classic form.
+		add_action( 'added_post_meta', array( $this, 'on_focus_keyword_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $this, 'on_focus_keyword_change' ), 10, 4 );
 	}
 
 	// ─── Toolbar scores ──────────────────────────────────────────────────
@@ -107,6 +125,154 @@ class Seonix_Metabox {
 			update_post_meta( $post_id, Seonix_Admin_Bar::META_READABILITY, max( 0, min( 100, (int) $stash['readability'] ) ) );
 		}
 		delete_transient( self::SCORE_STASH_PREFIX . $post_id );
+	}
+
+	// ─── Focus keyphrase field ────────────────────────────────────
+
+	/**
+	 * Register Seonix's canonical focus-keyphrase meta on the same post types
+	 * the meta box appears on, so the block editor can read and write it through
+	 * core's REST meta handling (and the value rides along with the post's own
+	 * save instead of needing a route of our own).
+	 *
+	 * `_seonix_focus_keyword` is protected meta (leading underscore), whose
+	 * auth_callback defaults to __return_false — REST would refuse every write
+	 * without the explicit callback below.
+	 *
+	 * @return void
+	 */
+	public function register_meta(): void {
+		foreach ( $this->editor_post_types() as $type ) {
+			register_post_meta(
+				$type,
+				Seonix_Meta_Bridge::META_FOCUS_KW,
+				array(
+					// Restricted to the `edit` context on purpose. auth_callback
+					// gates WRITES only — core wires it onto the edit/add/delete
+					// _post_meta caps, which WP_REST_Meta_Fields consults on the
+					// update path and nowhere else; get_value() runs no capability
+					// check at all. With a bare `show_in_rest => true`, the key
+					// would ride along in the default `view` context of
+					// GET /wp/v2/<type>/<id>, which check_read_permission() allows
+					// unauthenticated for any PUBLISHED post — handing the page's
+					// keyphrase to anonymous visitors. Requesting `context=edit`
+					// costs edit_post, and the block editor already asks for it.
+					'show_in_rest'      => array(
+						'schema' => array( 'context' => array( 'edit' ) ),
+					),
+					'single'            => true,
+					'type'              => 'string',
+					'sanitize_callback' => array( __CLASS__, 'sanitize_focus_keyword' ),
+					'auth_callback'     => array( __CLASS__, 'auth_focus_keyword' ),
+				)
+			);
+		}
+	}
+
+	/**
+	 * sanitize_callback for the focus keyphrase.
+	 *
+	 * A type-safe adapter over the bridge's sanitizer, which stays the single
+	 * source of truth for stripping engine template variables (%%title%% and
+	 * friends) out of a stored value. The adapter earns its keep on the type:
+	 * sanitize_meta() hands the callback whatever was passed to
+	 * update_post_meta(), so a null or an array from some other plugin's stray
+	 * write would be a fatal TypeError against sanitize_value()'s string
+	 * signature — a white screen on save, from a value we don't even want.
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string
+	 */
+	public static function sanitize_focus_keyword( $value ): string {
+		return Seonix_Meta_Bridge::sanitize_value( is_string( $value ) ? $value : '' );
+	}
+
+	/**
+	 * auth_callback for the focus keyphrase: only someone who can edit THIS post
+	 * may WRITE its keyphrase — not anyone who can edit posts in general.
+	 *
+	 * Writes only. Core hangs this callback off the auth_{type}_meta_{key} filter,
+	 * which map_meta_cap() consults for edit/add/delete_post_meta — all of them
+	 * write-path caps. Reads are gated instead by the `edit` context on the
+	 * registration above; this callback never runs for a GET.
+	 *
+	 * @param bool   $allowed  Core's default for the key (recomputed here).
+	 * @param string $meta_key Meta key (unused — one key registers this).
+	 * @param int    $post_id  Post the meta belongs to.
+	 * @return bool
+	 */
+	public static function auth_focus_keyword( $allowed, $meta_key, $post_id ): bool {
+		return current_user_can( 'edit_post', (int) $post_id );
+	}
+
+	/**
+	 * CLASSIC editor: persist the focus keyphrase input from the meta box.
+	 *
+	 * Writes through the bridge rather than update_post_meta() so one save puts
+	 * the value in the canonical key AND every active engine's storage, with the
+	 * fingerprint refreshed — and with the reverse-sync watcher's guard raised
+	 * for the duration, so our own write is never mistaken for the site owner
+	 * editing their SEO plugin.
+	 *
+	 * @param int $post_id Post being saved.
+	 * @return void
+	 */
+	public function save_focus_keyword( $post_id ): void {
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			return;
+		}
+		// Both are absent on every save that is not our classic form (block
+		// editor REST saves, quick edit, WP-CLI). Bailing out is what keeps
+		// those from reading as "the author cleared the field".
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce IS what is being fetched here; it is verified two lines down.
+		if ( ! isset( $_POST['seonix_focus_kw_nonce'], $_POST['seonix_focus_keyword'] ) ) {
+			return;
+		}
+		$nonce = sanitize_key( wp_unslash( $_POST['seonix_focus_kw_nonce'] ) );
+		if ( ! wp_verify_nonce( $nonce, 'seonix_focus_kw_' . (int) $post_id ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_post', (int) $post_id ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$value = sanitize_text_field( wp_unslash( $_POST['seonix_focus_keyword'] ) );
+		// An empty value is a deliberate clear, which write() honours.
+		Seonix_Meta_Bridge::write( (int) $post_id, array( 'focus_keyword' => $value ) );
+	}
+
+	/**
+	 * The canonical focus keyphrase changed on a path that bypasses the bridge —
+	 * the block editor's REST meta write, quick edit, WP-CLI — so mirror it into
+	 * whatever SEO engines are active (AIOSEO today; Yoast / Rank Math / SEOPress
+	 * should one of them be switched on while the field is on screen).
+	 *
+	 * Loop safety, both directions:
+	 *   • write() raises Seonix_Meta_Bridge::$writing around its own writes, so
+	 *     the canonical write it makes cannot re-enter this hook, and the
+	 *     reverse-sync watcher ignores the engine keys we fan out to instead of
+	 *     reading them back as a site-owner edit;
+	 *   • the guard is checked here too, so a bridge write that started
+	 *     elsewhere (publish, SEO fix, backfill) is never fanned out twice.
+	 *
+	 * @param int    $meta_id    Meta row ID (unused).
+	 * @param int    $post_id    Post ID.
+	 * @param string $meta_key   Meta key that changed.
+	 * @param mixed  $meta_value New value — already unslashed and sanitized by
+	 *                           update_metadata() before the hook fires.
+	 * @return void
+	 */
+	public function on_focus_keyword_change( $meta_id, $post_id, $meta_key, $meta_value ): void {
+		if ( Seonix_Meta_Bridge::META_FOCUS_KW !== (string) $meta_key ) {
+			return;
+		}
+		if ( Seonix_Meta_Bridge::$writing ) {
+			return; // Our own write — the bridge has already fanned it out.
+		}
+		Seonix_Meta_Bridge::write(
+			(int) $post_id,
+			array( 'focus_keyword' => is_string( $meta_value ) ? $meta_value : '' )
+		);
 	}
 
 	/**
@@ -231,6 +397,21 @@ class Seonix_Metabox {
 			// Identifies the post to the /score route, which checks edit_post
 			// against it. 0 for a draft that has never been saved.
 			'postId'  => (int) $post->ID,
+			// Whether an SEO plugin already gives the author a keyphrase field.
+			// When it does, Seonix shows none of its own — see
+			// Seonix_SEO_Engine::has_native_focus_kw_ui.
+			'hasNativeKeyphraseUi' => Seonix_SEO_Engine::has_native_focus_kw_ui(),
+			// Whether this post type carries meta over REST at all. Core drops
+			// the `meta` field from a post type's REST schema unless it supports
+			// `custom-fields` (post and page always do; a CPT declaring only
+			// title+editor does not), and editPost({meta}) against a post type
+			// without it accepts the author's typing and silently discards it on
+			// save. The block editor field stands down rather than lie; the
+			// classic form posts straight to save_post and is unaffected.
+			'keyphraseMetaInRest'  => post_type_supports( $post->post_type, 'custom-fields' ),
+			// Passed rather than hard-coded in the JS so the canonical key has
+			// exactly one definition (the bridge's).
+			'focusKeywordMetaKey'  => Seonix_Meta_Bridge::META_FOCUS_KW,
 			'i18n'    => array(
 				'viewAll'  => __( 'View all issues', 'seonix' ),
 				'optional' => __( 'Optional', 'seonix' ),
@@ -254,7 +435,15 @@ class Seonix_Metabox {
 				'problems'         => __( 'Problems', 'seonix' ),
 				'improvements'     => __( 'Improvements', 'seonix' ),
 				'goodResults'      => __( 'Good results', 'seonix' ),
-				'noKeyphrase'      => __( 'No focus keyphrase set — keyphrase checks are skipped.', 'seonix' ),
+				'focusKeyphrase'     => __( 'Focus keyphrase', 'seonix' ),
+				'focusKeyphraseHelp' => __( 'The search term this page should rank for. Seonix checks the title, URL, intro and headings against it.', 'seonix' ),
+				// Three, because "skipped" alone is only honest in one of the three
+				// states: when an engine owns the field, when Seonix's own field is
+				// on screen, the author has somewhere to go — telling them the
+				// checks are skipped and stopping there reads as a dead end.
+				'noKeyphrase'        => __( 'No focus keyphrase set — add one in your SEO plugin to turn on keyphrase checks.', 'seonix' ),
+				'noKeyphraseOwn'     => __( 'No focus keyphrase set — fill in the field above to turn on keyphrase checks.', 'seonix' ),
+				'noKeyphraseSkipped' => __( 'No focus keyphrase set — keyphrase checks are skipped.', 'seonix' ),
 				/* translators: %d: score out of 100. */
 				'scoreOutOf'       => __( '%d out of 100', 'seonix' ),
 			),
@@ -369,6 +558,33 @@ class Seonix_Metabox {
 	}
 
 	/**
+	 * The focus keyphrase input for the CLASSIC meta box — Seonix's answer to
+	 * "there is nowhere on this site to type a keyphrase" (its block-editor twin
+	 * is the TextControl in assets/editor-panel.js).
+	 *
+	 * Suppressed the moment an SEO plugin offers its own field: Seonix reads
+	 * theirs, and a second input over the same value only invites the two to
+	 * disagree.
+	 *
+	 * @param WP_Post $post The post being edited.
+	 * @param array   $d    audit_data() payload — the native-UI flag + strings.
+	 * @return void
+	 */
+	private function render_focus_keyword_field( WP_Post $post, array $d ): void {
+		if ( ! empty( $d['hasNativeKeyphraseUi'] ) ) {
+			return;
+		}
+		$value = (string) get_post_meta( $post->ID, Seonix_Meta_Bridge::META_FOCUS_KW, true );
+
+		echo '<div class="seonix-mb-kw">';
+		wp_nonce_field( 'seonix_focus_kw_' . (int) $post->ID, 'seonix_focus_kw_nonce' );
+		echo '<label class="seonix-mb-kw-label" for="seonix-focus-keyword">' . esc_html( $d['i18n']['focusKeyphrase'] ) . '</label>';
+		echo '<input type="text" class="widefat" id="seonix-focus-keyword" name="seonix_focus_keyword" value="' . esc_attr( $value ) . '" />';
+		echo '<p class="seonix-mb-kw-help">' . esc_html( $d['i18n']['focusKeyphraseHelp'] ) . '</p>';
+		echo '</div>';
+	}
+
+	/**
 	 * Render the CLASSIC meta box body (classic editor only). Uses the same
 	 * audit_data() payload the sidebar panel renders, so they match exactly.
 	 *
@@ -393,6 +609,11 @@ class Seonix_Metabox {
 			echo '<div class="seonix-mb-sub">' . esc_html( $d['sub'] ) . '</div>';
 		}
 		echo '</div></div>';
+
+		// Authoring input, so it renders in every audit state — including the
+		// unpublished one, where setting the keyphrase before writing is exactly
+		// the point.
+		$this->render_focus_keyword_field( $post, $d );
 
 		// Issue groups.
 		foreach ( $d['groups'] as $g ) {

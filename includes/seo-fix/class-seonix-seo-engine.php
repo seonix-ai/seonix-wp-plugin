@@ -195,4 +195,39 @@ class Seonix_SEO_Engine {
 				return null;
 		}
 	}
+
+	/**
+	 * Does an ACTIVE engine already own the focus keyphrase — i.e. give the
+	 * author a field for it that Seonix can read back?
+	 *
+	 * True for Yoast / Rank Math / SEOPress: they show a keyphrase field in the
+	 * editor and keep the value in postmeta this class maps, so Seonix reads
+	 * theirs and must not offer a second field — two inputs over one value is
+	 * how the two silently drift apart.
+	 *
+	 * False when no SEO plugin is active, and — deliberately — for AIOSEO,
+	 * Squirrly and TSF. TSF has no keyphrase concept at all; AIOSEO and Squirrly
+	 * do show one, but keep it in their own tables where nothing in Seonix can
+	 * read it (post_focus_kw_key() is null for both), so an author on those sites
+	 * has no way to reach the keyphrase checks either. Seonix's own field is what
+	 * gives them one — and for AIOSEO the bridge mirrors it INTO AIOSEO's model
+	 * (Seonix_Meta_Bridge::write_aioseo), so the two fields converge rather than
+	 * compete.
+	 *
+	 * Folding over post_focus_kw_key() rather than listing engines again keeps
+	 * this in lockstep with the storage map: an engine only ever "owns" the
+	 * keyphrase here if Seonix knows where to read it.
+	 *
+	 * @param string[]|null $engines Engine slugs, or null to detect the active ones.
+	 * @return bool
+	 */
+	public static function has_native_focus_kw_ui( ?array $engines = null ): bool {
+		$engines = null !== $engines ? $engines : self::detect_all();
+		foreach ( $engines as $engine ) {
+			if ( null !== self::post_focus_kw_key( (string) $engine ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
 }

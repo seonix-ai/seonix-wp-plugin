@@ -40,7 +40,8 @@ class Seonix_Meta_Bridge {
 	public static $writing = false;
 
 	/**
-	 * Strip SEO-plugin template variables from a value before it is stored.
+	 * Strip markup and SEO-plugin template variables from a value before it is
+	 * stored.
 	 *
 	 * Every engine expands its template syntax even inside per-post values:
 	 * Yoast `%%title%%`, Rank Math `%title%`, AIOSEO `#post_title`. AI-written
@@ -49,10 +50,25 @@ class Seonix_Meta_Bridge {
 	 * stripped from a known-tag allowlist only, so an innocent hashtag like
 	 * "#seo" survives.
 	 *
+	 * Tags go first, and this is load-bearing rather than belt-and-braces: every
+	 * value passing through here is fanned out verbatim into OTHER plugins'
+	 * postmeta (`_yoast_wpseo_focuskw`, `rank_math_focus_keyword`,
+	 * `_seopress_analysis_target_kw`, AIOSEO's keyphrases model), skipping the
+	 * save-time handling those plugins would have applied to their own input.
+	 * Whatever they do with it downstream — their admin screens, their REST
+	 * output, their rendered tags — is outside this codebase's control, so the
+	 * markup must not survive the write. The classic-editor form already runs
+	 * sanitize_text_field() upstream; the REST/block-editor path reaches storage
+	 * through this function alone, and reached it unfiltered before. None of
+	 * these three fields has any business carrying markup.
+	 *
 	 * @param string $value Raw value.
 	 * @return string
 	 */
 	public static function sanitize_value( string $value ): string {
+		// Tags first: the template-variable regexes below assume plain text, and
+		// a value only reaches an engine's postmeta through here.
+		$value = sanitize_text_field( $value );
 		// Yoast %%var%% first (greedier), then Rank Math / SEOPress %var%.
 		$value = (string) preg_replace( '/%%[a-z0-9_]+%%/i', '', $value );
 		$value = (string) preg_replace( '/%[a-z0-9_]+%/i', '', $value );
