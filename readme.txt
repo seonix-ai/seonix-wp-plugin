@@ -143,6 +143,7 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 == Changelog ==
 
 = 2.11.0 =
+* New: a focus keyphrase field in the editor for sites without a separate SEO plugin — set the phrase a page should rank for and the Seonix panel scores the text against it. Sites that already have an SEO plugin keep using that plugin's field, as before.
 * New: the plugin now tells your Seonix dashboard which version it is running, so the Integrations page shows the installed version for every connected site and points out when a newer one is available.
 * The version travels on the calls the plugin already makes to Seonix — no extra requests, nothing about your content, and nothing sent anywhere else.
 * Updates themselves are unchanged: WordPress installs them from the plugin directory as it always has.
