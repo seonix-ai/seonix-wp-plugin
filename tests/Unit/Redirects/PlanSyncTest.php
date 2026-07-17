@@ -1,6 +1,8 @@
 <?php
 namespace Seonix\Tests\Unit\Redirects;
 
+use Brain\Monkey;
+use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use Seonix_Redirects_Store;
 
@@ -9,6 +11,22 @@ use Seonix_Redirects_Store;
  * planning step (Seonix_Redirects_Store::plan_sync).
  */
 final class PlanSyncTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+		Monkey\setUp();
+		// validate_rule now canonicalizes targets against the permalink
+		// convention + site host; "no convention" keeps these fixtures literal.
+		Functions\when( 'get_option' )->alias( static function ( $key, $default = '' ) {
+			return $default;
+		} );
+		Functions\when( 'home_url' )->justReturn( 'http://example.org' );
+	}
+
+	protected function tearDown(): void {
+		Monkey\tearDown();
+		parent::tearDown();
+	}
 
     private const UUID_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     private const UUID_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';

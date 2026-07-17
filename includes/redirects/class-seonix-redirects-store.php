@@ -238,6 +238,90 @@ class Seonix_Redirects_Store {
 	}
 
 	/**
+	 * Canonicalize a redirect target's PATH to the site's own trailing-slash
+	 * convention, so our 301 lands directly on the page's canonical form.
+	 *
+	 * Why: WordPress (and most hosts at the server level) 301 a page to its
+	 * canonical slash form — with pretty permalinks ending "/", /a/b sits one
+	 * extra hop away from /a/b/. A fix that writes the uncanonical form buys
+	 * every visitor and crawler an avoidable second redirect: the wohnart
+	 * AI-verdict fix did exactly that (target …/oberkraemer on a slashed-
+	 * permalink site → 301 chain of three). Applied on save (validate_rule)
+	 * AND at serve time (runner), so already-stored rows are healed without a
+	 * data migration.
+	 *
+	 * Untouched: external hosts (not our canonical space to reason about),
+	 * targets whose last segment looks like a file (/brochure.pdf), plain-
+	 * permalink sites (no convention to follow), and the bare root "/".
+	 * Regex rules are exempt at the call sites — their targets carry $1
+	 * expansions, not literal paths.
+	 */
+	public static function canonicalize_target( string $to_url ): string {
+		if ( '' === $to_url ) {
+			return $to_url;
+		}
+		// Absolute URL: only this site's own host follows our permalink
+		// convention. Rebuild with the canonical path, preserving everything else.
+		if ( preg_match( '#^https?://#i', $to_url ) ) {
+			$home_host = function_exists( 'home_url' ) ? (string) wp_parse_url( home_url(), PHP_URL_HOST ) : '';
+			$host      = wp_parse_url( $to_url, PHP_URL_HOST );
+			if ( '' === $home_host || ! is_string( $host ) || 0 !== strcasecmp( $host, $home_host ) ) {
+				return $to_url;
+			}
+			$parts = wp_parse_url( $to_url );
+			if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+				return $to_url;
+			}
+			$path  = isset( $parts['path'] ) && '' !== $parts['path'] ? (string) $parts['path'] : '/';
+			$canon = self::canonical_slash_form( $path );
+			if ( $canon === $path ) {
+				return $to_url;
+			}
+			$rebuilt  = $parts['scheme'] . '://' . $parts['host'];
+			$rebuilt .= isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+			$rebuilt .= $canon;
+			$rebuilt .= isset( $parts['query'] ) && '' !== $parts['query'] ? '?' . $parts['query'] : '';
+			$rebuilt .= isset( $parts['fragment'] ) && '' !== $parts['fragment'] ? '#' . $parts['fragment'] : '';
+			return $rebuilt;
+		}
+		// Relative: canonicalize the path part, keep query/fragment verbatim.
+		if ( '/' !== $to_url[0] || 0 === strpos( $to_url, '//' ) ) {
+			return $to_url;
+		}
+		$cut    = strcspn( $to_url, '?#' );
+		$path   = substr( $to_url, 0, $cut );
+		$suffix = (string) substr( $to_url, $cut );
+		return self::canonical_slash_form( $path ) . $suffix;
+	}
+
+	/**
+	 * The site's canonical trailing-slash form of one local path. Pure string
+	 * logic over get_option('permalink_structure'): structure ending "/" →
+	 * slashed, structure set but unslashed → unslashed, plain permalinks ("")
+	 * → the path as given.
+	 */
+	public static function canonical_slash_form( string $path ): string {
+		if ( '' === $path || '/' === $path ) {
+			return $path;
+		}
+		// Never touch a path whose last segment looks like a file (.pdf, .xml…):
+		// files have no canonical slash form and slashing them 404s.
+		$last = (string) substr( $path, (int) strrpos( $path, '/' ) + 1 );
+		if ( '' !== $last && false !== strpos( $last, '.' ) ) {
+			return $path;
+		}
+		$structure = function_exists( 'get_option' ) ? (string) get_option( 'permalink_structure', '' ) : '';
+		if ( '' === $structure ) {
+			return $path;
+		}
+		if ( '/' === substr( $structure, -1 ) ) {
+			return rtrim( $path, '/' ) . '/';
+		}
+		$trimmed = rtrim( $path, '/' );
+		return '' === $trimmed ? '/' : $trimmed;
+	}
+
+	/**
 	 * Validate one redirect rule (shared by REST sync, the admin form, and the
 	 * seo-fix method).
 	 *
@@ -306,6 +390,13 @@ class Seonix_Redirects_Store {
 			);
 		}
 		$to_url = trim( (string) $to_url );
+
+		// Land the fix on the page's canonical slash form so the stored rule is
+		// the LAST hop, not one 301 short of it (see canonicalize_target). Regex
+		// rules are exempt: their targets carry $1 expansions, not literal paths.
+		if ( ! $is_regex ) {
+			$to_url = self::canonicalize_target( $to_url );
+		}
 
 		// Self-redirect guard: a relative target that resolves to the same match
 		// key would loop on itself at runtime — reject upfront. Regex rules are

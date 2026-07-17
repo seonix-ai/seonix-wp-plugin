@@ -2,6 +2,7 @@
 namespace Seonix\Tests\Unit\Methods;
 
 use Brain\Monkey;
+use Brain\Monkey\Functions;
 use Mockery;
 use PHPUnit\Framework\TestCase;
 use Seonix_Fix_Redirect;
@@ -31,6 +32,12 @@ final class RedirectTest extends TestCase {
     protected function setUp(): void {
         parent::setUp();
         Monkey\setUp();
+        // validate_rule now canonicalizes targets against the permalink
+        // convention + site host; "no convention" keeps these fixtures literal.
+        Functions\when( 'get_option' )->alias( static function ( $key, $default = '' ) {
+            return $default;
+        } );
+        Functions\when( 'home_url' )->justReturn( 'http://example.org' );
         $this->history      = Mockery::mock( Seonix_SEO_Fix_History::class );
         $this->wpdb         = Mockery::mock();
         $this->wpdb->prefix = 'wp_';

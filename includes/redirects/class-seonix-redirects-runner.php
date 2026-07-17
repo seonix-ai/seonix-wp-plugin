@@ -97,7 +97,20 @@ class Seonix_Redirects_Runner {
 			return;
 		}
 
-		$target = self::append_query( $hit['target'], $query );
+		// One request, ONE redirect: follow our own rule chain to its final
+		// local destination (absolute same-host targets — what the Seonix fix
+		// applier writes — are folded into local paths first), then land on the
+		// site's canonical slash form. Without this a fix chained through
+		// rules and the theme's canonical redirect: /old → /mid → /new →
+		// /new/ cost three 301s where one suffices. A null means our rules
+		// form a cycle — serve the page rather than bounce the browser.
+		$target = self::flatten_chain( $hit['target'], $map, Seonix_Redirects_Store::match_key( $path ), $home_host );
+		if ( null === $target ) {
+			return;
+		}
+		$target = Seonix_Redirects_Store::canonicalize_target( $target );
+
+		$target = self::append_query( $target, $query );
 
 		// wp_safe_redirect() only allows hosts returned by the
 		// allowed_redirect_hosts filter and silently rewrites anything else to
@@ -420,6 +433,73 @@ class Seonix_Redirects_Runner {
 			return null;
 		}
 		return Seonix_Redirects_Store::match_key( $path );
+	}
+
+	/**
+	 * Fold an absolute same-host target into its site-relative form (path +
+	 * query + fragment) so chain flattening and slash canonicalization reason
+	 * about it like any local path. External hosts and already-relative
+	 * targets come back unchanged. The Seonix fix applier writes absolute
+	 * same-host targets, which the local-path logic used to treat as opaque —
+	 * that is how the wohnart rule dodged both flattening and loop detection.
+	 */
+	public static function relativize_same_host( string $target, string $home_host ): string {
+		if ( '' === $home_host || ! preg_match( '#^https?://#i', $target ) ) {
+			return $target;
+		}
+		$host = wp_parse_url( $target, PHP_URL_HOST );
+		if ( ! is_string( $host ) || 0 !== strcasecmp( $host, $home_host ) ) {
+			return $target;
+		}
+		$parts = wp_parse_url( $target );
+		if ( ! is_array( $parts ) ) {
+			return $target;
+		}
+		$rel  = isset( $parts['path'] ) && '' !== $parts['path'] ? (string) $parts['path'] : '/';
+		$rel .= isset( $parts['query'] ) && '' !== $parts['query'] ? '?' . $parts['query'] : '';
+		$rel .= isset( $parts['fragment'] ) && '' !== $parts['fragment'] ? '#' . $parts['fragment'] : '';
+		return $rel;
+	}
+
+	/**
+	 * Follow our own rule chain from an already-resolved target to its final
+	 * local destination — at most 3 further hops, each one relativized first
+	 * so absolute same-host links keep the chain walkable. Extends resolve()'s
+	 * one-hop flattening to the shapes it could not see (absolute same-host
+	 * targets, longer chains).
+	 *
+	 * Stops early, returning the CURRENT target, when the next rule is a
+	 * targetless 410 (the honest chain lets the 410 answer itself — see
+	 * resolve()) or when the target leaves our path space. Returns null when
+	 * the chain cycles back to the requested page: redirecting would bounce
+	 * the browser forever, so the caller serves the page instead, matching
+	 * resolve()'s two-rule-cycle behaviour.
+	 *
+	 * @param string $target      Target of the matched rule.
+	 * @param array  $map         Compiled literal-rule map (match key → entry).
+	 * @param string $request_key Match key of the page being requested.
+	 * @param string $home_host   This site's host, for relativizing.
+	 * @return string|null Final target, or null on a cycle.
+	 */
+	public static function flatten_chain( string $target, array $map, string $request_key, string $home_host ) {
+		$visited = array( $request_key => true );
+		for ( $hops = 0; $hops < 3; $hops++ ) {
+			$target = self::relativize_same_host( $target, $home_host );
+			$key    = self::local_target_key( $target );
+			if ( null === $key || ! isset( $map[ $key ] ) ) {
+				return $target; // left our rule space — this is the final stop
+			}
+			if ( isset( $visited[ $key ] ) ) {
+				return null; // cycle — redirecting would loop the browser
+			}
+			$next = (string) $map[ $key ]['target'];
+			if ( '' === $next ) {
+				return $target; // next rule is a 410 — stop before it
+			}
+			$visited[ $key ] = true;
+			$target          = $next;
+		}
+		return self::relativize_same_host( $target, $home_host );
 	}
 
 	/**

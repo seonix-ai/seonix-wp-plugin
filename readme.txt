@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.1
+Stable tag: 2.12.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,10 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.2 =
+* Improved: redirects now land in ONE hop. Targets are stored and served in your site's canonical form (trailing slash follows your permalink settings), and a redirect whose target is itself redirected is followed to its final destination before responding — visitors and crawlers get a single 301 instead of a chain of two or three. Existing rules are healed automatically, no editing needed.
+* Fixed: redirect chains that loop back on themselves are detected and the page is served instead of bouncing the browser.
 
 = 2.12.1 =
 * Fixed: Site Health now shows exactly the same numbers as your Seonix dashboard — the same overall and per-pillar scores and the same Active / Fixed / Came back counts. Seonix computes them once and the plugin displays them as-is, so the two screens can never disagree again.

@@ -1,6 +1,8 @@
 <?php
 namespace Seonix\Tests\Unit\Redirects;
 
+use Brain\Monkey;
+use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use Seonix_Redirects_Runner;
 use Seonix_Redirects_Store;
@@ -15,6 +17,23 @@ use Seonix_Redirects_Store;
  * than to a fatal or a hang.
  */
 final class RegexRulesTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+		Monkey\setUp();
+		// validate_rule now canonicalizes literal targets against the permalink
+		// convention + site host; "no convention" keeps these fixtures literal
+		// (regex targets are exempt from canonicalization either way).
+		Functions\when( 'get_option' )->alias( static function ( $key, $default = '' ) {
+			return $default;
+		} );
+		Functions\when( 'home_url' )->justReturn( 'http://example.org' );
+	}
+
+	protected function tearDown(): void {
+		Monkey\tearDown();
+		parent::tearDown();
+	}
 
     /**
      * @param array<int,array<string,mixed>> $overrides

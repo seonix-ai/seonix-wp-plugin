@@ -256,4 +256,93 @@ final class RunnerTest extends TestCase {
             'Relative targets are handled by resolve(), not the host check.'
         );
     }
+
+    // ─── relativize_same_host ────────────────────────────────────────────
+
+    public function test_relativize_folds_an_absolute_same_host_target(): void {
+        $this->assertSame(
+            '/moebelmontage/oberkraemer',
+            Seonix_Redirects_Runner::relativize_same_host( 'https://wohnartstudio.de/moebelmontage/oberkraemer', 'wohnartstudio.de' ),
+            'The fix applier writes absolute same-host targets — they must fold into local paths.'
+        );
+        $this->assertSame(
+            '/a?x=1#f',
+            Seonix_Redirects_Runner::relativize_same_host( 'https://x.test/a?x=1#f', 'x.test' ),
+            'Query and fragment survive the fold.'
+        );
+    }
+
+    public function test_relativize_leaves_external_and_relative_targets_alone(): void {
+        $this->assertSame(
+            'https://other.test/x',
+            Seonix_Redirects_Runner::relativize_same_host( 'https://other.test/x', 'x.test' )
+        );
+        $this->assertSame( '/x', Seonix_Redirects_Runner::relativize_same_host( '/x', 'x.test' ) );
+        $this->assertSame(
+            'https://x.test/x',
+            Seonix_Redirects_Runner::relativize_same_host( 'https://x.test/x', '' ),
+            'Unknown home host: take the target at face value.'
+        );
+    }
+
+    // ─── flatten_chain ───────────────────────────────────────────────────
+
+    public function test_flatten_chain_follows_rules_to_the_final_target(): void {
+        $map = array(
+            '/mid'  => array( 'id' => 2, 'target' => '/mid2', 'status' => 301 ),
+            '/mid2' => array( 'id' => 3, 'target' => '/final', 'status' => 301 ),
+        );
+        $this->assertSame(
+            '/final',
+            Seonix_Redirects_Runner::flatten_chain( '/mid', $map, '/old', 'x.test' ),
+            'One request, one redirect: the emitted target is the END of our own rule chain.'
+        );
+    }
+
+    public function test_flatten_chain_walks_through_absolute_same_host_links(): void {
+        $map = array(
+            '/mid' => array( 'id' => 2, 'target' => '/final', 'status' => 301 ),
+        );
+        $this->assertSame(
+            '/final',
+            Seonix_Redirects_Runner::flatten_chain( 'https://x.test/mid', $map, '/old', 'x.test' ),
+            'An absolute same-host hop must not stop the walk — it folds and continues.'
+        );
+    }
+
+    public function test_flatten_chain_returns_null_on_a_cycle(): void {
+        $map = array(
+            '/a' => array( 'id' => 1, 'target' => '/b', 'status' => 301 ),
+            '/b' => array( 'id' => 2, 'target' => '/a', 'status' => 301 ),
+        );
+        $this->assertNull(
+            Seonix_Redirects_Runner::flatten_chain( '/b', $map, '/a', 'x.test' ),
+            'A chain that circles back to the requested page must serve, not bounce.'
+        );
+    }
+
+    public function test_flatten_chain_stops_before_a_targetless_410_rule(): void {
+        $map = array(
+            '/mid' => array( 'id' => 2, 'target' => '', 'status' => 410 ),
+        );
+        $this->assertSame(
+            '/mid',
+            Seonix_Redirects_Runner::flatten_chain( '/mid', $map, '/old', 'x.test' ),
+            'The honest chain lets the 410 answer itself on arrival (see resolve()).'
+        );
+    }
+
+    public function test_flatten_chain_is_hop_capped(): void {
+        $map = array(
+            '/h1' => array( 'id' => 1, 'target' => '/h2', 'status' => 301 ),
+            '/h2' => array( 'id' => 2, 'target' => '/h3', 'status' => 301 ),
+            '/h3' => array( 'id' => 3, 'target' => '/h4', 'status' => 301 ),
+            '/h4' => array( 'id' => 4, 'target' => '/h5', 'status' => 301 ),
+        );
+        $this->assertSame(
+            '/h4',
+            Seonix_Redirects_Runner::flatten_chain( '/h1', $map, '/old', 'x.test' ),
+            'Three further hops at most — a pathological chain must not spin the request.'
+        );
+    }
 }
