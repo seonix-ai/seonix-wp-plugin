@@ -816,7 +816,10 @@
 			var isExternal = false;
 			if ( /^https?:\/\//i.test( href ) ) {
 				var h = '';
-				try { h = new URL( href ).host.toLowerCase().replace( /^www\./, '' ); } catch ( e2 ) { h = ''; }
+				// hostname (no port) to match PHP's wp_parse_url(..., PHP_URL_HOST),
+				// which the home host is derived from — .host would carry :8091 on
+				// a dev site and wrongly mark same-site links as external.
+				try { h = new URL( href ).hostname.toLowerCase().replace( /^www\./, '' ); } catch ( e2 ) { h = ''; }
 				isExternal = host ? ( !! h && h !== host ) : true;
 			}
 			if ( isExternal ) {
