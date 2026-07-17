@@ -91,7 +91,7 @@ final class TasksTest extends TestCase {
 			'generated_at'   => '2026-05-30T12:00:00Z',
 			'project_id'     => 'proj-1',
 			'site_url'       => 'https://example.com',
-			'summary'        => array( 'open' => 2, 'solved' => 5, 'regressed' => 1, 'score' => 78 ),
+			'summary'        => array( 'open' => 2, 'solved' => 5, 'regressed' => 1, 'active' => 3, 'fixed' => 4, 'came_back' => 1, 'score' => 78 ),
 			'categories'     => array(
 				array( 'key' => 'seo', 'score' => 80, 'open' => 1 ),
 				array( 'key' => 'technical', 'score' => 74, 'open' => 1 ),
@@ -182,8 +182,38 @@ final class TasksTest extends TestCase {
 		$summary = json_decode( $this->updated['seonix_tasks_summary'], true );
 		$this->assertSame( 2, $summary['open'] );
 		$this->assertSame( 78, $summary['score'] );
+		// Canonical page-count headlines round-trip so the plugin renders the SAME
+		// Active / Fixed / Came back numbers as the app.seonix.ai dashboard.
+		$this->assertSame( 3, $summary['active'] );
+		$this->assertSame( 4, $summary['fixed'] );
+		$this->assertSame( 1, $summary['came_back'] );
 		$this->assertCount( 3, $summary['categories'] );
 		$this->assertSame( 'seo', $summary['categories'][0]['key'] );
+	}
+
+	/**
+	 * An older backend that predates the canonical page counts omits
+	 * active/fixed/came_back. They must persist as -1 (the "field absent"
+	 * sentinel) so the Dashboard falls back to a local task-row count rather
+	 * than rendering a bare 0 or -1.
+	 */
+	public function test_upsert_view_marks_absent_page_counts_as_sentinel(): void {
+		$this->wpdb->shouldReceive( 'query' )->once()->andReturn( 1 );
+
+		$view = array(
+			'schema_version' => 1,
+			'summary'        => array( 'open' => 1, 'solved' => 0, 'regressed' => 0, 'score' => 90 ),
+			'categories'     => array(),
+			'tasks'          => array(),
+		);
+
+		$result = $this->tasks->upsert_view( $view );
+		$this->assertTrue( $result );
+
+		$summary = json_decode( $this->updated['seonix_tasks_summary'], true );
+		$this->assertSame( -1, $summary['active'], 'absent active → -1 sentinel' );
+		$this->assertSame( -1, $summary['fixed'], 'absent fixed → -1 sentinel' );
+		$this->assertSame( -1, $summary['came_back'], 'absent came_back → -1 sentinel' );
 	}
 
 	public function test_upsert_view_clamps_unknown_vocab_to_safe_defaults(): void {

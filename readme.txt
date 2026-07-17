@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.0
+Stable tag: 2.12.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,10 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.1 =
+* Fixed: Site Health now shows exactly the same numbers as your Seonix dashboard — the same overall and per-pillar scores and the same Active / Fixed / Came back counts. Seonix computes them once and the plugin displays them as-is, so the two screens can never disagree again.
+* Changed: opening the dashboard re-syncs from Seonix when the local copy is older than 5 hours (was 24). The Refresh button still forces an immediate sync.
 
 = 2.12.0 =
 * Added: a "Links" section in the Seonix panel on the post editor. See the internal and external links in your article at a glance, with counts and anchor text, in both the block editor and the classic editor.

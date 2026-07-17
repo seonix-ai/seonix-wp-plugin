@@ -51,8 +51,11 @@ class Seonix_Tasks {
 	/** Transient lock guarding the 24h soft auto-pull against a thundering herd. */
 	const PULL_LOCK = 'seonix_tasks_pull_lock';
 
-	/** Soft staleness window (seconds) before the Dashboard triggers an auto-pull. */
-	const STALE_AFTER = 86400; // 24h
+	/** Soft staleness window (seconds) before the Dashboard triggers an auto-pull.
+	 * 5 hours (owner-tuned, 2026-07-17): opening the Dashboard re-syncs from
+	 * Seonix when the local copy is older than this; fresher views render the
+	 * stored copy with zero API calls, and a site nobody opens never syncs. */
+	const STALE_AFTER = 18000; // 5h
 
 	/** @var \wpdb|null Resolved lazily so constructing the class never requires $wpdb. */
 	private $wpdb;
@@ -254,11 +257,17 @@ class Seonix_Tasks {
 			'open'       => isset( $summary['open'] ) ? (int) $summary['open'] : 0,
 			'solved'     => isset( $summary['solved'] ) ? (int) $summary['solved'] : 0,
 			'regressed'  => isset( $summary['regressed'] ) ? (int) $summary['regressed'] : 0,
-			// Canonical "active issues" count computed by the backend (mirrors the
-			// app's activeProblemPageTotal). The plugin renders this verbatim so its
-			// headline equals the dashboard's. -1 = field absent (older backend) →
-			// the dashboard falls back to a local count until the next sync.
+			// Canonical page-count headlines computed by the backend on ONE basis
+			// (ProblemPageCount — affected pages of real error/warning issue types),
+			// so the plugin renders the SAME numbers as the app.seonix.ai dashboard:
+			//   active    → the app's activeProblemPageTotal ("Active issues")
+			//   fixed     → the app's counts.solved_problems ("Fixed")
+			//   came_back → the regressed slice of active ("Came back")
+			// -1 = field absent (older backend) → the Dashboard falls back to a
+			// local task-row count until the next sync.
 			'active'     => isset( $summary['active'] ) ? (int) $summary['active'] : -1,
+			'fixed'      => isset( $summary['fixed'] ) ? (int) $summary['fixed'] : -1,
+			'came_back'  => isset( $summary['came_back'] ) ? (int) $summary['came_back'] : -1,
 			'score'      => isset( $summary['score'] ) ? (int) $summary['score'] : 0,
 			'categories' => array(),
 		);
