@@ -839,9 +839,22 @@ class Seonix_Admin {
 					$ring_off    = $ring_c * ( 1 - max( 0, min( 100, $score ) ) / 100 );
 
 					// Plain-language headline + subline, derived from real numbers only.
-					if ( $score >= 90 ) {
+					// The verdict judges the WORST measured pillar, not the overall mean
+					// — mirrors the app's HealthOverview (a 93 overall with a lagging
+					// Speed 83 is "good", not "great"). Falls back to the overall score
+					// when no pillar carries a measured value.
+					$worst = null;
+					foreach ( $cats as $cat ) {
+						if ( isset( $cat['score'] ) && null !== $cat['score'] && ( null === $worst || (int) $cat['score'] < $worst ) ) {
+							$worst = (int) $cat['score'];
+						}
+					}
+					if ( null === $worst ) {
+						$worst = $score;
+					}
+					if ( $worst >= 90 ) {
 						$hero_title = __( 'Great shape — keep it up', 'seonix' );
-					} elseif ( $score >= 50 ) {
+					} elseif ( $worst >= 50 ) {
 						$hero_title = __( 'Good shape — room to improve', 'seonix' );
 					} else {
 						$hero_title = __( 'Needs attention', 'seonix' );
