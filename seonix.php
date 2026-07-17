@@ -62,6 +62,7 @@ require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-admin.php';
 // SEO Fix subsystem.
 require_once SEONIX_DIR . 'includes/seo-fix/interface-seonix-fix-method.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-engine.php';
+require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-builder-detector.php';
 
 // SEO meta bridge: canonical _seonix_* store + fan-out to the active SEO
 // plugin(s), standalone head renderer, and reverse sync back to Seonix.

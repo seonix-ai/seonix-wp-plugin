@@ -90,6 +90,33 @@ class Seonix_Meta_Renderer {
 	}
 
 	/**
+	 * The canonical URL WordPress will actually advertise for this post.
+	 *
+	 * og:url MUST agree with the canonical, or we manufacture the very
+	 * og_url_canonical_mismatch the scanner reports. Core's rel_canonical prints
+	 * wp_get_canonical_url(), which honours the `get_canonical_url` filter a
+	 * theme or plugin may use to override it — so reading the bare permalink
+	 * (what we used to do) silently diverges from the page's own canonical
+	 * whenever anything customises it.
+	 *
+	 * Falls back to the permalink when the canonical can't be resolved (e.g. an
+	 * unpublished post), which is exactly the old behaviour.
+	 *
+	 * @param int $post_id
+	 * @return string Empty when neither can be resolved.
+	 */
+	private function canonical_url( int $post_id ): string {
+		if ( function_exists( 'wp_get_canonical_url' ) ) {
+			$canonical = wp_get_canonical_url( $post_id );
+			if ( is_string( $canonical ) && '' !== $canonical ) {
+				return $canonical;
+			}
+		}
+		$permalink = get_permalink( $post_id );
+		return is_string( $permalink ) ? $permalink : '';
+	}
+
+	/**
 	 * The post ID meta should be rendered for, or 0 when this request is not
 	 * an eligible singular view.
 	 *
@@ -181,7 +208,7 @@ class Seonix_Meta_Renderer {
 		}
 
 		if ( $social_enabled && ( '' !== $og_title || '' !== $description ) ) {
-			$permalink = get_permalink( $post_id );
+			$canonical = $this->canonical_url( $post_id );
 			$lines[]   = '<meta property="og:type" content="article" />';
 			if ( '' !== $og_title ) {
 				$lines[] = '<meta property="og:title" content="' . esc_attr( $og_title ) . '" />';
@@ -189,8 +216,8 @@ class Seonix_Meta_Renderer {
 			if ( '' !== $description ) {
 				$lines[] = '<meta property="og:description" content="' . esc_attr( $description ) . '" />';
 			}
-			if ( $permalink ) {
-				$lines[] = '<meta property="og:url" content="' . esc_url( $permalink ) . '" />';
+			if ( '' !== $canonical ) {
+				$lines[] = '<meta property="og:url" content="' . esc_url( $canonical ) . '" />';
 			}
 			$site_name = get_bloginfo( 'name' );
 			if ( '' !== $site_name ) {

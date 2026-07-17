@@ -28,6 +28,11 @@ final class BrokenLinkRemoveModeTest extends TestCase {
 		$this->method  = new Seonix_Fix_Broken_Link( $this->history );
 
 		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		// apply()/dry_run() consult the builder detector before writing; default
+		// posts to "not builder-owned" so remove_link exercises its normal path.
+		Functions\when( 'get_post_meta' )->justReturn( '' );
+		Functions\when( 'apply_filters' )->alias( static fn ( $tag, $value = null ) => $value );
 	}
 
 	protected function tearDown(): void {

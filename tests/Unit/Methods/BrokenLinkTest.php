@@ -25,6 +25,12 @@ final class BrokenLinkTest extends TestCase {
         // home_url drives the relative-vs-absolute variant logic; default it
         // to example.com so each test can override per-case.
         Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+        // apply()/dry_run() ask the builder detector whether a post is builder-
+        // owned before writing; default every post to "not a builder" so these
+        // cases exercise the normal rewrite path. A case can override per-post.
+        Functions\when( 'get_post_meta' )->justReturn( '' );
+        Functions\when( 'apply_filters' )->alias( static fn ( $tag, $value = null ) => $value );
     }
 
     protected function tearDown(): void {

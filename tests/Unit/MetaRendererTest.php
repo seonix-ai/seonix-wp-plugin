@@ -115,6 +115,48 @@ final class MetaRendererTest extends TestCase {
 		$this->assertStringNotContainsString( 'name="robots"', $html );
 	}
 
+	public function test_og_url_follows_the_real_canonical_not_the_bare_permalink(): void {
+		// A theme or plugin can override the canonical through the
+		// `get_canonical_url` filter, which wp_get_canonical_url() honours and
+		// core's rel_canonical prints. og:url must follow THAT, not the raw
+		// permalink — otherwise Seonix manufactures the exact
+		// og_url_canonical_mismatch its own scanner reports.
+		Functions\when( 'get_option' )->justReturn( 'on' );
+		Functions\when( 'is_singular' )->justReturn( true );
+		Functions\when( 'get_queried_object_id' )->justReturn( 7 );
+		Functions\when( 'get_post_meta' )->alias( function ( $post_id, $key ) {
+			$own = array(
+				Seonix_Meta_Bridge::META_TITLE => 'SERP Title',
+				Seonix_Meta_Bridge::META_DESC  => 'Desc.',
+			);
+			return isset( $own[ $key ] ) ? $own[ $key ] : '';
+		} );
+		// Permalink and canonical deliberately disagree on the trailing slash.
+		Functions\when( 'get_permalink' )->justReturn( 'https://example.com/post-7' );
+		Functions\when( 'wp_get_canonical_url' )->justReturn( 'https://example.com/post-7/' );
+		Functions\when( 'get_bloginfo' )->justReturn( 'Example Site' );
+		Functions\when( 'get_locale' )->justReturn( 'en_US' );
+		Functions\when( 'get_post_time' )->justReturn( '2026-07-13T10:00:00+00:00' );
+		Functions\when( 'get_post_modified_time' )->justReturn( '2026-07-13T10:00:00+00:00' );
+		Functions\when( 'get_post_thumbnail_id' )->justReturn( 0 );
+
+		$renderer = new Seonix_Meta_Renderer();
+		ob_start();
+		$renderer->render_head();
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString(
+			'<meta property="og:url" content="https://example.com/post-7/"',
+			$html,
+			'og:url must use the canonical WordPress actually advertises'
+		);
+		$this->assertStringNotContainsString(
+			'<meta property="og:url" content="https://example.com/post-7"',
+			$html,
+			'og:url must not fall back to the bare permalink when a canonical exists'
+		);
+	}
+
 	public function test_render_head_silent_when_post_has_no_meta(): void {
 		Functions\when( 'get_option' )->justReturn( 'on' );
 		Functions\when( 'is_singular' )->justReturn( true );
