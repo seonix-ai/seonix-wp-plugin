@@ -451,10 +451,12 @@ class Seonix_Metabox {
 				'scoreOutOf'       => __( '%d out of 100', 'seonix' ),
 				// Links section (block-editor panel + classic metabox).
 				'linksLabel'    => __( 'Links', 'seonix' ),
-				'internalLinks' => __( 'Internal links', 'seonix' ),
-				'externalLinks' => __( 'External links', 'seonix' ),
-				'noInternal'    => __( 'No internal links in this page yet.', 'seonix' ),
-				'noExternal'    => __( 'No external links.', 'seonix' ),
+				'internalLinks' => __( 'Internal', 'seonix' ),
+				'externalLinks' => __( 'External', 'seonix' ),
+				'noInternal'    => __( 'No internal links yet.', 'seonix' ),
+				'noExternal'    => __( 'No external links yet.', 'seonix' ),
+				'noLinksTitle'  => __( 'No links on this page', 'seonix' ),
+				'noLinksSub'    => __( 'Add a few internal links to help readers and search engines navigate your content.', 'seonix' ),
 			),
 			'groups'  => array(),
 			'light'   => 'green',
@@ -600,12 +602,15 @@ class Seonix_Metabox {
 	 * @param WP_Post $post The post being edited.
 	 */
 	/**
-	 * Extract the links in the post body, split into internal vs external and
-	 * de-duplicated by href. Relative and same-host links are internal; other
-	 * hosts are external. Fragment / mailto / tel / javascript / data hrefs are
-	 * not page links and are skipped.
+	 * Extract the links in the post body, classified per the editor-concepts
+	 * spec and split into the two display groups. Each item carries:
+	 *   kind     — internal | external | mail | anchor
+	 *   nofollow — whether rel contains nofollow
+	 * Internal group = internal + #jump anchors; external group = external +
+	 * mailto. De-duplicated by href within each group. tel / javascript / data
+	 * hrefs are not page links and are skipped.
 	 *
-	 * @return array{internal:array<int,array{href:string,anchor:string}>,external:array<int,array{href:string,anchor:string}>}
+	 * @return array{internal:array<int,array{href:string,anchor:string,kind:string,nofollow:bool}>,external:array<int,array{href:string,anchor:string,kind:string,nofollow:bool}>}
 	 */
 	private function extract_links( string $html ): array {
 		$internal = array();
@@ -633,39 +638,84 @@ class Seonix_Metabox {
 				continue;
 			}
 			$lower = strtolower( $href );
-			if ( 0 === strpos( $href, '#' )
-				|| 0 === strpos( $lower, 'mailto:' )
-				|| 0 === strpos( $lower, 'tel:' )
+			if ( 0 === strpos( $lower, 'tel:' )
 				|| 0 === strpos( $lower, 'javascript:' )
 				|| 0 === strpos( $lower, 'data:' ) ) {
 				continue;
 			}
-			$anchor      = trim( (string) wp_strip_all_tags( $a->textContent ) );
-			$is_absolute = (bool) preg_match( '#^https?://#i', $href );
-			$is_external = false;
-			if ( $is_absolute ) {
-				$host        = wp_parse_url( $href, PHP_URL_HOST );
-				$host        = $host ? preg_replace( '/^www\./i', '', $host ) : null;
-				$is_external = $home_host ? ( $host && strcasecmp( $host, $home_host ) !== 0 ) : true;
+			$anchor   = trim( (string) wp_strip_all_tags( $a->textContent ) );
+			$nofollow = (bool) preg_match( '/\bnofollow\b/i', (string) $a->getAttribute( 'rel' ) );
+
+			if ( 0 === strpos( $href, '#' ) ) {
+				$kind = 'anchor';
+			} elseif ( 0 === strpos( $lower, 'mailto:' ) ) {
+				$kind = 'mail';
+			} elseif ( preg_match( '#^https?://#i', $href ) ) {
+				$host = wp_parse_url( $href, PHP_URL_HOST );
+				$host = $host ? preg_replace( '/^www\./i', '', $host ) : null;
+				$kind = ( $home_host && $host && 0 === strcasecmp( $host, $home_host ) ) ? 'internal' : 'external';
+			} else {
+				$kind = 'internal'; // relative → internal by definition
 			}
-			if ( $is_external ) {
-				if ( ! isset( $seen_external[ $href ] ) ) {
-					$seen_external[ $href ] = true;
-					$external[]             = array( 'href' => $href, 'anchor' => $anchor );
+
+			$item = array(
+				'href'     => $href,
+				'anchor'   => $anchor,
+				'kind'     => $kind,
+				'nofollow' => $nofollow,
+			);
+			if ( 'internal' === $kind || 'anchor' === $kind ) {
+				if ( ! isset( $seen_internal[ $href ] ) ) {
+					$seen_internal[ $href ] = true;
+					$internal[]             = $item;
 				}
-			} elseif ( ! isset( $seen_internal[ $href ] ) ) {
-				$seen_internal[ $href ] = true;
-				$internal[]             = array( 'href' => $href, 'anchor' => $anchor );
+			} elseif ( ! isset( $seen_external[ $href ] ) ) {
+				$seen_external[ $href ] = true;
+				$external[]             = $item;
 			}
 		}
 
 		return array( 'internal' => $internal, 'external' => $external );
 	}
 
+	/** Inline SVG for a link-type icon (editor-concepts spec, 13×13 @ viewBox 24). */
+	private function link_type_svg( string $kind ): string {
+		$open = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+		switch ( $kind ) {
+			case 'external':
+				return $open . '<path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>';
+			case 'mail':
+				return $open . '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>';
+			case 'anchor':
+				return $open . '<path d="M6 9h12M5 15h12M10 4L8 20M16 4l-2 16"></path></svg>';
+			default: // internal chain
+				return $open . '<path d="M9.5 14.5l5-5"></path><path d="M11 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"></path><path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"></path></svg>';
+		}
+	}
+
+	/** Compact display path per the concept: internal → /path, external → host/path. */
+	private function link_display_path( array $it ): string {
+		if ( 'anchor' === $it['kind'] || 'mail' === $it['kind'] ) {
+			return $it['href'];
+		}
+		if ( ! preg_match( '#^https?://#i', $it['href'] ) ) {
+			return $it['href']; // relative internal — already a path
+		}
+		$parts = wp_parse_url( $it['href'] );
+		$path  = ( isset( $parts['path'] ) && '/' !== $parts['path'] ) ? $parts['path'] : '';
+		$path .= isset( $parts['query'] ) ? '?' . $parts['query'] : '';
+		if ( 'internal' === $it['kind'] ) {
+			return '' !== $path ? $path : '/';
+		}
+		$host = isset( $parts['host'] ) ? preg_replace( '/^www\./i', '', $parts['host'] ) : '';
+		return $host . $path;
+	}
+
 	/**
-	 * Render the "Links" section of the classic-editor metabox: internal +
-	 * external link lists with counts. The block-editor panel renders the same
-	 * thing client-side from the live content (editor-panel.js).
+	 * Render the "Links" section of the classic-editor metabox, styled per the
+	 * editor-concepts spec: an internal/external split count in the head, two
+	 * groups with hairline headers, compact icon rows and typed tags. The
+	 * block-editor panel renders the same thing client-side (editor-panel.js).
 	 */
 	private function render_links_section( WP_Post $post, array $d ): void {
 		$links     = $this->extract_links( (string) $post->post_content );
@@ -675,32 +725,54 @@ class Seonix_Metabox {
 		echo '<div class="seonix-mb-group seonix-mb-links">';
 		echo '<div class="seonix-mb-grouphead">';
 		echo '<span class="seonix-cat seonix-cat--links">' . esc_html( $d['i18n']['linksLabel'] ) . '</span>';
-		echo '<span class="seonix-mb-groupcount">' . esc_html( $int_count . ' / ' . $ext_count ) . '</span>';
+		echo '<span class="lnk-split"><span class="in">' . esc_html( (string) $int_count ) . '</span><span class="sl">/</span><span class="ex">' . esc_html( (string) $ext_count ) . '</span></span>';
 		echo '</div>';
 
-		$this->render_link_list( $links['internal'], $d['i18n']['internalLinks'], $d['i18n']['noInternal'] );
-		$this->render_link_list( $links['external'], $d['i18n']['externalLinks'], $d['i18n']['noExternal'] );
+		if ( 0 === $int_count && 0 === $ext_count ) {
+			// Whole-section empty state (concept: sx-lnk-void).
+			echo '<div class="sx-lnk-void">';
+			echo '<span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 14.5l5-5"></path><path d="M11 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"></path><path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"></path></svg></span>';
+			echo '<span class="h">' . esc_html( $d['i18n']['noLinksTitle'] ) . '</span>';
+			echo '<span class="s">' . esc_html( $d['i18n']['noLinksSub'] ) . '</span>';
+			echo '</div></div>';
+			return;
+		}
+
+		$this->render_link_group( $links['internal'], $d['i18n']['internalLinks'], $d['i18n']['noInternal'], 'internal' );
+		$this->render_link_group( $links['external'], $d['i18n']['externalLinks'], $d['i18n']['noExternal'], 'external' );
 
 		echo '</div>';
 	}
 
-	/** Render one labelled link list (or its empty state). */
-	private function render_link_list( array $items, string $label, string $empty ): void {
-		echo '<div class="seonix-mb-linkgroup">';
-		echo '<div class="seonix-mb-linklabel">' . esc_html( $label ) . ' <span class="seonix-mb-linkn">' . esc_html( (string) count( $items ) ) . '</span></div>';
+	/** Render one concept-style link group: hairline header + icon rows. */
+	private function render_link_group( array $items, string $label, string $empty, string $group ): void {
+		echo '<div class="sx-lnk-group">';
+		echo '<div class="sx-lnk-group-h"><span>' . esc_html( $label ) . '</span><span class="n">' . esc_html( (string) count( $items ) ) . '</span><span class="rule"></span></div>';
 		if ( empty( $items ) ) {
-			echo '<div class="seonix-mb-linkempty">' . esc_html( $empty ) . '</div>';
-		} else {
-			echo '<ul class="seonix-mb-linklist">';
-			foreach ( $items as $it ) {
-				echo '<li class="seonix-mb-linkitem">';
-				if ( '' !== $it['anchor'] ) {
-					echo '<span class="seonix-mb-linkanchor">' . esc_html( $it['anchor'] ) . '</span>';
-				}
-				echo '<a class="seonix-mb-linkhref" href="' . esc_url( $it['href'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $it['href'] ) . '</a>';
-				echo '</li>';
+			$svg = 'external' === $group
+				? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>'
+				: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 14.5l5-5"></path><path d="M11 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"></path><path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"></path></svg>';
+			echo '<div class="sx-lnk-empty">' . $svg . '<span>' . esc_html( $empty ) . '</span></div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG above.
+			return;
+		}
+		foreach ( $items as $it ) {
+			$ico_cls = 'sx-lnk-ico';
+			if ( 'external' === $it['kind'] ) {
+				$ico_cls .= ' ext';
+			} elseif ( 'mail' === $it['kind'] ) {
+				$ico_cls .= ' mail';
 			}
-			echo '</ul>';
+			$path_cls = 'sx-lnk-path' . ( 'external' === $it['kind'] || 'mail' === $it['kind'] ? ' sx-lnk-ext-path' : '' );
+			$display  = $this->link_display_path( $it );
+			$anchor   = '' !== $it['anchor'] ? $it['anchor'] : $display;
+
+			echo '<a class="sx-lnk" href="' . esc_url( $it['href'] ) . '" target="_blank" rel="noopener noreferrer">';
+			echo '<span class="' . esc_attr( $ico_cls ) . '">' . $this->link_type_svg( $it['kind'] ) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG.
+			echo '<span class="sx-lnk-text"><span class="sx-lnk-anchor">' . esc_html( $anchor ) . '</span><span class="' . esc_attr( $path_cls ) . '">' . esc_html( $display ) . '</span></span>';
+			if ( ! empty( $it['nofollow'] ) ) {
+				echo '<span class="sx-lnk-tag">nofollow</span>';
+			}
+			echo '</a>';
 		}
 		echo '</div>';
 	}

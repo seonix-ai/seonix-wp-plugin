@@ -10,9 +10,11 @@ use Seonix_Metabox;
  * Covers Seonix_Metabox::extract_links — the post-body link inventory shown in
  * the metabox Links section (and mirrored client-side by editor-panel.js).
  *
- * Contract: relative + same-host anchors are internal, other hosts external,
- * fragment/mailto/tel/javascript/data are skipped, and both lists are
- * de-duplicated by href. www. is ignored when comparing hosts.
+ * Contract (editor-concepts spec): every anchor is typed — internal (relative
+ * or same-host, www. ignored), external (other host), mail (mailto:) and
+ * anchor (#jump). Internal group = internal + anchor; external group =
+ * external + mail. Each item carries a nofollow flag from rel.
+ * tel/javascript/data are skipped, groups de-duplicated by href.
  */
 final class LinksExtractionTest extends TestCase {
 
@@ -60,13 +62,28 @@ final class LinksExtractionTest extends TestCase {
 		$this->assertSame( 'Example', $r['external'][0]['anchor'] );
 	}
 
-	public function test_skips_fragment_mailto_tel_and_js(): void {
+	public function test_fragment_and_mailto_are_typed_not_skipped(): void {
 		$r = $this->extract(
 			'<a href="#top">Top</a><a href="mailto:a@b.com">Mail</a>'
 			. '<a href="tel:+49">Call</a><a href="javascript:void(0)">JS</a>'
 		);
-		$this->assertCount( 0, $r['internal'] );
-		$this->assertCount( 0, $r['external'] );
+		// #jump → anchor type in the internal group; mailto → mail type in the
+		// external group; tel/javascript stay skipped.
+		$this->assertCount( 1, $r['internal'] );
+		$this->assertSame( 'anchor', $r['internal'][0]['kind'] );
+		$this->assertCount( 1, $r['external'] );
+		$this->assertSame( 'mail', $r['external'][0]['kind'] );
+	}
+
+	public function test_kind_and_nofollow_flags(): void {
+		$r = $this->extract(
+			'<a href="/blog">In</a>'
+			. '<a href="https://example.com/a" rel="nofollow noopener">Ex</a>'
+		);
+		$this->assertSame( 'internal', $r['internal'][0]['kind'] );
+		$this->assertFalse( $r['internal'][0]['nofollow'] );
+		$this->assertSame( 'external', $r['external'][0]['kind'] );
+		$this->assertTrue( $r['external'][0]['nofollow'] );
 	}
 
 	public function test_dedupes_by_href(): void {

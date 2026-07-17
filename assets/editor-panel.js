@@ -787,9 +787,11 @@
 		);
 	}
 
-	// Split the article's anchors into internal vs external, de-duped by href.
-	// Relative + same-host → internal; other hosts → external; fragment /
-	// mailto / tel / javascript / data are skipped. Mirrors the PHP
+	// Classify the article's anchors per the editor-concepts spec, split into
+	// the two display groups (internal = internal + #jump anchors, external =
+	// external + mailto), de-duped by href. Each item carries kind
+	// (internal | external | mail | anchor) + nofollow. tel / javascript /
+	// data are skipped — not page links. Mirrors the PHP
 	// Seonix_Metabox::extract_links so both editors agree.
 	function classifyLinks( html, homeHost ) {
 		var internal = [];
@@ -809,49 +811,119 @@
 			var href = ( anchors[ i ].getAttribute( 'href' ) || '' ).trim();
 			if ( ! href ) { continue; }
 			var lower = href.toLowerCase();
-			if ( href.charAt( 0 ) === '#' || lower.indexOf( 'mailto:' ) === 0 || lower.indexOf( 'tel:' ) === 0 || lower.indexOf( 'javascript:' ) === 0 || lower.indexOf( 'data:' ) === 0 ) {
+			if ( lower.indexOf( 'tel:' ) === 0 || lower.indexOf( 'javascript:' ) === 0 || lower.indexOf( 'data:' ) === 0 ) {
 				continue;
 			}
 			var anchor = ( anchors[ i ].textContent || '' ).trim();
-			var isExternal = false;
-			if ( /^https?:\/\//i.test( href ) ) {
+			var nofollow = /\bnofollow\b/i.test( anchors[ i ].getAttribute( 'rel' ) || '' );
+
+			var kind;
+			if ( href.charAt( 0 ) === '#' ) {
+				kind = 'anchor';
+			} else if ( lower.indexOf( 'mailto:' ) === 0 ) {
+				kind = 'mail';
+			} else if ( /^https?:\/\//i.test( href ) ) {
 				var h = '';
 				// hostname (no port) to match PHP's wp_parse_url(..., PHP_URL_HOST),
 				// which the home host is derived from — .host would carry :8091 on
 				// a dev site and wrongly mark same-site links as external.
 				try { h = new URL( href ).hostname.toLowerCase().replace( /^www\./, '' ); } catch ( e2 ) { h = ''; }
-				isExternal = host ? ( !! h && h !== host ) : true;
+				kind = ( host && h && h === host ) ? 'internal' : 'external';
+			} else {
+				kind = 'internal'; // relative → internal by definition
 			}
-			if ( isExternal ) {
-				if ( ! seenE[ href ] ) { seenE[ href ] = 1; external.push( { href: href, anchor: anchor } ); }
-			} else if ( ! seenI[ href ] ) {
-				seenI[ href ] = 1; internal.push( { href: href, anchor: anchor } );
+
+			var item = { href: href, anchor: anchor, kind: kind, nofollow: nofollow };
+			if ( 'internal' === kind || 'anchor' === kind ) {
+				if ( ! seenI[ href ] ) { seenI[ href ] = 1; internal.push( item ); }
+			} else if ( ! seenE[ href ] ) {
+				seenE[ href ] = 1; external.push( item );
 			}
 		}
 		return { internal: internal, external: external };
 	}
 
-	// One labelled link list (or its empty state) inside the Links accordion.
-	function linkList( items, label, empty ) {
+	// Link-type icon (editor-concepts spec, 13×13 @ viewBox 24).
+	function linkTypeIcon( kind, size ) {
+		var svgProps = {
+			width: size || 13, height: size || 13, viewBox: '0 0 24 24', fill: 'none',
+			stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round',
+			'aria-hidden': 'true'
+		};
+		if ( 'external' === kind ) {
+			return el( 'svg', svgProps, el( 'path', { d: 'M7 17L17 7' } ), el( 'path', { d: 'M8 7h9v9' } ) );
+		}
+		if ( 'mail' === kind ) {
+			return el( 'svg', svgProps, el( 'rect', { x: 3, y: 5, width: 18, height: 14, rx: 2 } ), el( 'path', { d: 'm3 7 9 6 9-6' } ) );
+		}
+		if ( 'anchor' === kind ) {
+			return el( 'svg', svgProps, el( 'path', { d: 'M6 9h12M5 15h12M10 4L8 20M16 4l-2 16' } ) );
+		}
 		return el(
-			'div',
-			{ className: 'seonix-mb-linkgroup' },
-			el( 'div', { className: 'seonix-mb-linklabel' }, label, ' ', el( 'span', { className: 'seonix-mb-linkn' }, String( items.length ) ) ),
-			items.length
-				? el( 'ul', { className: 'seonix-mb-linklist' }, items.map( function ( it, i ) {
-					return el(
-						'li',
-						{ className: 'seonix-mb-linkitem', key: 'l' + i },
-						it.anchor ? el( 'span', { className: 'seonix-mb-linkanchor' }, it.anchor ) : null,
-						el( 'a', { className: 'seonix-mb-linkhref', href: it.href, target: '_blank', rel: 'noopener noreferrer' }, it.href )
-					);
-				} ) )
-				: el( 'div', { className: 'seonix-mb-linkempty' }, empty )
+			'svg', svgProps,
+			el( 'path', { d: 'M9.5 14.5l5-5' } ),
+			el( 'path', { d: 'M11 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1' } ),
+			el( 'path', { d: 'M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1' } )
 		);
 	}
 
-	// Links inventory accordion: internal + external lists parsed live from the
-	// editor content, so the counts track what the author is actually writing.
+	// Compact display path per the concept: internal → /path, external → host/path.
+	function linkDisplayPath( it ) {
+		if ( 'anchor' === it.kind || 'mail' === it.kind ) { return it.href; }
+		if ( ! /^https?:\/\//i.test( it.href ) ) { return it.href; }
+		try {
+			var u = new URL( it.href );
+			var path = ( '/' === u.pathname ? '' : u.pathname ) + ( u.search || '' );
+			if ( 'internal' === it.kind ) { return path || '/'; }
+			return u.hostname.replace( /^www\./, '' ) + path;
+		} catch ( e ) {
+			return it.href;
+		}
+	}
+
+	// One concept-style link group: hairline header + compact icon rows.
+	function linkGroup( items, label, empty, group ) {
+		var rows;
+		if ( items.length ) {
+			rows = items.map( function ( it, i ) {
+				var icoCls = 'sx-lnk-ico' + ( 'external' === it.kind ? ' ext' : ( 'mail' === it.kind ? ' mail' : '' ) );
+				var pathCls = 'sx-lnk-path' + ( 'external' === it.kind || 'mail' === it.kind ? ' sx-lnk-ext-path' : '' );
+				var display = linkDisplayPath( it );
+				return el(
+					'a',
+					{ className: 'sx-lnk', key: 'l' + i, href: it.href, target: '_blank', rel: 'noopener noreferrer' },
+					el( 'span', { className: icoCls }, linkTypeIcon( it.kind ) ),
+					el(
+						'span', { className: 'sx-lnk-text' },
+						el( 'span', { className: 'sx-lnk-anchor' }, it.anchor || display ),
+						el( 'span', { className: pathCls }, display )
+					),
+					it.nofollow ? el( 'span', { className: 'sx-lnk-tag' }, 'nofollow' ) : null
+				);
+			} );
+		} else {
+			rows = el(
+				'div', { className: 'sx-lnk-empty' },
+				linkTypeIcon( 'external' === group ? 'external' : 'internal', 14 ),
+				el( 'span', null, empty )
+			);
+		}
+		return el(
+			'div',
+			{ className: 'sx-lnk-group' },
+			el(
+				'div', { className: 'sx-lnk-group-h' },
+				el( 'span', null, label ),
+				el( 'span', { className: 'n' }, String( items.length ) ),
+				el( 'span', { className: 'rule' } )
+			),
+			rows
+		);
+	}
+
+	// Links inventory accordion: internal + external groups parsed live from
+	// the editor content (concept-spec rows), so the counts track what the
+	// author is actually writing.
 	function LinksSection() {
 		var st = useState( false );
 		var open = st[0];
@@ -865,6 +937,22 @@
 			}, [] )
 			: '';
 		var res = classifyLinks( content, data.homeHost );
+		var isVoid = ! res.internal.length && ! res.external.length;
+
+		var body;
+		if ( isVoid ) {
+			body = el(
+				'div', { className: 'sx-lnk-void' },
+				el( 'span', { className: 'ic' }, linkTypeIcon( 'internal', 19 ) ),
+				el( 'span', { className: 'h' }, i18n.noLinksTitle || 'No links on this page' ),
+				el( 'span', { className: 's' }, i18n.noLinksSub || 'Add a few internal links to help readers and search engines navigate your content.' )
+			);
+		} else {
+			body = [
+				linkGroup( res.internal, i18n.internalLinks || 'Internal', i18n.noInternal || 'No internal links yet.', 'internal' ),
+				linkGroup( res.external, i18n.externalLinks || 'External', i18n.noExternal || 'No external links yet.', 'external' )
+			];
+		}
 
 		return el(
 			'div',
@@ -878,7 +966,11 @@
 					onClick: function () { setOpen( ! open ); }
 				},
 				el( 'span', { className: 'sx-acc-lead' },
-					el( 'span', { className: 'sx-ind-soft sx-ind-soft--good' }, res.internal.length + ' / ' + res.external.length )
+					el( 'span', { className: 'lnk-split' },
+						el( 'span', { className: 'in' + ( res.internal.length ? '' : ' is-dim' ) }, String( res.internal.length ) ),
+						el( 'span', { className: 'sl' }, '/' ),
+						el( 'span', { className: 'ex' }, String( res.external.length ) )
+					)
 				),
 				el( 'span', { className: 'sx-acc-label' }, i18n.linksLabel || 'Links' ),
 				el(
@@ -887,14 +979,7 @@
 					el( 'path', { d: 'M7 10l5 5 5-5', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' } )
 				)
 			),
-			open
-				? el(
-					'div',
-					{ className: 'sx-acc-body seonix-mb-links' },
-					linkList( res.internal, i18n.internalLinks || 'Internal links', i18n.noInternal || 'No internal links in this page yet.' ),
-					linkList( res.external, i18n.externalLinks || 'External links', i18n.noExternal || 'No external links.' )
-				)
-				: null
+			open ? el( 'div', { className: 'sx-acc-body seonix-mb-links' }, body ) : null
 		);
 	}
 
