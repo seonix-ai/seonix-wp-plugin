@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.11.0
+Stable tag: 2.11.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,19 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.11.3 =
+* Fixed: the "Key takeaways" box at the top of Seonix articles now takes its look from your site — your theme's fonts and colours with a light tint of your brand colour — instead of bringing its own palette. Previously it could also flip to a dark box on light sites when a visitor's device preferred dark mode.
+* Fixed: theme stylesheets could distort the box — an oversized uppercase heading, bullet markers overlapping the text, or extra list indentation. It now renders consistently across themes.
+* Improved: the broken-link fix now leaves page-builder content (Elementor, Divi, WPBakery and similar) alone instead of editing markup those builders may regenerate, and `og:url` follows the page's real canonical URL.
+* Improved: the 404 log folds scanner and bot probes (requests like `/.env` or `/xmlrpc.php` that never existed on your site) into a collapsed "Scanner & bot noise" section with a one-click Dismiss all, so real broken links stay visible.
+
+= 2.11.2 =
+* New: a Seonix column in the post and page list tables, and the editor score is cached until the text changes.
+
+= 2.11.1 =
+* New: redirects live in the Seonix admin shell, with a 404 log, CSV import/export, and accurate Site Health counts.
+* New: a score badge in the editor and the Seonix mark in the toolbar entry.
 
 = 2.11.0 =
 * New: a focus keyphrase field in the editor for sites without a separate SEO plugin — set the phrase a page should rank for and the Seonix panel scores the text against it. Sites that already have an SEO plugin keep using that plugin's field, as before.
