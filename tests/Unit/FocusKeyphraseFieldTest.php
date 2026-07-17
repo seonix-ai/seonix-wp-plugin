@@ -45,6 +45,8 @@ final class FocusKeyphraseFieldTest extends TestCase {
 		Monkey\setUp();
 		Functions\when( 'is_plugin_active' )->justReturn( false );
 		Functions\when( '__' )->returnArg();
+		// audit_data() reads home_url() for the links section's home host.
+		Functions\when( 'home_url' )->justReturn( 'https://example.test' );
 		// Default for the tests that reach sanitize_value() without caring about
 		// sanitising. Mirrors core's strip-then-collapse; individual tests below
 		// override it with returnArg() where the assertion is about pass-through.

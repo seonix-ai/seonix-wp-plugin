@@ -2091,6 +2091,65 @@ body.seonix-modal-open {
   margin-top: 2px;
 }
 
+/* Links inventory (internal / external) in the metabox + editor panel. */
+.seonix-mb-linkgroup {
+  margin-top: 10px;
+}
+.seonix-mb-linkgroup:first-child {
+  margin-top: 4px;
+}
+.seonix-mb-linklabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sx-mute);
+  margin-bottom: 6px;
+}
+.seonix-mb-linkn {
+  color: var(--sx-mute-dim, #9a97b5);
+  font-weight: 700;
+}
+.seonix-mb-linklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.seonix-mb-linkitem {
+  padding: 6px 8px;
+  border: 1px solid var(--sx-border-soft);
+  border-radius: 8px;
+  background: var(--sx-paper-warm);
+}
+.seonix-mb-linkanchor {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sx-ink);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seonix-mb-linkhref {
+  display: block;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--sx-ac);
+  text-decoration: none;
+  word-break: break-all;
+}
+.seonix-mb-linkhref:hover {
+  text-decoration: underline;
+}
+.seonix-mb-linkempty {
+  font-size: 12.5px;
+  color: var(--sx-mute);
+}
+
 .seonix-mb-foot {
   display: flex;
   align-items: center;

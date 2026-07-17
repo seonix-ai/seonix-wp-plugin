@@ -787,6 +787,114 @@
 		);
 	}
 
+	// Split the article's anchors into internal vs external, de-duped by href.
+	// Relative + same-host → internal; other hosts → external; fragment /
+	// mailto / tel / javascript / data are skipped. Mirrors the PHP
+	// Seonix_Metabox::extract_links so both editors agree.
+	function classifyLinks( html, homeHost ) {
+		var internal = [];
+		var external = [];
+		if ( ! html ) { return { internal: internal, external: external }; }
+		var doc;
+		try {
+			doc = new DOMParser().parseFromString( html, 'text/html' );
+		} catch ( e ) {
+			return { internal: internal, external: external };
+		}
+		var host = ( homeHost || '' ).toLowerCase().replace( /^www\./, '' );
+		var seenI = {};
+		var seenE = {};
+		var anchors = doc.querySelectorAll( 'a[href]' );
+		for ( var i = 0; i < anchors.length; i++ ) {
+			var href = ( anchors[ i ].getAttribute( 'href' ) || '' ).trim();
+			if ( ! href ) { continue; }
+			var lower = href.toLowerCase();
+			if ( href.charAt( 0 ) === '#' || lower.indexOf( 'mailto:' ) === 0 || lower.indexOf( 'tel:' ) === 0 || lower.indexOf( 'javascript:' ) === 0 || lower.indexOf( 'data:' ) === 0 ) {
+				continue;
+			}
+			var anchor = ( anchors[ i ].textContent || '' ).trim();
+			var isExternal = false;
+			if ( /^https?:\/\//i.test( href ) ) {
+				var h = '';
+				try { h = new URL( href ).host.toLowerCase().replace( /^www\./, '' ); } catch ( e2 ) { h = ''; }
+				isExternal = host ? ( !! h && h !== host ) : true;
+			}
+			if ( isExternal ) {
+				if ( ! seenE[ href ] ) { seenE[ href ] = 1; external.push( { href: href, anchor: anchor } ); }
+			} else if ( ! seenI[ href ] ) {
+				seenI[ href ] = 1; internal.push( { href: href, anchor: anchor } );
+			}
+		}
+		return { internal: internal, external: external };
+	}
+
+	// One labelled link list (or its empty state) inside the Links accordion.
+	function linkList( items, label, empty ) {
+		return el(
+			'div',
+			{ className: 'seonix-mb-linkgroup' },
+			el( 'div', { className: 'seonix-mb-linklabel' }, label, ' ', el( 'span', { className: 'seonix-mb-linkn' }, String( items.length ) ) ),
+			items.length
+				? el( 'ul', { className: 'seonix-mb-linklist' }, items.map( function ( it, i ) {
+					return el(
+						'li',
+						{ className: 'seonix-mb-linkitem', key: 'l' + i },
+						it.anchor ? el( 'span', { className: 'seonix-mb-linkanchor' }, it.anchor ) : null,
+						el( 'a', { className: 'seonix-mb-linkhref', href: it.href, target: '_blank', rel: 'noopener noreferrer' }, it.href )
+					);
+				} ) )
+				: el( 'div', { className: 'seonix-mb-linkempty' }, empty )
+		);
+	}
+
+	// Links inventory accordion: internal + external lists parsed live from the
+	// editor content, so the counts track what the author is actually writing.
+	function LinksSection() {
+		var st = useState( false );
+		var open = st[0];
+		var setOpen = st[1];
+		var i18n = data.i18n || {};
+		var useSelect = wp.data && wp.data.useSelect;
+		var content = useSelect
+			? useSelect( function ( select ) {
+				var ed = select( 'core/editor' );
+				return ed && ed.getEditedPostContent ? ed.getEditedPostContent() : '';
+			}, [] )
+			: '';
+		var res = classifyLinks( content, data.homeHost );
+
+		return el(
+			'div',
+			{ className: 'sx-acc' },
+			el(
+				'button',
+				{
+					type: 'button',
+					className: 'sx-acc-head',
+					'aria-expanded': open ? 'true' : 'false',
+					onClick: function () { setOpen( ! open ); }
+				},
+				el( 'span', { className: 'sx-acc-lead' },
+					el( 'span', { className: 'sx-ind-soft sx-ind-soft--good' }, res.internal.length + ' / ' + res.external.length )
+				),
+				el( 'span', { className: 'sx-acc-label' }, i18n.linksLabel || 'Links' ),
+				el(
+					'svg',
+					{ className: 'sx-acc-chev' + ( open ? ' is-open' : '' ), width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+					el( 'path', { d: 'M7 10l5 5 5-5', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' } )
+				)
+			),
+			open
+				? el(
+					'div',
+					{ className: 'sx-acc-body seonix-mb-links' },
+					linkList( res.internal, i18n.internalLinks || 'Internal links', i18n.noInternal || 'No internal links in this page yet.' ),
+					linkList( res.external, i18n.externalLinks || 'External links', i18n.noExternal || 'No external links.' )
+				)
+				: null
+		);
+	}
+
 	function PanelBody() {
 		var score = useScore();
 		var i18n = data.i18n || {};
@@ -830,6 +938,7 @@
 			scanItems.length
 				? el( Section, { key: 'page', label: i18n.pageIssuesLabel || 'Page issues', items: scanItems } )
 				: null,
+			el( LinksSection, { key: 'links' } ),
 			foot()
 		);
 	}

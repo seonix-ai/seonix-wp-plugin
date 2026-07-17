@@ -397,6 +397,9 @@ class Seonix_Metabox {
 			// Identifies the post to the /score route, which checks edit_post
 			// against it. 0 for a draft that has never been saved.
 			'postId'  => (int) $post->ID,
+			// Home host so the editor-panel JS can split the article's links
+			// into internal vs external without another round-trip.
+			'homeHost' => (string) wp_parse_url( home_url(), PHP_URL_HOST ),
 			// Whether an SEO plugin already gives the author a keyphrase field.
 			// When it does, Seonix shows none of its own — see
 			// Seonix_SEO_Engine::has_native_focus_kw_ui.
@@ -446,6 +449,12 @@ class Seonix_Metabox {
 				'noKeyphraseSkipped' => __( 'No focus keyphrase set — keyphrase checks are skipped.', 'seonix' ),
 				/* translators: %d: score out of 100. */
 				'scoreOutOf'       => __( '%d out of 100', 'seonix' ),
+				// Links section (block-editor panel + classic metabox).
+				'linksLabel'    => __( 'Links', 'seonix' ),
+				'internalLinks' => __( 'Internal links', 'seonix' ),
+				'externalLinks' => __( 'External links', 'seonix' ),
+				'noInternal'    => __( 'No internal links in this page yet.', 'seonix' ),
+				'noExternal'    => __( 'No external links.', 'seonix' ),
 			),
 			'groups'  => array(),
 			'light'   => 'green',
@@ -590,6 +599,112 @@ class Seonix_Metabox {
 	 *
 	 * @param WP_Post $post The post being edited.
 	 */
+	/**
+	 * Extract the links in the post body, split into internal vs external and
+	 * de-duplicated by href. Relative and same-host links are internal; other
+	 * hosts are external. Fragment / mailto / tel / javascript / data hrefs are
+	 * not page links and are skipped.
+	 *
+	 * @return array{internal:array<int,array{href:string,anchor:string}>,external:array<int,array{href:string,anchor:string}>}
+	 */
+	private function extract_links( string $html ): array {
+		$internal = array();
+		$external = array();
+		if ( '' === trim( $html ) ) {
+			return array( 'internal' => $internal, 'external' => $external );
+		}
+
+		$home_host = function_exists( 'home_url' ) ? wp_parse_url( home_url(), PHP_URL_HOST ) : null;
+		$home_host = $home_host ? preg_replace( '/^www\./i', '', $home_host ) : null;
+
+		$dom  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		// Wrap in a UTF-8 fragment so loadHTML keeps encoding; the block editor
+		// stores hand-edited HTML that may be a fragment, not a full document.
+		$dom->loadHTML( '<?xml encoding="utf-8"?><div>' . $html . '</div>', LIBXML_NONET );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+
+		$seen_internal = array();
+		$seen_external = array();
+		foreach ( $dom->getElementsByTagName( 'a' ) as $a ) {
+			$href = trim( (string) $a->getAttribute( 'href' ) );
+			if ( '' === $href ) {
+				continue;
+			}
+			$lower = strtolower( $href );
+			if ( 0 === strpos( $href, '#' )
+				|| 0 === strpos( $lower, 'mailto:' )
+				|| 0 === strpos( $lower, 'tel:' )
+				|| 0 === strpos( $lower, 'javascript:' )
+				|| 0 === strpos( $lower, 'data:' ) ) {
+				continue;
+			}
+			$anchor      = trim( (string) wp_strip_all_tags( $a->textContent ) );
+			$is_absolute = (bool) preg_match( '#^https?://#i', $href );
+			$is_external = false;
+			if ( $is_absolute ) {
+				$host        = wp_parse_url( $href, PHP_URL_HOST );
+				$host        = $host ? preg_replace( '/^www\./i', '', $host ) : null;
+				$is_external = $home_host ? ( $host && strcasecmp( $host, $home_host ) !== 0 ) : true;
+			}
+			if ( $is_external ) {
+				if ( ! isset( $seen_external[ $href ] ) ) {
+					$seen_external[ $href ] = true;
+					$external[]             = array( 'href' => $href, 'anchor' => $anchor );
+				}
+			} elseif ( ! isset( $seen_internal[ $href ] ) ) {
+				$seen_internal[ $href ] = true;
+				$internal[]             = array( 'href' => $href, 'anchor' => $anchor );
+			}
+		}
+
+		return array( 'internal' => $internal, 'external' => $external );
+	}
+
+	/**
+	 * Render the "Links" section of the classic-editor metabox: internal +
+	 * external link lists with counts. The block-editor panel renders the same
+	 * thing client-side from the live content (editor-panel.js).
+	 */
+	private function render_links_section( WP_Post $post, array $d ): void {
+		$links     = $this->extract_links( (string) $post->post_content );
+		$int_count = count( $links['internal'] );
+		$ext_count = count( $links['external'] );
+
+		echo '<div class="seonix-mb-group seonix-mb-links">';
+		echo '<div class="seonix-mb-grouphead">';
+		echo '<span class="seonix-cat seonix-cat--links">' . esc_html( $d['i18n']['linksLabel'] ) . '</span>';
+		echo '<span class="seonix-mb-groupcount">' . esc_html( $int_count . ' / ' . $ext_count ) . '</span>';
+		echo '</div>';
+
+		$this->render_link_list( $links['internal'], $d['i18n']['internalLinks'], $d['i18n']['noInternal'] );
+		$this->render_link_list( $links['external'], $d['i18n']['externalLinks'], $d['i18n']['noExternal'] );
+
+		echo '</div>';
+	}
+
+	/** Render one labelled link list (or its empty state). */
+	private function render_link_list( array $items, string $label, string $empty ): void {
+		echo '<div class="seonix-mb-linkgroup">';
+		echo '<div class="seonix-mb-linklabel">' . esc_html( $label ) . ' <span class="seonix-mb-linkn">' . esc_html( (string) count( $items ) ) . '</span></div>';
+		if ( empty( $items ) ) {
+			echo '<div class="seonix-mb-linkempty">' . esc_html( $empty ) . '</div>';
+		} else {
+			echo '<ul class="seonix-mb-linklist">';
+			foreach ( $items as $it ) {
+				echo '<li class="seonix-mb-linkitem">';
+				if ( '' !== $it['anchor'] ) {
+					echo '<span class="seonix-mb-linkanchor">' . esc_html( $it['anchor'] ) . '</span>';
+				}
+				echo '<a class="seonix-mb-linkhref" href="' . esc_url( $it['href'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $it['href'] ) . '</a>';
+				echo '</li>';
+			}
+			echo '</ul>';
+		}
+		echo '</div>';
+	}
+
 	public function render( $post ): void {
 		echo '<div class="seonix-metabox">';
 
@@ -638,6 +753,9 @@ class Seonix_Metabox {
 			}
 			echo '</div>';
 		}
+
+		// Links inventory (internal / external) parsed from the post body.
+		$this->render_links_section( $post, $d );
 
 		// Footer.
 		echo '<div class="seonix-mb-foot">';

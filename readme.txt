@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.11.3
+Stable tag: 2.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.0 =
+* Added: a "Links" section in the Seonix panel on the post editor. See the internal and external links in your article at a glance, with counts and anchor text, in both the block editor and the classic editor.
 
 = 2.11.3 =
 * Fixed: the "Key takeaways" box at the top of Seonix articles now takes its look from your site — your theme's fonts and colours with a light tint of your brand colour — instead of bringing its own palette. Previously it could also flip to a dark box on light sites when a visitor's device preferred dark mode.
