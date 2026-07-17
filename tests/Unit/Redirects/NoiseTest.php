@@ -48,6 +48,15 @@ final class NoiseTest extends TestCase {
 			'hyphenless page'          => array( '/pricing', false, 'short word paths are pages' ),
 			'prefix lookalike'         => array( '/vendors/list', false, 'segment matching: /vendors is not /vendor' ),
 			'pma lookalike'            => array( '/pmalinks', false, 'segment matching: /pmalinks is not /pma' ),
+			'wp rest route'            => array( '/wp-json/wp/v2/posts', false, 'the REST API path has no .json extension and must stay actionable' ),
+
+			// ── Leaked-key hunt: the /*.json credential sweep. No page ends in .json.
+			'credentials json'         => array( '/credentials.json', true, 'the generic leaked-key probe' ),
+			'gcp service account'      => array( '/gcp-credentials.json', true, 'Google Cloud key hunting' ),
+			'firebase adminsdk'        => array( '/firebase-adminsdk.json', true, 'Firebase admin SDK key hunting' ),
+			'client secret json'       => array( '/client_secret.json', true, 'OAuth client secret hunting' ),
+			'appsettings json'         => array( '/appsettings.json', true, '.NET config hunting' ),
+			'bare secrets json'        => array( '/secrets.json', true, 'generic secret hunting' ),
 
 			// ── Dotfile and hidden-path probes.
 			'env file'                 => array( '/.env', true, 'the classic credentials probe' ),

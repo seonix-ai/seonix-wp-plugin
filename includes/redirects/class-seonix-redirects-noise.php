@@ -30,10 +30,16 @@ class Seonix_Redirects_Noise {
 	 * config files, database dumps, archives, the backup copies editors and
 	 * deploys leave behind, and server-side sources that are not WordPress.
 	 * (Asset extensions never reach the log — Seonix_Redirects_Log drops them.)
+	 *
+	 * 'json' belongs here despite looking legitimate: the constant wave of
+	 * /credentials.json, /firebase-service-account.json, /gcp-credentials.json,
+	 * /appsettings.json probes is bots hunting leaked cloud keys, and no page a
+	 * visitor could mean ends in .json — the WP REST API answers /wp-json/... with
+	 * no extension, and a real manifest.json is an asset, never a redirect target.
 	 */
 	const PROBE_EXTENSIONS = array(
 		'sql', 'bak', 'old', 'orig', 'save', 'dist', 'swp', 'log',
-		'ini', 'conf', 'cfg', 'yml', 'yaml', 'lock', 'env',
+		'ini', 'conf', 'cfg', 'yml', 'yaml', 'lock', 'env', 'json',
 		'sh', 'bat', 'exe', 'dll',
 		'asp', 'aspx', 'jsp', 'cgi',
 		'tar', 'gz', 'tgz', 'bz2', 'rar', '7z',
