@@ -238,4 +238,47 @@ class Seonix_Redirects_Log {
 		$wpdb->query( "TRUNCATE TABLE {$table}" );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
+
+	/**
+	 * Every logged path, busiest first. The bulk noise-dismiss sweeps the whole
+	 * log, not just the rendered page; MAX_ROWS keeps this bounded.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function all(): array {
+		$wpdb  = $this->db();
+		$table = $this->table_name();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			"SELECT id, path, hits, last_seen_at FROM {$table} ORDER BY hits DESC, last_seen_at DESC",
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Forget a batch of logged paths by id (a bulk dismiss).
+	 *
+	 * @param int[] $ids
+	 */
+	public function delete_ids( array $ids ): void {
+		$ids = array_values(
+			array_filter(
+				array_map( 'intval', $ids ),
+				static function ( $id ) {
+					return $id > 0;
+				}
+			)
+		);
+		if ( empty( $ids ) ) {
+			return;
+		}
+		$wpdb  = $this->db();
+		$table = $this->table_name();
+		$marks = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id IN ({$marks})", $ids ) );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
 }

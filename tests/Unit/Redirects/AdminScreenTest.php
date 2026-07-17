@@ -4,6 +4,7 @@ namespace Seonix\Tests\Unit\Redirects;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
+use Seonix\Tests\Unit\Doubles\FakeRedirectsLog;
 use Seonix\Tests\Unit\Doubles\FakeRedirectsStore;
 use Seonix_Redirects_Admin;
 
@@ -120,5 +121,83 @@ final class AdminScreenTest extends TestCase {
 
 		$this->assertStringContainsString( 'Add redirect', $html );
 		$this->assertStringContainsString( 'Existing redirects', $html );
+	}
+
+	// ── The 404 log's noise split ─────────────────────────────────────────
+
+	private function renderWithLog( array $rows ): string {
+		Functions\when( 'esc_js' )->returnArg();
+		Functions\when( 'human_time_diff' )->justReturn( '2 hours' );
+		Functions\when( 'number_format_i18n' )->alias( function ( $n ) {
+			return (string) $n;
+		} );
+		$screen = new Seonix_Redirects_Admin( new FakeRedirectsStore(), null, new FakeRedirectsLog( $rows ) );
+		ob_start();
+		$screen->render_page();
+		return (string) ob_get_clean();
+	}
+
+	private static function logRow( int $id, string $path, int $hits = 1 ): array {
+		return array(
+			'id'           => $id,
+			'path'         => $path,
+			'hits'         => $hits,
+			'last_seen_at' => '2026-07-17 10:00:00',
+		);
+	}
+
+	/**
+	 * A site owner opening this screen must see their genuinely broken URLs,
+	 * not a threat feed: bot probes are parked in the collapsed noise
+	 * disclosure — still visible and dismissable, never mixed into the list.
+	 */
+	public function test_bot_probes_are_parked_in_the_noise_disclosure(): void {
+		$html = $this->renderWithLog( array(
+			self::logRow( 1, '/alte-seite', 12 ),
+			self::logRow( 2, '/.env', 40 ),
+			self::logRow( 3, '/000.php', 3 ),
+		) );
+
+		$cut = strpos( $html, 'rdr-noise' );
+		$this->assertNotFalse( $cut, 'the noise disclosure renders' );
+		$main = substr( $html, 0, $cut );
+		$rest = substr( $html, $cut );
+
+		$this->assertStringContainsString( '/alte-seite', $main, 'the real dead page stays in the main list' );
+		$this->assertStringNotContainsString( '/.env', $main, 'probes never sit in the actionable list' );
+		$this->assertStringNotContainsString( '/000.php', $main );
+		$this->assertStringContainsString( '/.env', $rest, 'probes are parked, not hidden' );
+		$this->assertStringContainsString( '/000.php', $rest );
+		$this->assertStringContainsString( 'Scanner & bot noise (2)', $rest, 'the summary counts what is parked' );
+		$this->assertStringContainsString( 'seonix_redirects_log_dismiss_noise', $rest, 'one click dismisses all of it' );
+	}
+
+	/**
+	 * When every logged 404 is bot traffic — the normal state of a healthy
+	 * site — the screen says so instead of rendering an empty table or, worse,
+	 * the probes themselves as the main list.
+	 */
+	public function test_all_noise_log_says_nothing_needs_fixing(): void {
+		$html = $this->renderWithLog( array(
+			self::logRow( 1, '/.env', 40 ),
+			self::logRow( 2, '/wp-content/plugins/fix/up.php', 1 ),
+		) );
+
+		$cut = strpos( $html, 'rdr-noise' );
+		$this->assertNotFalse( $cut );
+
+		$this->assertStringContainsString( 'rdr-404-allclear', $html, 'the operator hears "nothing needs fixing", not silence' );
+		$this->assertStringContainsString( 'Scanner & bot noise (2)', $html );
+		$this->assertStringNotContainsString( 'rdrtable rdr-404', substr( $html, 0, $cut ), 'no empty main table is rendered' );
+	}
+
+	/** A log with only real dead pages renders no disclosure at all. */
+	public function test_clean_log_renders_no_noise_disclosure(): void {
+		$html = $this->renderWithLog( array(
+			self::logRow( 1, '/alte-seite', 12 ),
+		) );
+
+		$this->assertStringContainsString( '/alte-seite', $html );
+		$this->assertStringNotContainsString( 'rdr-noise', $html, 'no probes, no disclosure' );
 	}
 }

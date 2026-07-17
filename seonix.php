@@ -53,6 +53,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-webmcp.php';
 // redirects store.
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-store.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-log.php';
+require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-noise.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-runner.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-recorder.php';
 require_once SEONIX_DIR . 'includes/redirects/class-seonix-redirects-watcher.php';

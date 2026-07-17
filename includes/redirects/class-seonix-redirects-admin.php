@@ -55,6 +55,7 @@ class Seonix_Redirects_Admin {
 		add_action( 'admin_post_seonix_redirects_toggle', array( $this, 'handle_toggle' ) );
 		add_action( 'admin_post_seonix_redirects_bulk', array( $this, 'handle_bulk' ) );
 		add_action( 'admin_post_seonix_redirects_log_dismiss', array( $this, 'handle_log_dismiss' ) );
+		add_action( 'admin_post_seonix_redirects_log_dismiss_noise', array( $this, 'handle_log_dismiss_noise' ) );
 		add_action( 'admin_post_seonix_redirects_log_clear', array( $this, 'handle_log_clear' ) );
 		add_action( 'admin_post_seonix_redirects_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_seonix_redirects_import', array( $this, 'handle_import' ) );
@@ -148,6 +149,27 @@ class Seonix_Redirects_Admin {
 			}
 		}
 		$this->back( 'log_dismissed' );
+	}
+
+	/**
+	 * Forget every logged 404 the classifier marks as scanner noise. Bots keep
+	 * probing, so rows will reappear — in the collapsed noise section, never in
+	 * the actionable list, so this is tidying, not a fight.
+	 */
+	public function handle_log_dismiss_noise(): void {
+		$this->guard( 'seonix_redirects_log_dismiss_noise' );
+		$dropped = 0;
+		if ( null !== $this->log ) {
+			$ids = array();
+			foreach ( $this->log->all() as $row ) {
+				if ( Seonix_Redirects_Noise::is_noise( (string) ( $row['path'] ?? '' ) ) ) {
+					$ids[] = (int) $row['id'];
+				}
+			}
+			$this->log->delete_ids( $ids );
+			$dropped = count( $ids );
+		}
+		$this->back( 'noise_dismissed', (string) $dropped );
 	}
 
 	/**
@@ -425,7 +447,9 @@ class Seonix_Redirects_Admin {
 	/**
 	 * The 404 log: dead URLs visitors hit, most-hit first, each a one-click
 	 * "Create redirect" that prefills the add form above. Only shown once there
-	 * is something to show — a clean site sees no empty panel.
+	 * is something to show — a clean site sees no empty panel. Bot probes
+	 * (Seonix_Redirects_Noise) are parked in a collapsed section below the real
+	 * list, so /.env and /000.php never sit next to a genuinely broken page.
 	 */
 	private function render_log(): void {
 		if ( null === $this->log ) {
@@ -435,6 +459,7 @@ class Seonix_Redirects_Admin {
 		if ( empty( $entries ) ) {
 			return;
 		}
+		list( $real, $noise ) = Seonix_Redirects_Noise::split( $entries );
 		?>
 		<div class="issues-head">
 			<div>
@@ -448,41 +473,102 @@ class Seonix_Redirects_Admin {
 			</form>
 		</div>
 
-		<div class="rdrtable rdr-404">
-			<div class="rdr-404-th">
-				<span><?php esc_html_e( 'Dead URL', 'seonix' ); ?></span>
-				<span class="th-hits"><?php esc_html_e( 'Hits', 'seonix' ); ?></span>
-				<span class="th-seen"><?php esc_html_e( 'Last seen', 'seonix' ); ?></span>
-				<span class="th-act"></span>
+		<?php if ( ! empty( $real ) ) : ?>
+			<div class="rdrtable rdr-404">
+				<?php $this->render_log_head(); ?>
+				<?php foreach ( $real as $e ) : ?>
+					<?php $this->render_log_row( $e ); ?>
+				<?php endforeach; ?>
 			</div>
-			<?php foreach ( $entries as $e ) : ?>
+		<?php elseif ( ! empty( $noise ) ) : ?>
+			<p class="rdr-404-allclear"><?php esc_html_e( 'Nothing that needs fixing — every 404 logged so far looks like automated scanner noise, parked below.', 'seonix' ); ?></p>
+		<?php endif; ?>
+
+		<?php $this->render_noise( $noise ); ?>
+		<?php
+	}
+
+	/**
+	 * The parked bot traffic: probes for exploits and exposed files that every
+	 * public site receives. Lives behind a closed disclosure — findable when
+	 * someone wonders where the rest of the log went, out of the way otherwise —
+	 * because a wall of /.env and /000.php rows reads like a break-in to a site
+	 * owner when it is just the internet's weather.
+	 *
+	 * @param array<int,array<string,mixed>> $noise Log rows classified as noise.
+	 */
+	private function render_noise( array $noise ): void {
+		if ( empty( $noise ) ) {
+			return;
+		}
+		?>
+		<details class="rdr-noise">
+			<summary>
 				<?php
-				$path     = (string) $e['path'];
-				$hits     = (int) $e['hits'];
-				$seen_ago = $this->time_ago( (string) $e['last_seen_at'] );
-				$create   = add_query_arg(
-					array(
-						'page'    => self::PAGE_SLUG,
-						'sx_from' => rawurlencode( $path ),
-					),
-					admin_url( 'admin.php' )
-				) . '#sx-rdr-add';
+				/* translators: %s: number of parked bot-probe URLs. */
+				echo esc_html( sprintf( __( 'Scanner & bot noise (%s)', 'seonix' ), number_format_i18n( count( $noise ) ) ) );
 				?>
-				<div class="rdr-404-row">
-					<code class="rdr-404-path" title="<?php echo esc_attr( $path ); ?>"><?php echo esc_html( $path ); ?></code>
-					<span class="rdr-404-hits"><?php echo esc_html( number_format_i18n( $hits ) ); ?></span>
-					<span class="rdr-404-seen"><?php echo esc_html( $seen_ago ); ?></span>
-					<span class="rdr-404-act">
-						<a class="rdr-link on" href="<?php echo esc_url( $create ); ?>"><?php esc_html_e( 'Create redirect', 'seonix' ); ?></a>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
-							<input type="hidden" name="action" value="seonix_redirects_log_dismiss" />
-							<input type="hidden" name="id" value="<?php echo esc_attr( (string) (int) $e['id'] ); ?>" />
-							<?php wp_nonce_field( 'seonix_redirects_log_dismiss' ); ?>
-							<button class="rdr-link" type="submit"><?php esc_html_e( 'Dismiss', 'seonix' ); ?></button>
-						</form>
-					</span>
-				</div>
-			<?php endforeach; ?>
+			</summary>
+			<div class="rdr-noise-bar">
+				<p class="rdr-noise-sub"><?php esc_html_e( 'Automated probes for exploits, shells and exposed config files — every public site gets these, and a 404 is already the right answer. Nothing is broken and no redirect is needed; they are parked here so real dead pages stay visible above.', 'seonix' ); ?></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="seonix_redirects_log_dismiss_noise" />
+					<?php wp_nonce_field( 'seonix_redirects_log_dismiss_noise' ); ?>
+					<button class="btn sm" type="submit"><?php esc_html_e( 'Dismiss all', 'seonix' ); ?></button>
+				</form>
+			</div>
+			<div class="rdrtable rdr-404 rdr-404-noise">
+				<?php $this->render_log_head(); ?>
+				<?php foreach ( $noise as $e ) : ?>
+					<?php $this->render_log_row( $e ); ?>
+				<?php endforeach; ?>
+			</div>
+		</details>
+		<?php
+	}
+
+	/** Column headers shared by the real-404 table and the noise table. */
+	private function render_log_head(): void {
+		?>
+		<div class="rdr-404-th">
+			<span><?php esc_html_e( 'Dead URL', 'seonix' ); ?></span>
+			<span class="th-hits"><?php esc_html_e( 'Hits', 'seonix' ); ?></span>
+			<span class="th-seen"><?php esc_html_e( 'Last seen', 'seonix' ); ?></span>
+			<span class="th-act"></span>
+		</div>
+		<?php
+	}
+
+	/**
+	 * One logged dead URL: path, hits, last seen, Create redirect / Dismiss.
+	 *
+	 * @param array<string,mixed> $e Log row.
+	 */
+	private function render_log_row( array $e ): void {
+		$path     = (string) $e['path'];
+		$hits     = (int) $e['hits'];
+		$seen_ago = $this->time_ago( (string) $e['last_seen_at'] );
+		$create   = add_query_arg(
+			array(
+				'page'    => self::PAGE_SLUG,
+				'sx_from' => rawurlencode( $path ),
+			),
+			admin_url( 'admin.php' )
+		) . '#sx-rdr-add';
+		?>
+		<div class="rdr-404-row">
+			<code class="rdr-404-path" title="<?php echo esc_attr( $path ); ?>"><?php echo esc_html( $path ); ?></code>
+			<span class="rdr-404-hits"><?php echo esc_html( number_format_i18n( $hits ) ); ?></span>
+			<span class="rdr-404-seen"><?php echo esc_html( $seen_ago ); ?></span>
+			<span class="rdr-404-act">
+				<a class="rdr-link on" href="<?php echo esc_url( $create ); ?>"><?php esc_html_e( 'Create redirect', 'seonix' ); ?></a>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+					<input type="hidden" name="action" value="seonix_redirects_log_dismiss" />
+					<input type="hidden" name="id" value="<?php echo esc_attr( (string) (int) $e['id'] ); ?>" />
+					<?php wp_nonce_field( 'seonix_redirects_log_dismiss' ); ?>
+					<button class="rdr-link" type="submit"><?php esc_html_e( 'Dismiss', 'seonix' ); ?></button>
+				</form>
+			</span>
 		</div>
 		<?php
 	}
@@ -869,6 +955,14 @@ class Seonix_Redirects_Admin {
 			'saved'   => array( 'notice-success', __( 'Redirect updated.', 'seonix' ) ),
 			'log_dismissed' => array( 'notice-success', __( 'Removed from the 404 log.', 'seonix' ) ),
 			'log_cleared'   => array( 'notice-success', __( '404 log cleared.', 'seonix' ) ),
+			'noise_dismissed' => array(
+				'notice-success',
+				sprintf(
+					/* translators: %d: number of bot-probe log entries removed. */
+					_n( '%d scanner-noise entry dismissed.', '%d scanner-noise entries dismissed.', (int) $detail, 'seonix' ),
+					(int) $detail
+				),
+			),
 			'imported'      => array(
 				'notice-success',
 				/* translators: %s: "added/total", e.g. "12/14". */

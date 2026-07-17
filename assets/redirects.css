@@ -229,6 +229,28 @@
   .sx-rdr .rdr-404-act { justify-content: flex-start; }
 }
 
+/* ── Scanner noise ──
+   Bot probes (/.env, /000.php, wp-content shells) parked out of the main 404
+   list by Seonix_Redirects_Noise, behind a closed disclosure. The list above
+   stays a to-do list; this stays de-emphasized — it is weather, not damage. */
+.sx-rdr .rdr-noise { margin-top: 16px; }
+.sx-rdr .rdr-noise > summary { font-size: 12.5px; font-weight: 600; color: var(--mute); cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; padding: 2px 0; }
+.sx-rdr .rdr-noise > summary::-webkit-details-marker { display: none; }
+.sx-rdr .rdr-noise > summary::before { content: "›"; font-size: 15px; line-height: 1; transition: transform .12s; color: var(--mute-dim); }
+.sx-rdr .rdr-noise[open] > summary::before { transform: rotate(90deg); }
+.sx-rdr .rdr-noise > summary:hover { color: var(--ink-2); }
+.sx-rdr .rdr-noise-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin: 10px 0 12px; }
+.sx-rdr .rdr-noise-sub { margin: 0; font-size: 12.5px; color: var(--mute); font-weight: 500; line-height: 1.55; max-width: 640px; }
+.sx-rdr .rdr-noise-bar form { flex: none; margin: 0; }
+.sx-rdr .rdr-noise .rdr-404 { margin-top: 0; }
+.sx-rdr .rdr-noise .rdr-404-path,
+.sx-rdr .rdr-noise .rdr-404-hits { color: var(--mute); }
+.sx-rdr .rdr-404-allclear { margin: 4px 2px 0; font-size: 12.5px; color: var(--mute); font-weight: 500; }
+
+@media (max-width: 960px) {
+  .sx-rdr .rdr-noise-bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
+
 /* Advanced disclosure in the add form — regex lives here, out of the common path. */
 .sx-rdr .rdr-advanced { margin-top: 2px; }
 .sx-rdr .rdr-advanced > summary { font-size: 12.5px; font-weight: 600; color: var(--mute); cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; padding: 2px 0; }
