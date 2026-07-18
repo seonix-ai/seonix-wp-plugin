@@ -364,7 +364,7 @@ class Seonix_Metabox {
 			'seonix-admin',
 			SEONIX_URL . 'assets/admin.css',
 			array( 'seonix-admin-fonts' ),
-			SEONIX_VERSION
+			self::asset_ver( 'assets/admin.css' )
 		);
 
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
@@ -385,10 +385,24 @@ class Seonix_Metabox {
 			// the edited content, wp-api-fetch to call our own /score route (it
 			// attaches the REST nonce the route's capability check depends on).
 			array( 'wp-plugins', 'wp-editor', 'wp-edit-post', 'wp-element', 'wp-components', 'wp-i18n', 'wp-data', 'wp-api-fetch' ),
-			SEONIX_VERSION,
+			self::asset_ver( 'assets/editor-panel.js' ),
 			true
 		);
 		wp_localize_script( 'seonix-editor-panel', 'seonixAudit', $this->audit_data( $post ) );
+	}
+
+	/**
+	 * Cache-busting version for a bundled asset: the file's mtime, so re-uploading
+	 * a JS/CSS file (e.g. while iterating on a test site) busts the browser cache
+	 * WITHOUT bumping the plugin version. Falls back to the plugin version when the
+	 * file cannot be stat'd.
+	 *
+	 * @param string $rel Path relative to the plugin dir, e.g. "assets/admin.css".
+	 * @return string
+	 */
+	private static function asset_ver( string $rel ): string {
+		$mtime = @filemtime( SEONIX_DIR . $rel );
+		return $mtime ? (string) $mtime : SEONIX_VERSION;
 	}
 
 	/**

@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.8
+Stable tag: 2.12.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.9 =
+* Housekeeping: bundled editor and admin assets are cache-busted by their file modification time, so updated styles and scripts reach the browser reliably without needing a plugin version bump.
 
 = 2.12.8 =
 * Improved: the Search appearance previews now match the real search result — mobile is a card with a thumbnail next to the description, desktop is a plain full-width result with a larger title and the breadcrumb URL.
