@@ -1972,7 +1972,7 @@ body.seonix-modal-open {
 }
 
 /* ════════════════════════════════════════════════════════════════
- * Editor meta box — per-page audit (Yoast-style)
+ * Editor meta box — per-page audit (SEO-plugin-style)
  * Lives outside .seonix-wrap, so it carries its own token scope (set
  * with .seonix-wrap at the top) and base font. Bleeds to the meta box
  * edges so the header/footer bands span full width.
@@ -2126,20 +2126,247 @@ body.seonix-modal-open {
 .sx-lnk {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
+  gap: 2px;
   margin: 0 -8px;
   border-radius: 8px;
-  cursor: pointer;
-  text-decoration: none;
   transition: background 0.1s;
 }
-.sx-lnk:hover,
-.sx-lnk:focus {
+.sx-lnk:hover {
   background: var(--sx-paper-warm);
+}
+/* Main click target: jump to the link inside the article. */
+.sx-lnk-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.sx-lnk-main:focus-visible {
+  outline: 2px solid var(--sx-ac);
+  outline-offset: -2px;
+}
+/* Row actions (edit / remove / open), revealed on row hover or keyboard focus. */
+.sx-lnk-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  margin-right: 4px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.sx-lnk:hover .sx-lnk-actions,
+.sx-lnk-actions:focus-within {
+  opacity: 1;
+}
+.sx-lnk-act {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--sx-mute-dim);
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+}
+.sx-lnk-act:hover {
+  background: var(--sx-ac-soft);
+  color: var(--sx-ac);
   text-decoration: none;
   box-shadow: none;
 }
+.sx-lnk-act--del:hover {
+  background: var(--sx-red-soft);
+  color: var(--sx-red);
+}
+
+/* ── Search appearance: SEO title + meta description with Google / social
+   preview. Scoped inside the editor panel accordion. ── */
+.sx-sa { padding: 2px 16px 14px; }
+.sx-sa-ico { color: var(--sx-ac); display: grid; place-items: center; }
+
+.sx-sa-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.sx-sa-tab {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sx-track);
+  color: var(--sx-mute);
+  cursor: pointer;
+}
+.sx-sa-tab.is-active { background: var(--sx-ac-soft); color: var(--sx-ac); }
+.sx-sa-modes { display: flex; gap: 2px; margin-left: auto; }
+.sx-sa-mode {
+  width: 28px;
+  height: 26px;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  color: var(--sx-mute-dim);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.sx-sa-mode.is-active { background: var(--sx-track); color: var(--sx-ink); }
+
+.sx-sa-preview { margin-bottom: 6px; }
+
+/* Google result preview — mobile is a rounded card with a thumbnail, desktop is
+   a plain full-width result (no card, no thumbnail), each like the real SERP. */
+.sx-gp-head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.sx-gp-fav {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--sx-track);
+  color: var(--sx-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.sx-gp-id { min-width: 0; flex: 1; }
+.sx-gp-site { font-size: 13px; font-weight: 500; color: var(--sx-ink); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-gp-url { font-size: 12px; color: var(--sx-mute); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-gp-dots { flex-shrink: 0; align-self: center; color: var(--sx-mute-dim); font-size: 17px; line-height: 1; }
+.sx-gp-title {
+  color: #1a0dab;
+  line-height: 1.3;
+  margin-bottom: 3px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sx-gp-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #4d5156;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.sx-gp-date { color: var(--sx-mute); }
+
+/* Mobile: rounded card, thumbnail tucked beside the description. */
+.sx-gp--mobile {
+  background: var(--sx-paper);
+  border: 1px solid var(--sx-border-soft);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba( 15, 10, 36, 0.06 );
+}
+.sx-gp--mobile .sx-gp-title { font-size: 17px; }
+.sx-gp-descrow { display: flex; gap: 12px; align-items: flex-start; }
+.sx-gp-descrow .sx-gp-desc { flex: 1; min-width: 0; }
+.sx-gp-thumb {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--sx-track);
+}
+
+/* Desktop: plain result, no card, no thumbnail, bigger title. */
+.sx-gp--desktop { padding: 2px 2px 4px; }
+.sx-gp--desktop .sx-gp-title { font-size: 20px; }
+.sx-gp--desktop .sx-gp-desc { -webkit-line-clamp: 2; }
+
+/* Social share card preview */
+.sx-sp {
+  border: 1px solid var(--sx-border-soft);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sx-paper);
+}
+.sx-sp-img {
+  width: 100%;
+  aspect-ratio: 1.91 / 1;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--sx-track);
+}
+.sx-sp-img--empty { display: grid; place-items: center; }
+.sx-sp-img--empty svg { width: 46px; height: 46px; border-radius: 12px; }
+.sx-sp-meta { padding: 10px 14px 12px; }
+.sx-sp-domain { font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sx-mute-dim); margin-bottom: 3px; }
+.sx-sp-title { font-size: 14px; font-weight: 700; color: var(--sx-ink); line-height: 1.3; margin-bottom: 3px; }
+.sx-sp-desc { font-size: 12px; color: var(--sx-mute); line-height: 1.4; }
+
+/* Editable / read-only title + description fields */
+.sx-sa-field { margin-top: 12px; }
+.sx-sa-flabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sx-ink);
+}
+.sx-sa-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--sx-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--sx-ink);
+  background: var(--sx-paper);
+}
+.sx-sa-input:focus {
+  outline: none;
+  border-color: var(--sx-ac);
+  box-shadow: 0 0 0 3px var(--sx-ac-soft);
+}
+.sx-sa-textarea { resize: vertical; line-height: 1.45; min-height: 58px; }
+.sx-sa-ro {
+  padding: 8px 10px;
+  border: 1px solid var(--sx-border-soft);
+  border-radius: 8px;
+  background: var(--sx-paper-warm);
+  font-size: 13px;
+  color: var(--sx-ink);
+  line-height: 1.4;
+  min-height: 18px;
+}
+.sx-sa-ph { color: var(--sx-mute-dim); }
+
+/* Soft length meter shown next to each field label */
+.sx-meter { display: flex; align-items: center; gap: 7px; }
+.sx-meter-track { width: 54px; height: 4px; border-radius: 2px; background: var(--sx-track); overflow: hidden; }
+.sx-meter-fill { height: 100%; border-radius: 2px; transition: width 0.15s ease, background 0.15s ease; }
+.sx-meter-fill--good { background: var(--sx-green); }
+.sx-meter-fill--warn { background: var(--sx-amber); }
+.sx-meter-fill--bad { background: var(--sx-red); }
+.sx-meter-fill--mute { background: var(--sx-mute-dim); }
+.sx-meter-num { font-family: var(--sx-mono); font-size: 10.5px; font-weight: 600; color: var(--sx-mute-dim); }
+.sx-meter-num--good { color: var(--sx-green-ink); }
+.sx-meter-num--warn { color: var(--sx-amber-ink); }
+.sx-meter-num--bad { color: var(--sx-red-ink); }
 .sx-lnk-ico {
   flex-shrink: 0;
   width: 22px;
@@ -2269,7 +2496,7 @@ body.seonix-modal-open {
   color: var(--sx-mute);
 }
 
-/* --- Editor sidebar panel: Yoast-style accordion. Brand header + two
+/* --- Editor sidebar panel: SEO-plugin-style accordion. Brand header + two
    collapsible analysis sections (SEO / Readability), each with a Seonix eye
    indicator coloured by status. Scoped to --panel; no horizontal bleed so the
    panel never gets a horizontal scrollbar. --- */
@@ -2277,7 +2504,7 @@ body.seonix-modal-open {
 .seonix-metabox--panel * { box-sizing: border-box; }
 .seonix-metabox--panel { margin: 0; overflow-x: hidden; overflow-wrap: anywhere; }
 
-/* Yoast-like inset: all content padded 16px left/right (and 16px top on the
+/* SEO-plugin-like inset: all content padded 16px left/right (and 16px top on the
    header) so nothing hugs the panel edges. Section dividers stay full-bleed. */
 .sx-ph-head {
   display: flex;
@@ -2406,6 +2633,31 @@ body.seonix-modal-open {
   border-radius: 6px;
   padding: 6px 8px;
   margin-top: 4px;
+}
+
+/* One-click "fix it" action inside an expanded issue (e.g. "Open redirect
+   manager →") — a small brand-filled button under the how-to-fix steps. */
+.sx-iss-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 12px 0 2px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--sx-ac);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.sx-iss-action:hover,
+.sx-iss-action:focus {
+  background: var(--sx-ac-deep);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: none;
 }
 
 /* ── Task table: responsive (stack on narrow) ── */

@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.2
+Stable tag: 2.12.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,30 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.8 =
+* Improved: the Search appearance previews now match the real search result — mobile is a card with a thumbnail next to the description, desktop is a plain full-width result with a larger title and the breadcrumb URL.
+* Fixed: the SEO title and meta description are editable on every site again (Seonix keeps its own copy and syncs it to any active SEO plugin and to your dashboard).
+* Fixed: the length meter is green across the whole good range — a 60/60 title now reads green, not amber; it only turns amber when too short and red when it would be clipped.
+
+= 2.12.7 =
+* Fixed: the Google preview in Search appearance now gives the title the full width (no thumbnail squeezing it) so it no longer wraps to a clipped column, and reads cleanly on both mobile and desktop.
+
+= 2.12.6 =
+* Improved: when an SEO plugin (Yoast, Rank Math, …) owns the SEO title and meta description, the Search appearance preview now updates live as you edit them there, instead of only after a reload.
+
+= 2.12.5 =
+* Added: a "Search appearance" section in the editor panel — a live Google and social preview of the page with its SEO title and meta description. On sites with no SEO plugin the fields are editable here and Seonix syncs them to any SEO plugin you add and to your Seonix dashboard; when Yoast, Rank Math or another SEO plugin is active their values are shown.
+* Added: each link in the Links section now has edit, remove and open-in-a-new-tab actions on hover.
+
+= 2.12.4 =
+* Changed: the Seonix icon in the editor toolbar is a green / amber / red status dot again (the exact issue count stays in the Page issues section, where it belongs).
+* Changed: the Links section no longer lists popup and button triggers (Popup Maker "#popmake-…", bare "#") — only real links a visitor can follow.
+* Added: click a link in the panel to jump straight to it in the article; a hover icon opens it in a new tab.
+
+= 2.12.3 =
+* Changed: the Seonix icon in the editor toolbar now shows the number of open issues on the page — a green tick when there are none — coloured by severity, so a page's status is readable at a glance without opening the panel.
+* Added: page issues whose fix lives in the Redirects manager now show a one-click "Open redirect manager" button right inside the editor panel.
 
 = 2.12.2 =
 * Improved: redirects now land in ONE hop. Targets are stored and served in your site's canonical form (trailing slash follows your permalink settings), and a redirect whose target is itself redirected is followed to its final destination before responding — visitors and crawlers get a single 301 instead of a chain of two or three. Existing rules are healed automatically, no editing needed.

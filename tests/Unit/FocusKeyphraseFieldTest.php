@@ -197,6 +197,13 @@ final class FocusKeyphraseFieldTest extends TestCase {
 		$tasks->shouldReceive( 'synced_at' )->andReturn( 0 );
 		$tasks->shouldReceive( 'issues_for_url' )->andReturn( array() );
 		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/admin.php?page=seonix' );
+		// The search-appearance block reads the effective meta + preview context.
+		Functions\when( 'get_post_meta' )->justReturn( '' );
+		Functions\when( 'get_bloginfo' )->justReturn( 'Example Site' );
+		Functions\when( 'get_permalink' )->justReturn( 'https://example.test/hello-world/' );
+		Functions\when( 'get_the_date' )->justReturn( 'May 1, 2026' );
+		Functions\when( 'get_the_title' )->justReturn( 'Hello World' );
+		Functions\when( 'get_the_post_thumbnail_url' )->justReturn( false );
 
 		$metabox = new Seonix_Metabox( $tasks );
 		return $metabox->audit_data( new \WP_Post( array( 'ID' => 42, 'post_status' => 'draft' ) ) );
@@ -283,7 +290,7 @@ final class FocusKeyphraseFieldTest extends TestCase {
 		$registered = array();
 		Functions\when( 'register_post_meta' )->alias(
 			function ( $type, $key, $args ) use ( &$registered ) {
-				$registered[ $type ] = array( 'key' => $key, 'args' => $args );
+				$registered[] = array( 'type' => $type, 'key' => $key, 'args' => $args );
 				return true;
 			}
 		);
@@ -291,25 +298,36 @@ final class FocusKeyphraseFieldTest extends TestCase {
 		$this->metabox->register_meta();
 
 		// The editor post types, minus attachment — same set the meta box uses.
-		$this->assertSame( array( 'post', 'page' ), array_keys( $registered ) );
+		$types = array_values( array_unique( array_map( static fn ( $r ) => $r['type'], $registered ) ) );
+		$this->assertSame( array( 'post', 'page' ), $types );
 
-		$args = $registered['post']['args'];
-		$this->assertSame( Seonix_Meta_Bridge::META_FOCUS_KW, $registered['post']['key'] );
-		// Without show_in_rest the block editor cannot read or write it at all —
-		// but it MUST be edit-context only. auth_callback gates writes and nothing
-		// else (core hangs it off the edit/add/delete_post_meta caps, which only
-		// the update path consults; WP_REST_Meta_Fields::get_value() checks no
-		// capability at all). A bare `true` here would ship the key in the default
-		// `view` context of GET /wp/v2/posts/<id>, which is unauthenticated for any
-		// published post — leaking the page's keyphrase to anonymous visitors.
-		$this->assertIsArray( $args['show_in_rest'] );
-		$this->assertSame( array( 'edit' ), $args['show_in_rest']['schema']['context'] );
-		$this->assertTrue( $args['single'] );
-		$this->assertSame( 'string', $args['type'] );
-		$this->assertIsCallable( $args['sanitize_callback'] );
-		// Protected meta (leading underscore) defaults to __return_false — an
-		// explicit auth_callback is what makes the key writable at all.
-		$this->assertIsCallable( $args['auth_callback'] );
+		// All three canonical Seonix fields ride REST: the focus keyphrase plus the
+		// search-appearance SEO title and meta description.
+		$post_keys = array_map(
+			static fn ( $r ) => $r['key'],
+			array_values( array_filter( $registered, static fn ( $r ) => 'post' === $r['type'] ) )
+		);
+		$this->assertEqualsCanonicalizing(
+			array( Seonix_Meta_Bridge::META_FOCUS_KW, Seonix_Meta_Bridge::META_TITLE, Seonix_Meta_Bridge::META_DESC ),
+			$post_keys
+		);
+
+		// Every one MUST be edit-context only. auth_callback gates writes and nothing
+		// else (core hangs it off the edit/add/delete_post_meta caps, which only the
+		// update path consults; WP_REST_Meta_Fields::get_value() checks no capability
+		// at all). A bare `true` would ship the key in the default `view` context of
+		// GET /wp/v2/posts/<id>, unauthenticated for any published post — leaking the
+		// page's SEO fields to anonymous visitors. Protected meta (leading underscore)
+		// defaults to __return_false, so the explicit auth_callback is load-bearing.
+		foreach ( $registered as $r ) {
+			$args = $r['args'];
+			$this->assertIsArray( $args['show_in_rest'], $r['key'] );
+			$this->assertSame( array( 'edit' ), $args['show_in_rest']['schema']['context'], $r['key'] );
+			$this->assertTrue( $args['single'], $r['key'] );
+			$this->assertSame( 'string', $args['type'], $r['key'] );
+			$this->assertIsCallable( $args['sanitize_callback'], $r['key'] );
+			$this->assertIsCallable( $args['auth_callback'], $r['key'] );
+		}
 	}
 
 	public function test_auth_callback_requires_edit_on_that_very_post(): void {

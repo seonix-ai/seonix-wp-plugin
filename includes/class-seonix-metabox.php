@@ -1,10 +1,10 @@
 <?php
 /**
- * Per-page audit for the post editor (Yoast-style).
+ * Per-page audit for the post editor (SEO-plugin-style).
  *
  * Surfaces the current page's Seonix audit where the user edits:
  *   - in the BLOCK editor (Gutenberg) → a panel in the document sidebar
- *     (assets/editor-panel.js), like Yoast, so it is immediately visible;
+ *     (assets/editor-panel.js), like the SEO plugin, so it is immediately visible;
  *   - in the CLASSIC editor → a normal meta box.
  *
  * The data comes straight from the local tasks table
@@ -166,6 +166,27 @@ class Seonix_Metabox {
 					'auth_callback'     => array( __CLASS__, 'auth_focus_keyword' ),
 				)
 			);
+
+			// SEO title + meta description — same edit-context REST exposure so the
+			// search-appearance fields can read and write them via editPost(). Only
+			// authoritative on sites with no SEO plugin (then Seonix owns them); with
+			// an engine present the panel shows the engine's values read-only. The
+			// bridge sanitizer + per-post auth callback apply the same way.
+			foreach ( array( Seonix_Meta_Bridge::META_TITLE, Seonix_Meta_Bridge::META_DESC ) as $seo_key ) {
+				register_post_meta(
+					$type,
+					$seo_key,
+					array(
+						'show_in_rest'      => array(
+							'schema' => array( 'context' => array( 'edit' ) ),
+						),
+						'single'            => true,
+						'type'              => 'string',
+						'sanitize_callback' => array( __CLASS__, 'sanitize_focus_keyword' ),
+						'auth_callback'     => array( __CLASS__, 'auth_focus_keyword' ),
+					)
+				);
+			}
 		}
 	}
 
@@ -244,7 +265,7 @@ class Seonix_Metabox {
 	/**
 	 * The canonical focus keyphrase changed on a path that bypasses the bridge —
 	 * the block editor's REST meta write, quick edit, WP-CLI — so mirror it into
-	 * whatever SEO engines are active (AIOSEO today; Yoast / Rank Math / SEOPress
+	 * whatever SEO engines are active (AIOSEO today; the active SEO plugin
 	 * should one of them be switched on while the field is on screen).
 	 *
 	 * Loop safety, both directions:
@@ -457,12 +478,28 @@ class Seonix_Metabox {
 				'noExternal'    => __( 'No external links yet.', 'seonix' ),
 				'noLinksTitle'  => __( 'No links on this page', 'seonix' ),
 				'noLinksSub'    => __( 'Add a few internal links to help readers and search engines navigate your content.', 'seonix' ),
+				'jumpToLink'    => __( 'Find this link in the article', 'seonix' ),
+				'editLink'      => __( 'Edit this link', 'seonix' ),
+				'removeLink'    => __( 'Remove this link', 'seonix' ),
+				'openLink'      => __( 'Open in a new tab', 'seonix' ),
+				// Search appearance section.
+				'searchApp'          => __( 'Search appearance', 'seonix' ),
+				'seoTitleLabel'      => __( 'SEO title', 'seonix' ),
+				'metaDescLabel'      => __( 'Meta description', 'seonix' ),
+				'googlePreview'      => __( 'Google preview', 'seonix' ),
+				'socialPreview'      => __( 'Social preview', 'seonix' ),
+				'mobileLabel'        => __( 'Mobile', 'seonix' ),
+				'desktopLabel'       => __( 'Desktop', 'seonix' ),
+				'seoTitlePlaceholder'=> __( 'Write a title for search results…', 'seonix' ),
+				'metaDescPlaceholder'=> __( 'Write a description for search results…', 'seonix' ),
+				'untitledLabel'      => __( 'Untitled', 'seonix' ),
 			),
 			'groups'  => array(),
 			'light'   => 'green',
 			'verdict' => '',
 			'sub'     => '',
 			'syncedLabel' => '',
+			'search'  => $this->search_appearance( $post ),
 		);
 
 		$synced = $this->tasks->synced_at();
@@ -528,6 +565,10 @@ class Seonix_Metabox {
 				'good_example_code'    => isset( $iss['good_example_code'] ) ? $iss['good_example_code'] : '',
 				'good_example_caption' => isset( $iss['good_example_caption'] ) ? $iss['good_example_caption'] : '',
 				'warnings'             => isset( $iss['warnings'] ) && is_array( $iss['warnings'] ) ? $iss['warnings'] : array(),
+				// A one-click action when the fix lives on a screen THIS plugin
+				// hosts (currently the Redirects manager). null when there is no
+				// local tool — the how-to-fix steps stand on their own.
+				'fix_action'           => $this->fix_action_for( isset( $iss['code'] ) ? (string) $iss['code'] : '' ),
 			);
 		}
 		$total = count( $issues );
@@ -566,6 +607,68 @@ class Seonix_Metabox {
 		}
 
 		return $base;
+	}
+
+	/**
+	 * Data for the "Search appearance" section: the effective SEO title / meta
+	 * description (from whichever engine owns them, via the bridge) plus the
+	 * context the previews need — site name, host, permalink, date, OG image.
+	 *
+	 * Fields are editable in our panel only when NO SEO plugin owns them and the
+	 * post type carries meta over REST (same guard as the focus-keyphrase field);
+	 * otherwise the engine's values show as the live source and the author edits
+	 * them there. Either way Seonix keeps its own copy and syncs it upstream.
+	 *
+	 * @param WP_Post $post The post being edited.
+	 * @return array<string,mixed>
+	 */
+	private function search_appearance( WP_Post $post ): array {
+		$eff   = Seonix_Meta_Bridge::read_effective( (int) $post->ID );
+		$image = get_the_post_thumbnail_url( $post, 'large' );
+		return array(
+			'seoTitle'        => (string) $eff['seo_title'],
+			'metaDescription' => (string) $eff['meta_description'],
+			'fallbackTitle'   => (string) get_the_title( $post ),
+			'siteName'        => (string) get_bloginfo( 'name' ),
+			'host'            => (string) wp_parse_url( home_url(), PHP_URL_HOST ),
+			'permalink'       => (string) get_permalink( $post ),
+			'dateLabel'       => (string) get_the_date( '', $post ),
+			'image'           => $image ? (string) $image : '',
+			'titleMetaKey'    => Seonix_Meta_Bridge::META_TITLE,
+			'descMetaKey'     => Seonix_Meta_Bridge::META_DESC,
+			// Editable whenever the post type carries meta over REST. Writing here
+			// updates Seonix's canonical title/description meta, which the bridge
+			// mirrors into any active SEO plugin on save and syncs to Seonix. The
+			// fields are pre-filled with the current effective values.
+			'editable'        => post_type_supports( $post->post_type, 'custom-fields' ),
+		);
+	}
+
+	/**
+	 * A one-click "fix it" action for a scan issue whose fix lives on a screen
+	 * this plugin hosts, so the panel can send the author straight there instead
+	 * of only describing the fix.
+	 *
+	 * Right now that is the Redirects manager: every redirect-family scan code
+	 * (broken_redirect, redirect_loop, too_many_redirects, internal_link_to_redirect,
+	 * https_redirect_missing, speed_redirects) is resolved there, and they all
+	 * carry "redirect" in the code — so one substring test covers the family and
+	 * any future redirect check without a hand-maintained list. Issues with no
+	 * local tool return null and render no button.
+	 *
+	 * @param string $code Machine code of the scan issue (may be empty).
+	 * @return array{label:string,url:string}|null
+	 */
+	private function fix_action_for( string $code ) {
+		if ( '' !== $code && false !== strpos( $code, 'redirect' ) ) {
+			return array(
+				'label' => __( 'Open redirect manager', 'seonix' ),
+				// Same slug as Seonix_Redirects_Admin::PAGE_SLUG; hard-coded so this
+				// payload builder does not depend on the redirects module loading.
+				'url'   => admin_url( 'admin.php?page=seonix-redirects' ),
+			);
+		}
+		return null;
 	}
 
 	/**
@@ -641,6 +744,12 @@ class Seonix_Metabox {
 			if ( 0 === strpos( $lower, 'tel:' )
 				|| 0 === strpos( $lower, 'javascript:' )
 				|| 0 === strpos( $lower, 'data:' ) ) {
+				continue;
+			}
+			// Skip non-navigational anchors plugins use as click targets: a bare
+			// "#" (JS/button trigger) and popup openers (Popup Maker #popmake-NN,
+			// Elementor #elementor-*) — they open a modal, not a page.
+			if ( '#' === $href || preg_match( '/^#(popmake|elementor)/i', $href ) ) {
 				continue;
 			}
 			$anchor   = trim( (string) wp_strip_all_tags( $a->textContent ) );
@@ -820,6 +929,12 @@ class Seonix_Metabox {
 				echo '</div>';
 				if ( '' !== $iss['recommendation'] ) {
 					echo '<div class="seonix-mb-issuerec">' . esc_html( $iss['recommendation'] ) . '</div>';
+				}
+				// One-click action when the fix lives on a screen this plugin hosts
+				// (the Redirects manager) — same button as the block-editor panel.
+				if ( ! empty( $iss['fix_action']['url'] ) ) {
+					echo '<a class="sx-iss-action" href="' . esc_url( $iss['fix_action']['url'] ) . '">'
+						. esc_html( $iss['fix_action']['label'] ) . ' &rarr;</a>';
 				}
 				echo '</div></div>';
 			}

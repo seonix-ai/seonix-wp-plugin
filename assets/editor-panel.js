@@ -2,7 +2,7 @@
  * Seonix — per-page audit panel in the block-editor document sidebar.
  *
  * Renders window.seonixAudit (localized by Seonix_Metabox::enqueue) as a
- * Yoast-style panel in the editor's Document sidebar, reusing the .seonix-metabox
+ * SEO-plugin-style panel in the editor's Document sidebar, reusing the .seonix-metabox
  * styles from admin.css. Pure wp.element (no JSX / build step). Fully defensive:
  * if any required editor API is missing it no-ops and never breaks the editor.
  */
@@ -35,7 +35,7 @@
 		null;
 
 	// Need at least one render target. The Sidebar is the primary, discoverable
-	// entry point (its icon sits in the top toolbar, Yoast-style); the document
+	// entry point (its icon sits in the top toolbar, SEO-plugin-style); the document
 	// Panel is the fallback / secondary location.
 	if ( ! registerPlugin || ( ! Sidebar && ! Panel ) ) {
 		return;
@@ -47,7 +47,7 @@
 	}
 
 	// Brand header: the Seonix mark + wordmark + one-line verdict. Mirrors the
-	// "Yoast SEO" header row at the top of Yoast's panel.
+	// the header row at the top of the SEO plugin's panel.
 	//
 	// The verdict line describes the last SITE SCAN ("6 issues on this page",
 	// "Not scanned yet"), not the live score — the two answer different
@@ -139,6 +139,16 @@
 			detail.push( el( 'div', { className: 'sx-iss-warn', key: 'warn' },
 				warns.map( function ( w, i ) { return el( 'div', { className: 'sx-iss-warn-row', key: i }, '⚠ ' + w ); } )
 			) );
+		}
+		// One-click action when the fix lives on a screen the plugin hosts (the
+		// Redirects manager). Only shown when the payload carries fix_action —
+		// most issues have no local tool and just show the steps above.
+		if ( iss.fix_action && iss.fix_action.url ) {
+			detail.push( el( 'a', {
+				className: 'sx-iss-action',
+				key: 'act',
+				href: iss.fix_action.url
+			}, ( iss.fix_action.label || 'Open' ) + ' →' ) );
 		}
 		return el( 'div', { className: 'sx-iss is-open' }, head, el( 'div', { className: 'sx-iss-detail' }, detail ) );
 	}
@@ -256,17 +266,14 @@
 	}
 
 	/**
-	 * The badge on the mark: is this page green yet?
+	 * The badge on the mark: a green / amber / red status dot, NOT a number.
 	 *
-	 * It reads the SCORES, not the issue count. A count answered the wrong
-	 * question: a page can carry eight speed recommendations and still be the
-	 * best page on the site, while a page with one real error and nothing else
-	 * shows a smaller, friendlier number. "8" told the author how much text was
-	 * below, not whether the page was in good shape.
-	 *
-	 * Page issues keep their own section. They describe the PAGE — redirects,
-	 * canonicals, structured data — which no amount of editing the text fixes,
-	 * so folding them into the writing verdict would only make it unactionable.
+	 * The colour is the page's overall verdict from the two content SCORES (the
+	 * worse of SEO / Readability), with a ✓ when green and a "·" while there is
+	 * no score yet. A raw issue count read as the page's grade even though it is
+	 * not one — eight speed notes do not make a page "worse" than one with a
+	 * single real error — so the badge speaks in the same green/amber/red the
+	 * gauges do, and the exact issue count lives in the Page issues section.
 	 */
 	function badgeState( score ) {
 		var i18n = data.i18n || {};
@@ -406,7 +413,7 @@
 	var showKeyphraseField = ! data.hasNativeKeyphraseUi && !! data.keyphraseMetaInRest;
 
 	// Seonix's own keyphrase field, read from the post's EDITED meta — the same
-	// "live, including unsaved" contract as the Yoast / Rank Math store probes
+	// "live, including unsaved" contract as the the active SEO plugin store probes
 	// above, since editPost() lands the value here long before a save does.
 	function ownKeyphrase() {
 		try {
@@ -425,9 +432,9 @@
 	// The engine's EMPTY value is still its answer, so we must not fall through
 	// to ours behind it: liveSeoField() can't tell "author cleared this field"
 	// from "no such store", and our field is invisible while an engine is active.
-	// A post that carried a Seonix keyphrase before Yoast was installed would
+	// A post that carried a Seonix keyphrase before an SEO plugin was installed would
 	// otherwise keep scoring against that old value forever — the author clears
-	// Yoast's field, sees nothing on screen, and the panel silently keeps judging
+	// the SEO plugin's field, sees nothing on screen, and the panel silently keeps judging
 	// against a phrase they cannot see or delete (read_effective() only copies
 	// non-empty engine values back, so it never clears either).
 	function liveKeyphrase() {
@@ -440,7 +447,7 @@
 	}
 
 	// The meta description matters more than it looks: it carries weight 10 in
-	// the engine, so an author typing one in the Yoast/Rank Math sidebar would
+	// the engine, so an author typing one in the the active SEO plugin sidebar would
 	// otherwise watch the SEO gauge insist there isn't one until they saved —
 	// the panel arguing with work they can see on screen.
 	function liveMetaDescription() {
@@ -448,6 +455,25 @@
 			[ 'yoast-seo/editor', 'getDescription' ],
 			[ 'rank-math', 'getDescription' ]
 		] );
+	}
+
+	// The SEO title / description as the active engine has them right now, read
+	// through a passed-in `select` so it can run INSIDE
+	// a useSelect() — that is what makes the search-appearance preview re-render
+	// live as the author edits the title / description in the active SEO plugin,
+	// rather than freezing at whatever the value was on page load.
+	function selectSeoField( select, probes ) {
+		for ( var i = 0; i < probes.length; i++ ) {
+			try {
+				var store = select( probes[ i ][ 0 ] );
+				var selector = store && store[ probes[ i ][ 1 ] ];
+				if ( selector ) {
+					var value = store[ probes[ i ][ 1 ] ]();
+					if ( value ) { return String( value ); }
+				}
+			} catch ( e ) {}
+		}
+		return '';
 	}
 
 	// Everything the score depends on, in one place. Both the change detector
@@ -814,6 +840,13 @@
 			if ( lower.indexOf( 'tel:' ) === 0 || lower.indexOf( 'javascript:' ) === 0 || lower.indexOf( 'data:' ) === 0 ) {
 				continue;
 			}
+			// Skip non-navigational anchors that plugins use as click targets: a
+			// bare "#" (a JS/button trigger) and popup openers (Popup Maker
+			// #popmake-NN, Elementor #elementor-*). They open a modal, not a page,
+			// so they are not links the author placed to navigate anywhere.
+			if ( '#' === href || /^#(popmake|elementor)/i.test( href ) ) {
+				continue;
+			}
 			var anchor = ( anchors[ i ].textContent || '' ).trim();
 			var nofollow = /\bnofollow\b/i.test( anchors[ i ].getAttribute( 'rel' ) || '' );
 
@@ -881,24 +914,149 @@
 		}
 	}
 
-	// One concept-style link group: hairline header + compact icon rows.
+	// Jump to a link inside the article: select the block that contains this
+	// href and scroll it into view, so the author can see WHERE the link sits.
+	// The block-editor canvas is an iframe in WP 6.6+, so we look there too.
+	function focusLinkInEditor( href ) {
+		try {
+			var be = ( wp.data && wp.data.select ) ? wp.data.select( 'core/block-editor' ) : null;
+			var dispatch = ( wp.data && wp.data.dispatch ) ? wp.data.dispatch( 'core/block-editor' ) : null;
+			if ( ! be || ! be.getBlocks || ! dispatch ) { return; }
+			var found = null;
+			( function walk( blocks ) {
+				for ( var i = 0; i < blocks.length && ! found; i++ ) {
+					var b = blocks[ i ];
+					var hay = '';
+					try { hay = JSON.stringify( b.attributes || {} ); } catch ( e ) {}
+					if ( hay && hay.indexOf( href ) !== -1 ) { found = b.clientId; return; }
+					if ( b.innerBlocks && b.innerBlocks.length ) { walk( b.innerBlocks ); }
+				}
+			} )( be.getBlocks() );
+			if ( ! found ) { return; }
+			if ( dispatch.selectBlock ) { dispatch.selectBlock( found ); }
+			setTimeout( function () {
+				var node = document.getElementById( 'block-' + found );
+				if ( ! node ) {
+					var frame = document.querySelector( 'iframe[name="editor-canvas"]' );
+					if ( frame && frame.contentDocument ) { node = frame.contentDocument.getElementById( 'block-' + found ); }
+				}
+				if ( node && node.scrollIntoView ) { node.scrollIntoView( { behavior: 'smooth', block: 'center' } ); }
+			}, 30 );
+		} catch ( e ) {}
+	}
+
+	// Unwrap the first <a> that points at href, keeping its inner text.
+	function unwrapAnchor( html, href ) {
+		var esc = href.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+		var re = new RegExp( '<a\\b[^>]*href="' + esc + '"[^>]*>([\\s\\S]*?)<\\/a>', 'i' );
+		return html.replace( re, '$1' );
+	}
+
+	// Remove a link from the article, keeping its anchor text (unlink). Finds the
+	// block that holds this href and unwraps the matching <a> in every string
+	// attribute (paragraph / heading / list content). Undoable with editor Undo.
+	function removeLinkInEditor( href ) {
+		try {
+			var be = ( wp.data && wp.data.select ) ? wp.data.select( 'core/block-editor' ) : null;
+			var dispatch = ( wp.data && wp.data.dispatch ) ? wp.data.dispatch( 'core/block-editor' ) : null;
+			if ( ! be || ! be.getBlocks || ! dispatch || ! dispatch.updateBlockAttributes ) { return; }
+			var found = null;
+			( function walk( blocks ) {
+				for ( var i = 0; i < blocks.length && ! found; i++ ) {
+					var b = blocks[ i ];
+					var hay = '';
+					try { hay = JSON.stringify( b.attributes || {} ); } catch ( e ) {}
+					if ( hay && hay.indexOf( href ) !== -1 ) { found = b; return; }
+					if ( b.innerBlocks && b.innerBlocks.length ) { walk( b.innerBlocks ); }
+				}
+			} )( be.getBlocks() );
+			if ( ! found ) { return; }
+			var attrs = found.attributes || {};
+			var changed = {};
+			Object.keys( attrs ).forEach( function ( k ) {
+				var v = attrs[ k ];
+				// content is a string on older cores and a RichTextData object on
+				// WP 6.4+ — read both via toString(); a non-text object stringifies
+				// to "[object Object]", which carries no href and is skipped.
+				var str = ( 'string' === typeof v ) ? v : ( v && 'function' === typeof v.toString ? v.toString() : '' );
+				if ( str && str.indexOf( '<a' ) !== -1 && str.indexOf( href ) !== -1 ) {
+					var next = unwrapAnchor( str, href );
+					if ( next !== str ) { changed[ k ] = next; }
+				}
+			} );
+			if ( ! Object.keys( changed ).length ) { return; }
+			if ( dispatch.selectBlock ) { dispatch.selectBlock( found.clientId ); }
+			dispatch.updateBlockAttributes( found.clientId, changed );
+		} catch ( e ) {}
+	}
+
+	// Small action icons for a link row (edit / delete), 14px @ viewBox 24.
+	function actionIcon( kind ) {
+		var p = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' };
+		if ( 'edit' === kind ) {
+			return el( 'svg', p, el( 'path', { d: 'M12 20h9' } ), el( 'path', { d: 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' } ) );
+		}
+		return el( 'svg', p, el( 'path', { d: 'M3 6h18' } ), el( 'path', { d: 'M8 6V4h8v2' } ), el( 'path', { d: 'M19 6l-1 14H6L5 6' } ), el( 'path', { d: 'M10 11v6M14 11v6' } ) );
+	}
+
+	// One concept-style link group: hairline header + compact icon rows. Each row
+	// shows the link, and on hover the three actions the dashboard link tools use:
+	// edit (jump to it in the article), remove (unlink, keep the text), and open
+	// in a new tab (real destinations only — an in-page #anchor has nothing to open).
 	function linkGroup( items, label, empty, group ) {
+		var i18n = data.i18n || {};
 		var rows;
 		if ( items.length ) {
 			rows = items.map( function ( it, i ) {
 				var icoCls = 'sx-lnk-ico' + ( 'external' === it.kind ? ' ext' : ( 'mail' === it.kind ? ' mail' : '' ) );
 				var pathCls = 'sx-lnk-path' + ( 'external' === it.kind || 'mail' === it.kind ? ' sx-lnk-ext-path' : '' );
 				var display = linkDisplayPath( it );
+				// A real destination worth opening in a tab (an in-page #anchor is not).
+				var canOpen = 'external' === it.kind || 'internal' === it.kind || 'mail' === it.kind;
 				return el(
-					'a',
-					{ className: 'sx-lnk', key: 'l' + i, href: it.href, target: '_blank', rel: 'noopener noreferrer' },
-					el( 'span', { className: icoCls }, linkTypeIcon( it.kind ) ),
+					'div',
+					{ className: 'sx-lnk', key: 'l' + i },
 					el(
-						'span', { className: 'sx-lnk-text' },
-						el( 'span', { className: 'sx-lnk-anchor' }, it.anchor || display ),
-						el( 'span', { className: pathCls }, display )
+						'button',
+						{
+							type: 'button',
+							className: 'sx-lnk-main',
+							title: i18n.jumpToLink || 'Find this link in the article',
+							onClick: function () { focusLinkInEditor( it.href ); }
+						},
+						el( 'span', { className: icoCls }, linkTypeIcon( it.kind ) ),
+						el(
+							'span', { className: 'sx-lnk-text' },
+							el( 'span', { className: 'sx-lnk-anchor' }, it.anchor || display ),
+							el( 'span', { className: pathCls }, display )
+						)
 					),
-					it.nofollow ? el( 'span', { className: 'sx-lnk-tag' }, 'nofollow' ) : null
+					it.nofollow ? el( 'span', { className: 'sx-lnk-tag' }, 'nofollow' ) : null,
+					el(
+						'span',
+						{ className: 'sx-lnk-actions' },
+						// Edit — jump to the link in the article so the author can change it.
+						el( 'button', {
+							type: 'button', className: 'sx-lnk-act',
+							title: i18n.editLink || 'Edit this link',
+							'aria-label': i18n.editLink || 'Edit this link',
+							onClick: function () { focusLinkInEditor( it.href ); }
+						}, actionIcon( 'edit' ) ),
+						// Remove — unlink, keeping the anchor text (undoable).
+						el( 'button', {
+							type: 'button', className: 'sx-lnk-act sx-lnk-act--del',
+							title: i18n.removeLink || 'Remove this link',
+							'aria-label': i18n.removeLink || 'Remove this link',
+							onClick: function () { removeLinkInEditor( it.href ); }
+						}, actionIcon( 'del' ) ),
+						// Open in a new tab — real destinations only.
+						canOpen ? el( 'a', {
+							className: 'sx-lnk-act',
+							href: it.href, target: '_blank', rel: 'noopener noreferrer',
+							title: i18n.openLink || 'Open in a new tab',
+							'aria-label': i18n.openLink || 'Open in a new tab'
+						}, linkTypeIcon( 'external', 13 ) ) : null
+					)
 				);
 			} );
 		} else {
@@ -983,6 +1141,189 @@
 		);
 	}
 
+	// --- Search appearance ---------------------------------------------------
+	// SEO title + meta description with a live Google / social preview, mirroring
+	// the "Search appearance" surface SEO plugins show. Values come from the bridge
+	// (whichever engine owns them). When no SEO plugin is installed the fields are
+	// editable and write our canonical meta — which the bridge fans out to any
+	// active engine and syncs to Seonix; otherwise they show the engine's live
+	// values and the author edits them there.
+	var search = data.search || {};
+	var TITLE_MIN = 30;
+	var TITLE_MAX = 60;
+	var DESC_MIN = 70;
+	var DESC_MAX = 160;
+
+	function truncate( s, n ) {
+		s = String( s || '' );
+		if ( s.length <= n ) { return s; }
+		return s.slice( 0, n - 1 ).replace( /\s+\S*$/, '' ) + '…';
+	}
+
+	function siteInitial() {
+		var n = ( search.siteName || search.host || 'S' ).trim();
+		return n ? n.charAt( 0 ).toUpperCase() : 'S';
+	}
+
+	// Path part of the permalink, as Google renders the breadcrumb URL.
+	function urlCrumb() {
+		try {
+			var u = new URL( search.permalink || '' );
+			var parts = u.pathname.split( '/' ).filter( Boolean );
+			return parts.length ? ' › ' + parts.join( ' › ' ) : '';
+		} catch ( e ) { return ''; }
+	}
+
+	// Length meter: grey when empty, amber when too short, GREEN across the whole
+	// good range up to the limit, red only once it overruns and would be clipped
+	// in results. (At exactly the limit it is still green — that length is fine.)
+	function lenMeter( len, min, max ) {
+		var tone = 0 === len ? 'mute' : ( len > max ? 'bad' : ( len < min ? 'warn' : 'good' ) );
+		var pct = Math.max( 3, Math.min( 100, ( len / max ) * 100 ) );
+		return el( 'div', { className: 'sx-meter' },
+			el( 'div', { className: 'sx-meter-track' }, el( 'div', { className: 'sx-meter-fill sx-meter-fill--' + tone, style: { width: pct + '%' } } ) ),
+			el( 'span', { className: 'sx-meter-num sx-meter-num--' + tone }, len + ' / ' + max )
+		);
+	}
+
+	function sglyph( paths ) {
+		return el( 'svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, paths.map( function ( d, i ) { return el( 'path', { d: d, key: i } ); } ) );
+	}
+
+	function GooglePreview( props ) {
+		var mobile = 'mobile' === props.mode;
+		var title = props.title || search.fallbackTitle || ( ( data.i18n && data.i18n.untitledLabel ) || 'Untitled' );
+		var desc = props.desc || '';
+		var head = el( 'div', { className: 'sx-gp-head' },
+			el( 'span', { className: 'sx-gp-fav' }, siteInitial() ),
+			el( 'div', { className: 'sx-gp-id' },
+				el( 'div', { className: 'sx-gp-site' }, search.siteName || search.host ),
+				// Mobile shows just the host; desktop shows the full breadcrumb URL.
+				el( 'div', { className: 'sx-gp-url' }, mobile ? ( search.host || '' ) : ( ( search.host || '' ) + urlCrumb() ) )
+			),
+			el( 'span', { className: 'sx-gp-dots', 'aria-hidden': 'true' }, '⋮' )
+		);
+		var titleEl = el( 'div', { className: 'sx-gp-title' }, truncate( title, mobile ? 58 : 66 ) );
+		var descEl = el( 'div', { className: 'sx-gp-desc' },
+			search.dateLabel ? el( 'span', { className: 'sx-gp-date' }, search.dateLabel + ' — ' ) : null,
+			truncate( desc, mobile ? 150 : 175 )
+		);
+		// Mobile: a rounded card — title full width, then the description with a
+		// small thumbnail tucked to its right (the title never gets squeezed).
+		if ( mobile ) {
+			return el( 'div', { className: 'sx-gp sx-gp--mobile' },
+				head,
+				titleEl,
+				el( 'div', { className: 'sx-gp-descrow' },
+					descEl,
+					search.image ? el( 'div', { className: 'sx-gp-thumb', style: { backgroundImage: 'url("' + search.image + '")' } } ) : null
+				)
+			);
+		}
+		// Desktop: a plain result — breadcrumb URL row, blue title, description. No
+		// card chrome, no thumbnail, full width.
+		return el( 'div', { className: 'sx-gp sx-gp--desktop' }, head, titleEl, descEl );
+	}
+
+	function SocialPreview( props ) {
+		var title = props.title || search.fallbackTitle || 'Untitled';
+		var desc = props.desc || '';
+		return el( 'div', { className: 'sx-sp' },
+			search.image
+				? el( 'div', { className: 'sx-sp-img', style: { backgroundImage: 'url("' + search.image + '")' } } )
+				: el( 'div', { className: 'sx-sp-img sx-sp-img--empty' }, makeIcon( BRAND_EYES ) ),
+			el( 'div', { className: 'sx-sp-meta' },
+				el( 'div', { className: 'sx-sp-domain' }, ( search.host || '' ).toUpperCase() ),
+				el( 'div', { className: 'sx-sp-title' }, truncate( title, 70 ) ),
+				desc ? el( 'div', { className: 'sx-sp-desc' }, truncate( desc, 120 ) ) : null
+			)
+		);
+	}
+
+	function SearchAppearanceSection() {
+		var oSt = useState( false ), open = oSt[0], setOpen = oSt[1];
+		var tSt = useState( 'google' ), tab = tSt[0], setTab = tSt[1];
+		var mSt = useState( 'mobile' ), mode = mSt[0], setMode = mSt[1];
+		var i18n = data.i18n || {};
+		var editable = !! search.editable;
+		var useSelect = wp.data && wp.data.useSelect;
+		var useDispatch = wp.data && wp.data.useDispatch;
+
+		// Hooks run unconditionally (Rules of Hooks); the branch is in the values.
+		// Read BOTH our own meta and the active SEO plugin's store inside one
+		// useSelect, so the fields + preview stay in sync live — whether the author
+		// types here or the value already lives in an active SEO plugin.
+		var live = useSelect ? useSelect( function ( select ) {
+			var ed = select( 'core/editor' );
+			var meta = ( ed && ed.getEditedPostAttribute ) ? ed.getEditedPostAttribute( 'meta' ) : null;
+			return {
+				ownT: ( meta && meta[ search.titleMetaKey ] ) || '',
+				ownD: ( meta && meta[ search.descMetaKey ] ) || '',
+				engT: selectSeoField( select, [
+					[ 'yoast-seo/editor', 'getSeoTitle' ],
+					[ 'yoast-seo/editor', 'getEditorDataTitle' ],
+					[ 'rank-math', 'getTitle' ]
+				] ),
+				engD: selectSeoField( select, [
+					[ 'yoast-seo/editor', 'getDescription' ],
+					[ 'rank-math', 'getDescription' ]
+				] )
+			};
+		}, [] ) : { ownT: '', ownD: '', engT: '', engD: '' };
+		var dispatcher = useDispatch ? useDispatch( 'core/editor' ) : null;
+
+		// Our own value first; else the SEO plugin's current value; else the
+		// localized effective — so an editable field is pre-filled with whatever
+		// title / description already exists, and a read-only field still shows it.
+		var title = ( editable ? live.ownT : '' ) || live.engT || search.seoTitle || '';
+		var desc = ( editable ? live.ownD : '' ) || live.engD || search.metaDescription || '';
+
+		function writeMeta( key, val ) {
+			if ( ! dispatcher || ! dispatcher.editPost ) { return; }
+			var m = {}; m[ key ] = val; dispatcher.editPost( { meta: m } );
+		}
+
+		var previewArea = 'social' === tab
+			? el( SocialPreview, { title: title, desc: desc } )
+			: el( GooglePreview, { title: title, desc: desc, mode: mode } );
+
+		var titleField = editable
+			? el( 'input', { type: 'text', className: 'sx-sa-input', value: title, placeholder: i18n.seoTitlePlaceholder || '', onChange: function ( e ) { writeMeta( search.titleMetaKey, e.target.value ); } } )
+			: el( 'div', { className: 'sx-sa-ro' }, title || el( 'span', { className: 'sx-sa-ph' }, i18n.seoTitlePlaceholder || '' ) );
+		var descField = editable
+			? el( 'textarea', { className: 'sx-sa-input sx-sa-textarea', rows: 3, value: desc, placeholder: i18n.metaDescPlaceholder || '', onChange: function ( e ) { writeMeta( search.descMetaKey, e.target.value ); } } )
+			: el( 'div', { className: 'sx-sa-ro' }, desc || el( 'span', { className: 'sx-sa-ph' }, i18n.metaDescPlaceholder || '' ) );
+
+		var body = el( 'div', { className: 'sx-acc-body sx-sa' },
+			el( 'div', { className: 'sx-sa-tabs' },
+				el( 'button', { type: 'button', className: 'sx-sa-tab' + ( 'google' === tab ? ' is-active' : '' ), onClick: function () { setTab( 'google' ); } }, i18n.googlePreview || 'Google' ),
+				el( 'button', { type: 'button', className: 'sx-sa-tab' + ( 'social' === tab ? ' is-active' : '' ), onClick: function () { setTab( 'social' ); } }, i18n.socialPreview || 'Social' ),
+				'google' === tab ? el( 'div', { className: 'sx-sa-modes' },
+					el( 'button', { type: 'button', className: 'sx-sa-mode' + ( 'mobile' === mode ? ' is-active' : '' ), 'aria-label': i18n.mobileLabel || 'Mobile', title: i18n.mobileLabel || 'Mobile', onClick: function () { setMode( 'mobile' ); } }, sglyph( [ 'M7 4h10a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M11 18h2' ] ) ),
+					el( 'button', { type: 'button', className: 'sx-sa-mode' + ( 'desktop' === mode ? ' is-active' : '' ), 'aria-label': i18n.desktopLabel || 'Desktop', title: i18n.desktopLabel || 'Desktop', onClick: function () { setMode( 'desktop' ); } }, sglyph( [ 'M3 5h18v11H3z', 'M8 20h8M12 16v4' ] ) )
+				) : null
+			),
+			el( 'div', { className: 'sx-sa-preview' }, previewArea ),
+			el( 'div', { className: 'sx-sa-field' },
+				el( 'div', { className: 'sx-sa-flabel' }, el( 'span', null, i18n.seoTitleLabel || 'SEO title' ), lenMeter( ( title || '' ).length, TITLE_MIN, TITLE_MAX ) ),
+				titleField
+			),
+			el( 'div', { className: 'sx-sa-field' },
+				el( 'div', { className: 'sx-sa-flabel' }, el( 'span', null, i18n.metaDescLabel || 'Meta description' ), lenMeter( ( desc || '' ).length, DESC_MIN, DESC_MAX ) ),
+				descField
+			)
+		);
+
+		return el( 'div', { className: 'sx-acc' },
+			el( 'button', { type: 'button', className: 'sx-acc-head', 'aria-expanded': open ? 'true' : 'false', onClick: function () { setOpen( ! open ); } },
+				el( 'span', { className: 'sx-acc-lead' }, el( 'span', { className: 'sx-sa-ico' }, sglyph( [ 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M21 21l-4.35-4.35' ] ) ) ),
+				el( 'span', { className: 'sx-acc-label' }, i18n.searchApp || 'Search appearance' ),
+				el( 'svg', { className: 'sx-acc-chev' + ( open ? ' is-open' : '' ), width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, el( 'path', { d: 'M7 10l5 5 5-5', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' } ) )
+			),
+			open ? body : null
+		);
+	}
+
 	function PanelBody() {
 		var score = useScore();
 		var i18n = data.i18n || {};
@@ -1001,10 +1342,12 @@
 			'div',
 			{ className: 'seonix-metabox seonix-metabox--panel' },
 			brandHeader(),
-			// Above the analysis, Yoast-style: the keyphrase is the input the
+			// Above the analysis, SEO-plugin-style: the keyphrase is the input the
 			// SEO checks below are judging against, so it reads top-down — and
 			// it is what the "fill in the field above" hint points at.
 			showKeyphraseField ? el( KeyphraseField, { key: 'kw' } ) : null,
+			// How this page looks in search + social, with editable title / meta.
+			el( SearchAppearanceSection, { key: 'search' } ),
 			el( ScoreSection, {
 				key: 'seo',
 				label: i18n.seoLabel || 'SEO',
@@ -1091,7 +1434,7 @@
 
 	// The sidebar header bar is narrow — a long "Seonix — 6 issues · 3 warnings ·
 	// 3 notices" string wrapped to three clipped lines. Keep the header/tooltip to
-	// just the brand (like Yoast's "Yoast SEO"); the count lives in the body header.
+	// just the brand (like the SEO plugin's own name); the count lives in the body header.
 	var tipText = 'Seonix';
 
 	// The icon the editor shows for this plugin (its toolbar button and the
@@ -1100,8 +1443,8 @@
 	// own; an element built once at registration time would be frozen at whatever
 	// it had on page load.
 	function LiveIcon() {
-		// Subscribing is what makes the badge follow the text as it is edited.
-		// The mark itself stays brand — only the badge moves.
+		// Subscribing is what makes the badge follow the score as the text is
+		// edited. The mark itself stays brand — only the status dot moves.
 		return el( MarkWithBadge, { badge: badgeState( useScore() ) } );
 	}
 

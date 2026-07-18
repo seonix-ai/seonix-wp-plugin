@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.12.2
+ * Version:     2.12.8
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.12.2' );
+define( 'SEONIX_VERSION', '2.12.8' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
