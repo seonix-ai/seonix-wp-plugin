@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.9
+Stable tag: 2.12.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.12.10 =
+* Fixed: updating an article whose WordPress post was deleted (for example after restoring the site from a backup) no longer fails with a generic error — the plugin now reports the missing post clearly, and Seonix automatically re-publishes the article as a fresh post.
 
 = 2.12.9 =
 * Housekeeping: bundled editor and admin assets are cache-busted by their file modification time, so updated styles and scripts reach the browser reliably without needing a plugin version bump.

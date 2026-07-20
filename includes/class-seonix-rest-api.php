@@ -495,6 +495,20 @@ class Seonix_REST_API {
 		// If wp_post_id is provided, update existing post instead of creating new.
 		$wp_post_id = (int) $request->get_param( 'wp_post_id' );
 		if ( $wp_post_id > 0 ) {
+			// The target of an update can vanish out-of-band — deleted by hand
+			// or wiped when the site was restored from a backup. Letting
+			// wp_insert_post discover that yields a generic 500
+			// post_creation_failed ("Invalid post ID.") the backend cannot
+			// tell apart from a real write failure. Answer a clean 404
+			// instead: the backend maps it to its post-not-found path and
+			// re-publishes the article as a fresh post.
+			if ( ! get_post( $wp_post_id ) ) {
+				return new WP_Error(
+					'post_not_found',
+					sprintf( 'Post %d no longer exists on this site.', $wp_post_id ),
+					array( 'status' => 404 )
+				);
+			}
 			$post_data['ID'] = $wp_post_id;
 		} elseif ( ! empty( $ce_article_id ) ) {
 			// Idempotency guard: a previous publish call may have created the
