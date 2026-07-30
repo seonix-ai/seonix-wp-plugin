@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.13.0
+Stable tag: 2.13.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.13.1 =
+* New: the llms.txt business block accepts operator extensions via the `seonix_llmstxt_business_extra` filter — add pricing, availability or review facts so AI assistants can quote them directly.
 
 = 2.13.0 =
 * New: sitewide business entity — when your Seonix project carries a business profile (address, phone, service area), the plugin enriches your SEO plugin's Organization structured data into a proper LocalBusiness entity and lists the facts in llms.txt, so Google and AI assistants see ONE consistent business instead of scattered fragments. Fully automatic, nothing to configure; profiles without complete address data change nothing.

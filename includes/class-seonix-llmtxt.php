@@ -152,6 +152,15 @@ class Seonix_LLMTxt {
 		// questions without parsing any page. Empty string when no profile.
 		$llm_txt .= Seonix_Business_Profile::llms_block();
 
+		// Site-specific business facts the profile does not model yet —
+		// pricing, availability, review counts. Operators (or Seonix-managed
+		// mu-plugins) append pre-formatted markdown here; AI assistants
+		// answer "what does it cost" questions from exactly this block.
+		$extra = apply_filters( 'seonix_llmstxt_business_extra', '' );
+		if ( is_string( $extra ) && '' !== trim( $extra ) ) {
+			$llm_txt .= rtrim( $extra ) . "\n\n";
+		}
+
 		// Safety cap for very large sites; llms.txt should stay consumable.
 		$max_items = (int) apply_filters( 'seonix_llmstxt_max_items', 2000 );
 		$emitted   = 0;
