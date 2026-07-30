@@ -54,6 +54,10 @@ class Seonix_Schema {
 		'GeneralContractor',
 		'ProfessionalService',
 		'Store',
+		// A per-page Service node (provider → the site's business @id) is the
+		// schema.org-correct way to mark up a service/city landing page without
+		// spawning a second business entity. No SEO engine emits it.
+		'Service',
 	);
 
 	/**
@@ -106,13 +110,54 @@ class Seonix_Schema {
 		if ( ! $has_graph && ! $has_valid_context ) {
 			return null;
 		}
-		// Re-encode through wp_json_encode so slashes are escaped ("<\/script>").
-		// This is what makes the stored value safe to echo inside <script>.
-		$encoded = wp_json_encode( $decoded );
+		// Re-encode through wp_json_encode so slashes are escaped ("<\/script>")
+		// — that is what makes the stored value safe to echo inside <script>.
+		// JSON_UNESCAPED_UNICODE keeps non-ASCII text (umlauts, €, dashes) as
+		// plain UTF-8 instead of \uXXXX escapes: the value crosses slashing
+		// boundaries (meta_input → wp_unslash) on its way into post meta, and a
+		// plain-UTF-8 body leaves nothing for a missed slashing layer to eat.
+		$encoded = wp_json_encode( $decoded, JSON_UNESCAPED_UNICODE );
 		if ( false === $encoded ) {
 			return null;
 		}
 		return $encoded;
+	}
+
+	/**
+	 * Repair a stored JSON-LD string whose \uXXXX escapes lost their backslashes.
+	 *
+	 * Plugin versions ≤ 2.12.10 passed the sanitized JSON to wp_insert_post()
+	 * via meta_input without wp_slash(). Core wp_unslash()es meta_input, so one
+	 * backslash level was eaten: every "ö" became "u00f6" and "<\/" became
+	 * "</". The document stayed valid JSON, but the human-readable text inside
+	 * (FAQ questions, priceRange "€€") turned into garbage like
+	 * "Mu00f6belmontage" — which is what Google and AI crawlers then read.
+	 *
+	 * The repair reinstates a backslash before every orphaned u+4-hex sequence
+	 * and re-runs sanitize_jsonld (which also restores the "<\/" script-tag
+	 * armor). Only the ranges real content produces are targeted — u0xxx
+	 * (Latin-1 umlauts, Latin Extended, Cyrillic, Greek) and u20xx (€, dashes,
+	 * typographic quotes, ellipsis) — because an orphan can sit mid-word
+	 * ("Mu00f6bel"), so the char before it cannot be used to disambiguate;
+	 * matching all 4-hex runs would rewrite legitimate "u"+hex substrings in
+	 * URLs or IDs. The result must still decode as a schema.org document or
+	 * the original string is kept.
+	 *
+	 * @param string $raw Stored meta value.
+	 * @return string|null Re-sanitized JSON when something was repaired and it
+	 *                     validates; null when there is nothing to heal or the
+	 *                     repaired string fails validation.
+	 */
+	public static function heal_escapes( string $raw ): ?string {
+		$pattern = '/(?<!\\\\)u(0[0-9a-f]{3}|20[0-9a-f]{2})/';
+		if ( ! preg_match( $pattern, $raw ) ) {
+			return null;
+		}
+		$repaired = preg_replace( $pattern, '\\\\u$1', $raw );
+		if ( ! is_string( $repaired ) || $repaired === $raw ) {
+			return null;
+		}
+		return self::sanitize_jsonld( $repaired );
 	}
 
 	/**
@@ -223,7 +268,9 @@ class Seonix_Schema {
 			'@context' => 'https://schema.org',
 			'@graph'   => array_values( $kept ),
 		);
-		$encoded = wp_json_encode( $envelope );
+		// Same encoding contract as sanitize_jsonld: slashes escaped for
+		// <script> safety, non-ASCII kept as readable UTF-8.
+		$encoded = wp_json_encode( $envelope, JSON_UNESCAPED_UNICODE );
 		return false === $encoded ? null : $encoded;
 	}
 
@@ -252,6 +299,16 @@ class Seonix_Schema {
 		$jsonld = get_post_meta( $post_id, self::META_KEY, true );
 		if ( ! is_string( $jsonld ) || '' === trim( $jsonld ) ) {
 			return;
+		}
+
+		// Self-heal payloads stored by ≤ 2.12.10, whose \uXXXX escapes were
+		// eaten by an unslashed meta_input write. Persist the repaired value
+		// (wp_slash — update_post_meta unslashes) so the regex runs once per
+		// post, not on every render.
+		$healed = self::heal_escapes( $jsonld );
+		if ( null !== $healed ) {
+			update_post_meta( $post_id, self::META_KEY, wp_slash( $healed ) );
+			$jsonld = $healed;
 		}
 
 		// should_output() is true when no engine owns the graph (or mode "on") —

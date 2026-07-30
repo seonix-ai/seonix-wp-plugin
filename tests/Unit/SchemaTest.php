@@ -86,6 +86,70 @@ final class SchemaTest extends TestCase {
 		$this->assertNull( Seonix_Schema::sanitize_jsonld( $huge ) );
 	}
 
+	public function test_sanitize_jsonld_keeps_unicode_readable(): void {
+		// Umlauts and € must come back as plain UTF-8, not \uXXXX escapes:
+		// escaped forms are what the historic meta_input unslash bug corrupted.
+		$out = Seonix_Schema::sanitize_jsonld(
+			'{"@context":"https://schema.org","@graph":[{"@type":"FAQPage","name":"Was kostet die Möbelmontage?","priceRange":"€€"}]}'
+		);
+		$this->assertIsString( $out );
+		$this->assertStringContainsString( 'Möbelmontage', $out );
+		$this->assertStringContainsString( '€€', $out );
+		$this->assertStringNotContainsString( '\\u00f6', $out );
+	}
+
+	// ─── heal_escapes: repair of backslash-eaten \uXXXX payloads ──────────
+
+	public function test_heal_escapes_restores_eaten_backslashes(): void {
+		// Real corruption shape from ≤ 2.12.10: meta_input went through
+		// wp_unslash, so "€" was stored as "u20ac" and "ö" as "u00f6".
+		$broken = '{"@context":"https://schema.org","@graph":[{"@type":"GeneralContractor","priceRange":"u20acu20ac"},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Was kostet die Mu00f6belmontage?","acceptedAnswer":{"@type":"Answer","text":"Kleinere Auftru00e4ge nach Stundensatz u2013 einfach anfragen."}}]}]}';
+		$healed = Seonix_Schema::heal_escapes( $broken );
+		$this->assertIsString( $healed );
+		$this->assertStringContainsString( '€€', $healed );
+		$this->assertStringContainsString( 'Möbelmontage', $healed );
+		$this->assertStringContainsString( 'Aufträge nach Stundensatz –', $healed );
+		$this->assertStringNotContainsString( 'u20ac', $healed );
+		$this->assertNotNull( json_decode( $healed, true ) );
+	}
+
+	public function test_heal_escapes_returns_null_when_nothing_to_heal(): void {
+		// A healthy plain-UTF-8 payload has no orphaned uXXXX sequences.
+		$clean = Seonix_Schema::sanitize_jsonld(
+			'{"@context":"https://schema.org","@graph":[{"@type":"FAQPage","name":"Möbelmontage €€"}]}'
+		);
+		$this->assertNull( Seonix_Schema::heal_escapes( $clean ) );
+	}
+
+	public function test_heal_escapes_is_idempotent(): void {
+		$broken = '{"@context":"https://schema.org","@graph":[{"@type":"FAQPage","name":"Mu00f6bel"}]}';
+		$healed = Seonix_Schema::heal_escapes( $broken );
+		$this->assertIsString( $healed );
+		$this->assertNull( Seonix_Schema::heal_escapes( $healed ) );
+	}
+
+	public function test_heal_escapes_ignores_properly_escaped_sequences(): void {
+		// An intact escape (backslash-u00f6) must not match the orphan pattern
+		// — the negative lookbehind excludes sequences that kept their slash.
+		$intact = '{"@context":"https://schema.org","@graph":[{"@type":"FAQPage","name":"M\\u00f6bel"}]}';
+		$this->assertNull( Seonix_Schema::heal_escapes( $intact ) );
+	}
+
+	public function test_heal_escapes_returns_null_when_repair_stays_invalid(): void {
+		// Matches the corruption pattern but is not valid JSON even repaired.
+		$this->assertNull( Seonix_Schema::heal_escapes( '{broken u20ac payload' ) );
+	}
+
+	public function test_supplemental_only_keeps_service_node(): void {
+		// A Service node (provider-referencing a business @id) must survive the
+		// supplemental filter under an active engine — engines never emit it.
+		$graph = '{"@context":"https://schema.org","@graph":[{"@type":"Service","name":"Möbelmontage Oranienburg","provider":{"@id":"https://example.com/#organization"}},{"@type":"WebPage","name":"drop me"}]}';
+		$out   = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringContainsString( '"@type":"Service"', $out );
+		$this->assertStringNotContainsString( 'WebPage', $out );
+	}
+
 	// ─── mode ─────────────────────────────────────────────────────────────
 
 	public function test_mode_defaults_to_auto(): void {

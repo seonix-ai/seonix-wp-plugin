@@ -352,7 +352,9 @@ class Seonix_REST_API {
 				return $result;
 			}
 			if ( '' !== $cache_key ) {
-				update_post_meta( $post_id, self::SCORE_CACHE_META, array( 'hash' => $cache_key, 'payload' => $result ) );
+				// wp_slash: update_post_meta() unslashes; the payload carries
+				// free-form check messages that may contain backslashes.
+				update_post_meta( $post_id, self::SCORE_CACHE_META, wp_slash( array( 'hash' => $cache_key, 'payload' => $result ) ) );
 			}
 		}
 
@@ -441,13 +443,21 @@ class Seonix_REST_API {
 			$meta_input[ Seonix_Schema::META_KEY ] = $schema_jsonld;
 		}
 
+		// Sitewide business profile (NAP + service area from Project DNA) for
+		// the business-entity schema enrichment and the llms.txt facts block.
+		// Absent key (older backend) leaves the stored copy alone; an empty
+		// object deletes it; a complete profile refreshes it.
+		Seonix_Business_Profile::store_from_request( $request->get_param( 'business_profile' ) );
+
 		$meta_input['_ce_published_at'] = gmdate( 'c' );
 
 		// Persist takeaways on the post so themes/AMP/llms.txt can read them
 		// directly without re-parsing the rendered HTML. Stored even when the
 		// HTML is also embedded above the body — they are the canonical copy.
 		if ( ! empty( $key_takeaways ) ) {
-			$meta_input['_seonix_key_takeaways']       = wp_json_encode( $key_takeaways );
+			// JSON_UNESCAPED_UNICODE: keep umlauts readable in the stored copy
+			// (and immune to any slashing-layer mistakes downstream).
+			$meta_input['_seonix_key_takeaways']       = wp_json_encode( $key_takeaways, JSON_UNESCAPED_UNICODE );
 			$meta_input['_seonix_key_takeaways_title'] = $key_takeaways_title;
 		}
 		if ( '' !== $brand_accent ) {
@@ -578,8 +588,13 @@ class Seonix_REST_API {
 			}
 		}
 
-		// Insert the post.
-		$post_id = wp_insert_post( $post_data, true );
+		// Insert the post. wp_insert_post() expects SLASHED data (core runs
+		// wp_unslash() on the post fields and on every meta_input value).
+		// REST params arrive unslashed, so without wp_slash() one backslash
+		// level is eaten from everything we store — which silently corrupted
+		// every \uXXXX escape in the schema JSON-LD and key-takeaways meta
+		// ("ö" stored as "u00f6") up to 2.12.10.
+		$post_id = wp_insert_post( wp_slash( $post_data ), true );
 
 		if ( is_wp_error( $post_id ) ) {
 			return new WP_Error(
@@ -1849,10 +1864,17 @@ class Seonix_REST_API {
 		$updated_content = $this->normalize_image_blocks( $updated_content, $id_by_new_src );
 
 		if ( $updated_content !== $post->post_content ) {
+			// wp_slash: wp_update_post() runs wp_unslash() on the array, and
+			// $updated_content came straight from the DB (unslashed). Without
+			// this, any backslash already in the post body — e.g. \uXXXX
+			// escapes inside Gutenberg block-attribute JSON — loses one level
+			// and the block markup corrupts.
 			$result = wp_update_post(
-				array(
-					'ID'           => $post_id,
-					'post_content' => $updated_content,
+				wp_slash(
+					array(
+						'ID'           => $post_id,
+						'post_content' => $updated_content,
+					)
 				),
 				true
 			);

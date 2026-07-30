@@ -136,6 +136,11 @@ class Seonix_LLMTxt {
 			$llm_txt .= "> {$site_desc}\n\n";
 		}
 
+		// Business facts (NAP + service area) straight from the Seonix
+		// profile — the one block an AI assistant can quote for identity
+		// questions without parsing any page. Empty string when no profile.
+		$llm_txt .= Seonix_Business_Profile::llms_block();
+
 		// Pages section (ordered by menu_order).
 		$pages = get_posts( array(
 			'post_type'      => 'page',

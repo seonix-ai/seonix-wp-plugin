@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.12.10
+Stable tag: 2.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,15 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.13.0 =
+* New: sitewide business entity — when your Seonix project carries a business profile (address, phone, service area), the plugin enriches your SEO plugin's Organization structured data into a proper LocalBusiness entity and lists the facts in llms.txt, so Google and AI assistants see ONE consistent business instead of scattered fragments. Fully automatic, nothing to configure; profiles without complete address data change nothing.
+
+= 2.12.11 =
+* Fixed: structured data (FAQ and local-business JSON-LD) no longer loses umlauts, the euro sign and dashes when an article is published — special characters used to be stored as garbage like "Mu00f6belmontage", which stopped Google rich results and gave AI assistants unreadable text.
+* Fixed: existing articles with corrupted structured data are repaired automatically the next time the page is viewed — no re-publish needed.
+* Fixed: publishing could silently strip backslashes from the article body and stored key takeaways; content is now stored exactly as generated.
+* Improved: per-page Service nodes in stored structured data are now kept alongside an active SEO plugin, so service/city pages can reference the site's business entity without duplicating it.
 
 = 2.12.10 =
 * Fixed: updating an article whose WordPress post was deleted (for example after restoring the site from a backup) no longer fails with a generic error — the plugin now reports the missing post clearly, and Seonix automatically re-publishes the article as a fresh post.

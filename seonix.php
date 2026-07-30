@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.12.10
+ * Version:     2.13.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.12.10' );
+define( 'SEONIX_VERSION', '2.13.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +40,7 @@ require_once SEONIX_DIR . 'includes/class-seonix-admin-bar.php';
 require_once SEONIX_DIR . 'includes/class-seonix-post-columns.php';
 require_once SEONIX_DIR . 'includes/class-seonix-llmtxt.php';
 require_once SEONIX_DIR . 'includes/class-seonix-schema.php';
+require_once SEONIX_DIR . 'includes/class-seonix-business-profile.php';
 
 // Agent-facing render-time annotators (Chrome Lighthouse "Agentic Browsing").
 // Both are inert until their option is flipped by the matching SEO Fix method.
@@ -195,6 +196,11 @@ function seonix_init() {
 	// "auto" mode this self-suppresses when a dedicated SEO plugin is active,
 	// so it never duplicates Yoast/Rank Math/AIOSEO schema.
 	add_action( 'wp_head', array( $schema, 'render_head' ) );
+
+	// Sitewide business entity: enrich Yoast's Organization node with the
+	// backend-provided NAP profile (one business entity per site instead of
+	// per-post fragments). Inert until a publish delivers a complete profile.
+	( new Seonix_Business_Profile() )->register();
 
 	// Standalone SEO meta output (title / description / OG / Twitter). Same
 	// auto/on/off contract as the schema emitter: in "auto" it renders ONLY
