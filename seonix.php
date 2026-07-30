@@ -72,6 +72,7 @@ require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-builder-detector.php';
 require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-bridge.php';
 require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-renderer.php';
 require_once SEONIX_DIR . 'includes/seo-meta/class-seonix-meta-watcher.php';
+require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-content-write.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-registry.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-history.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-cache-purger.php';

@@ -199,6 +199,8 @@ final class SslMixedContentTest extends TestCase {
     }
 
     public function test_rollback_restores_post_content_from_history(): void {
+        // Seonix_Content_Write probes the current modified date; null → plain update.
+        Functions\when( 'get_post' )->justReturn( null );
         $this->history->shouldReceive( 'get' )
             ->with( 42 )
             ->andReturn( array(

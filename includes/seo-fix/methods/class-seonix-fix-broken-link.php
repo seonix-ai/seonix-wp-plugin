@@ -108,7 +108,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			// through to deep mode.
 			$primary_written = false;
 		} else {
-			$update = wp_update_post( array(
+			$update = Seonix_Content_Write::update_preserving_modified( array(
 				'ID'           => (int) $post->ID,
 				// wp_slash: wp_update_post() wp_unslash()es its input, so content
 				// derived from the DB-read post_content must be re-slashed to keep
@@ -236,7 +236,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 				$total += $c;
 			}
 			if ( $total > 0 && $replaced !== $row->post_content ) {
-				$ok = wp_update_post( array(
+				$ok = Seonix_Content_Write::update_preserving_modified( array(
 					'ID'           => (int) $row->ID,
 					// wp_slash: $replaced comes from the DB-read post_content;
 					// wp_update_post() unslashes, so re-slash to preserve backslashes.
@@ -322,7 +322,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 				$total  += $c;
 			}
 			if ( $total > 0 && $content !== $post->post_content ) {
-				$ok = wp_update_post( array(
+				$ok = Seonix_Content_Write::update_preserving_modified( array(
 					'ID'           => (int) $post_id,
 					// wp_slash: content is DB-read; wp_update_post() unslashes it.
 					'post_content' => wp_slash( $content ),
@@ -545,7 +545,7 @@ class Seonix_Fix_Broken_Link implements Seonix_Fix_Method {
 			$count = 0;
 			$replaced = $this->strip_anchors( (string) $row->post_content, $old_url, $count );
 			if ( $count > 0 && $replaced !== $row->post_content ) {
-				$ok = wp_update_post( array(
+				$ok = Seonix_Content_Write::update_preserving_modified( array(
 					'ID'           => (int) $row->ID,
 					// wp_slash: $replaced comes from the DB-read post_content;
 					// wp_update_post() unslashes, so re-slash to preserve backslashes.

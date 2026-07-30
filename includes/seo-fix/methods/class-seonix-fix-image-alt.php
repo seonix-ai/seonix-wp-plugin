@@ -147,7 +147,7 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 				$count       = 0;
 				$new_content = $this->revert_alt_in_html( (string) $post->post_content, $image_url, $alt, $count );
 				if ( $count > 0 && $new_content !== $post->post_content ) {
-					$ok = wp_update_post( array(
+					$ok = Seonix_Content_Write::update_preserving_modified( array(
 						'ID'           => (int) $post_id,
 						// wp_slash: content is DB-read; wp_update_post() unslashes.
 						'post_content' => wp_slash( $new_content ),
@@ -201,7 +201,10 @@ class Seonix_Fix_Image_Alt extends Seonix_Fix_Single_Meta {
 		foreach ( $rows as $row ) {
 			$new_content = $this->rewrite_alt_in_html( $row->post_content, $image_url, $alt, $count );
 			if ( $count > 0 && $new_content !== $row->post_content ) {
-				$ok = wp_update_post( array(
+				// Preserve post_modified: an alt-attribute repair is invisible to
+				// readers; stamping "Updated today" on up to 200 posts per image
+				// is manufactured freshness (see Seonix_Content_Write).
+				$ok = Seonix_Content_Write::update_preserving_modified( array(
 					'ID'           => (int) $row->ID,
 					// wp_slash: $new_content is the DB-read post_content with alt
 					// attributes rewritten; wp_update_post() unslashes its input,

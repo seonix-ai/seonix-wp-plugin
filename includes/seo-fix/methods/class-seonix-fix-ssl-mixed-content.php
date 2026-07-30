@@ -54,7 +54,7 @@ class Seonix_Fix_SSL_Mixed_Content implements Seonix_Fix_Method {
 			return $this->describe_result( $post, $rewritten );
 		}
 
-		$update = wp_update_post( array(
+		$update = Seonix_Content_Write::update_preserving_modified( array(
 			'ID'           => (int) $post->ID,
 			// wp_slash: wp_update_post() runs wp_unslash() on the array, so a
 			// value derived from the DB-read post_content must be re-slashed or
@@ -87,7 +87,7 @@ class Seonix_Fix_SSL_Mixed_Content implements Seonix_Fix_Method {
 			return new WP_Error( 'invalid_history_entry', 'History entry is missing post snapshot.', array( 'status' => 422 ) );
 		}
 
-		$update = wp_update_post( array(
+		$update = Seonix_Content_Write::update_preserving_modified( array(
 			'ID'           => $post_id,
 			// wp_slash: the snapshot holds the unslashed DB content, so restore
 			// it slashed or wp_update_post's internal wp_unslash corrupts it.

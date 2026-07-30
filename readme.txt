@@ -144,6 +144,9 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 = 2.13.0 =
 * New: sitewide business entity — when your Seonix project carries a business profile (address, phone, service area), the plugin enriches your SEO plugin's Organization structured data into a proper LocalBusiness entity and lists the facts in llms.txt, so Google and AI assistants see ONE consistent business instead of scattered fragments. Fully automatic, nothing to configure; profiles without complete address data change nothing.
+* Improved: llms.txt is now a curated map instead of a category dump — every post is listed exactly once under its primary category (a post in three nested categories used to appear in every one of them), placeholder drafts ("coming soon" stubs), noindexed content and utility pages (contact, checkout, cart) are excluded, and descriptions prefer your real meta description over an auto-cut excerpt.
+* Fixed: llms-full.txt no longer includes the full text of password-protected posts — protected content stayed protected everywhere except this file.
+* Fixed: automatic SEO repairs (filling missing image alt text, rewriting broken links, upgrading http:// images to https) no longer change the post's visible "last updated" date — a bulk repair used to re-stamp dozens of old posts as freshly updated, which reads as manufactured freshness to visitors and search engines. Real content updates keep bumping the date as before.
 
 = 2.12.11 =
 * Fixed: structured data (FAQ and local-business JSON-LD) no longer loses umlauts, the euro sign and dashes when an article is published — special characters used to be stored as garbage like "Mu00f6belmontage", which stopped Google rich results and gave AI assistants unreadable text.

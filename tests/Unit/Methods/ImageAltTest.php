@@ -55,6 +55,7 @@ final class ImageAltTest extends TestCase {
 	}
 
 	public function test_apply_sets_meta_rewrites_alt_and_records_affected_post_ids(): void {
+		Functions\when( 'get_post' )->justReturn( null ); // Seonix_Content_Write date probe
 		Functions\when( 'get_post_meta' )->justReturn( '' ); // attachment alt currently empty
 		Functions\when( 'update_post_meta' )->justReturn( true );
 
@@ -157,6 +158,7 @@ final class ImageAltTest extends TestCase {
 	public function test_apply_rewrites_block_json_alt(): void {
 		// Spectra/UAGB store the image inside block-attribute JSON, not an <img>
 		// tag. The shared walker must fill "alt":"" forward.
+		Functions\when( 'get_post' )->justReturn( null ); // Seonix_Content_Write date probe
 		Functions\when( 'get_post_meta' )->justReturn( '' );
 		Functions\when( 'update_post_meta' )->justReturn( true );
 

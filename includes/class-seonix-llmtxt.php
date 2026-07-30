@@ -122,8 +122,19 @@ class Seonix_LLMTxt {
 	 * Structure per llmstxt.org spec:
 	 * - # Site Name
 	 * - > Description
-	 * - ## Pages (ordered by menu_order)
-	 * - ## Category Name (posts grouped by category)
+	 * - ## Pages (ordered by importance)
+	 * - ## Category Name (each post listed ONCE, under its primary category)
+	 *
+	 * Curation rules (llms.txt is a curated map, not a sitemap dump):
+	 * - each post appears exactly once — under its primary category (SEO-plugin
+	 *   primary term when set, else the most specific assigned category). The
+	 *   old per-category loop used WP's hierarchy-inclusive `category` query,
+	 *   so one post fanned out into every category AND every ancestor section
+	 *   (71 posts became ~380 lines on a 52-category site);
+	 * - noindex, password-protected, placeholder ("coming soon" stubs) and
+	 *   utility pages (contact, privacy, cart, …) are excluded;
+	 * - descriptions prefer the SEO meta description (a complete sentence
+	 *   written for exactly this purpose) over the auto-excerpt.
 	 *
 	 * @return string
 	 */
@@ -141,6 +152,10 @@ class Seonix_LLMTxt {
 		// questions without parsing any page. Empty string when no profile.
 		$llm_txt .= Seonix_Business_Profile::llms_block();
 
+		// Safety cap for very large sites; llms.txt should stay consumable.
+		$max_items = (int) apply_filters( 'seonix_llmstxt_max_items', 2000 );
+		$emitted   = 0;
+
 		// Pages section (ordered by menu_order).
 		$pages = get_posts( array(
 			'post_type'      => 'page',
@@ -149,6 +164,7 @@ class Seonix_LLMTxt {
 			'orderby'        => 'menu_order',
 			'order'          => 'ASC',
 		) );
+		$pages = array_values( array_filter( $pages, array( $this, 'should_include' ) ) );
 
 		if ( ! empty( $pages ) ) {
 			// Order by IMPORTANCE, not raw menu_order: front page first, then
@@ -177,43 +193,275 @@ class Seonix_LLMTxt {
 
 			$llm_txt .= "## Pages\n\n";
 			foreach ( $pages as $page ) {
+				if ( $emitted >= $max_items ) {
+					break;
+				}
 				$llm_txt .= $this->format_link_line( $page ) . "\n";
+				$emitted++;
 			}
 			$llm_txt .= "\n";
 		}
 
-		// Blog posts grouped by category.
-		$categories = get_terms( array(
-			'taxonomy'   => 'category',
-			'hide_empty' => true,
-			'orderby'    => 'name',
-			'order'      => 'ASC',
+		// Blog posts: ONE query, then group in PHP by primary category. (The
+		// old shape — one hierarchy-inclusive get_posts() per category — both
+		// duplicated entries and cost 50+ queries per request.)
+		$posts = get_posts( array(
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
 		) );
 
-		if ( ! is_wp_error( $categories ) && ! empty( $categories ) ) {
-			foreach ( $categories as $category ) {
-				$posts = get_posts( array(
-					'post_type'      => 'post',
-					'post_status'    => 'publish',
-					'posts_per_page' => -1,
-					'category'       => $category->term_id,
-					'orderby'        => 'date',
-					'order'          => 'DESC',
-				) );
-
-				if ( empty( $posts ) ) {
-					continue;
-				}
-
-				$llm_txt .= '## ' . $this->clean_text( $category->name ) . "\n\n";
-				foreach ( $posts as $post ) {
-					$llm_txt .= $this->format_link_line( $post ) . "\n";
-				}
-				$llm_txt .= "\n";
+		$groups   = array(); // cat name => post list, insertion order = date DESC per group.
+		$orphans  = array(); // posts without any category.
+		foreach ( $posts as $post ) {
+			if ( ! $this->should_include( $post ) ) {
+				continue;
 			}
+			$term = $this->primary_category( $post );
+			if ( null === $term ) {
+				$orphans[] = $post;
+				continue;
+			}
+			$name = $this->clean_text( $term->name );
+			if ( ! isset( $groups[ $name ] ) ) {
+				$groups[ $name ] = array();
+			}
+			$groups[ $name ][] = $post;
+		}
+		uksort( $groups, 'strcasecmp' );
+
+		foreach ( $groups as $name => $group_posts ) {
+			if ( $emitted >= $max_items ) {
+				break;
+			}
+			$llm_txt .= '## ' . $name . "\n\n";
+			foreach ( $group_posts as $post ) {
+				if ( $emitted >= $max_items ) {
+					break;
+				}
+				$llm_txt .= $this->format_link_line( $post ) . "\n";
+				$emitted++;
+			}
+			$llm_txt .= "\n";
+		}
+
+		if ( ! empty( $orphans ) && $emitted < $max_items ) {
+			$llm_txt .= "## Posts\n\n";
+			foreach ( $orphans as $post ) {
+				if ( $emitted >= $max_items ) {
+					break;
+				}
+				$llm_txt .= $this->format_link_line( $post ) . "\n";
+				$emitted++;
+			}
+			$llm_txt .= "\n";
 		}
 
 		return $llm_txt;
+	}
+
+	/**
+	 * Whether a post/page belongs in llms.txt at all.
+	 *
+	 * Excludes password-protected content, anything the site's SEO plugin
+	 * marks noindex, utility pages (contact/privacy/cart/…), and placeholder
+	 * stubs — a "Binnenkort…" body next to real articles poisons the map AI
+	 * assistants build of the site.
+	 *
+	 * Public only because array_filter needs the callback; not an API.
+	 *
+	 * @param WP_Post $post The post/page object.
+	 * @return bool
+	 */
+	public function should_include( $post ) {
+		$include = true;
+
+		if ( '' !== (string) $post->post_password ) {
+			$include = false;
+		} elseif ( $this->is_noindex( $post->ID ) ) {
+			$include = false;
+		} elseif ( 'page' === $post->post_type
+			&& in_array( $post->post_name, $this->excluded_page_slugs(), true ) ) {
+			$include = false;
+		} elseif ( $this->is_stub( $post ) ) {
+			$include = false;
+		}
+
+		/**
+		 * Final per-item override for llms.txt / llms-full.txt inclusion.
+		 *
+		 * @param bool    $include Whether the item will be listed.
+		 * @param WP_Post $post    The candidate post/page.
+		 */
+		return (bool) apply_filters( 'seonix_llmstxt_include_item', $include, $post );
+	}
+
+	/**
+	 * Best-effort noindex check across the common SEO plugins (same signals
+	 * Seonix_IndexNow uses). Absence of any signal = indexable.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	private function is_noindex( $post_id ) {
+		if ( '1' === (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', true ) ) {
+			return true;
+		}
+		if ( 'yes' === (string) get_post_meta( $post_id, '_seopress_robots_index', true ) ) {
+			return true;
+		}
+		$rm = get_post_meta( $post_id, 'rank_math_robots', true );
+		if ( is_array( $rm ) && in_array( 'noindex', $rm, true ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Placeholder detection: publish-status stubs ("Binnenkort…", "Coming
+	 * soon", an empty shell awaiting content) that should never be offered to
+	 * AI crawlers. A post is a stub when its rendered body is under 40 words
+	 * AND it has no hand-written excerpt. Page-builder pages (content lives
+	 * outside post_content) and the front page are exempt — their body length
+	 * says nothing about the rendered page.
+	 *
+	 * @param WP_Post $post The post/page object.
+	 * @return bool
+	 */
+	private function is_stub( $post ) {
+		if ( '' !== trim( (string) $post->post_excerpt ) ) {
+			return false;
+		}
+		if ( (int) get_option( 'page_on_front' ) === (int) $post->ID ) {
+			return false;
+		}
+		// Elementor (and imports from it) keep real content in meta.
+		if ( '' !== (string) get_post_meta( $post->ID, '_elementor_data', true ) ) {
+			return false;
+		}
+		$text = $this->clean_text( strip_shortcodes( (string) $post->post_content ) );
+		if ( '' === $text ) {
+			return true;
+		}
+		$words = preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+		return count( $words ) < 40;
+	}
+
+	/**
+	 * Utility-page slugs that carry no informational value for AI assistants
+	 * (multi-language: EN/NL/DE + WooCommerce endpoints).
+	 *
+	 * @return string[]
+	 */
+	private function excluded_page_slugs() {
+		// Only UNAMBIGUOUS utility slugs. Deliberately absent: bare "privacy",
+		// "cookies", "terms" — those collide with legitimate content pages (a
+		// security blog's /privacy/ guide, a bakery's /cookies/, a glossary's
+		// /terms/), and a policy page slipping INTO llms.txt is harmless noise
+		// while a content page dropping OUT of it is real loss.
+		$slugs = array(
+			'contact', 'contact-us', 'kontakt', 'contacto',
+			'privacy-policy', 'privacybeleid', 'privacyverklaring',
+			'datenschutz', 'datenschutzerklaerung', 'datenschutzerklarung',
+			'cookie-policy', 'cookiebeleid', 'cookieverklaring',
+			'terms-of-use', 'terms-of-service', 'terms-and-conditions',
+			'algemene-voorwaarden', 'agb', 'imprint', 'impressum',
+			'cart', 'winkelwagen', 'warenkorb', 'checkout', 'afrekenen', 'kasse',
+			'my-account', 'mijn-account', 'mein-konto', 'login', 'register',
+			'thank-you', 'bedankt', 'danke',
+		);
+
+		/**
+		 * Page slugs excluded from llms.txt / llms-full.txt.
+		 *
+		 * @param string[] $slugs Exact post_name matches to skip.
+		 */
+		return (array) apply_filters( 'seonix_llmstxt_excluded_page_slugs', $slugs );
+	}
+
+	/**
+	 * The single category a post is listed under.
+	 *
+	 * Honors the SEO plugin's "primary category" pick (Rank Math / Yoast)
+	 * when it is set and still assigned; otherwise the most specific
+	 * (deepest) assigned category, ties broken by lowest term_id so output
+	 * is deterministic.
+	 *
+	 * @param WP_Post $post The post object.
+	 * @return WP_Term|null
+	 */
+	private function primary_category( $post ) {
+		$terms = get_the_terms( $post, 'category' );
+		if ( is_wp_error( $terms ) || empty( $terms ) ) {
+			return null;
+		}
+
+		foreach ( array( 'rank_math_primary_category', '_yoast_wpseo_primary_category' ) as $meta_key ) {
+			$primary_id = (int) get_post_meta( $post->ID, $meta_key, true );
+			if ( $primary_id > 0 ) {
+				foreach ( $terms as $term ) {
+					if ( (int) $term->term_id === $primary_id ) {
+						return $term;
+					}
+				}
+			}
+		}
+
+		$best       = null;
+		$best_depth = -1;
+		foreach ( $terms as $term ) {
+			$depth = count( get_ancestors( $term->term_id, 'category' ) );
+			if ( $depth > $best_depth
+				|| ( $depth === $best_depth && $best && (int) $term->term_id < (int) $best->term_id ) ) {
+				$best       = $term;
+				$best_depth = $depth;
+			}
+		}
+		return $best;
+	}
+
+	/**
+	 * The description shown after a link: SEO meta description first (it is a
+	 * complete, hand- or AI-written sentence sized for exactly this job),
+	 * auto-excerpt as fallback. Values containing SEO-plugin template
+	 * variables (%sitename%, %%excerpt%% …) are unusable as plain text.
+	 *
+	 * @param WP_Post $post The post/page object.
+	 * @return string
+	 */
+	private function item_description( $post ) {
+		$desc = '';
+		if ( class_exists( 'Seonix_Meta_Bridge' ) && class_exists( 'Seonix_SEO_Engine' ) ) {
+			$engine = Seonix_SEO_Engine::detect();
+			if ( null !== $engine ) {
+				if ( Seonix_SEO_Engine::AIOSEO === $engine ) {
+					// Mirror meta only: the model API costs a query per post.
+					$desc = (string) get_post_meta( $post->ID, '_aioseo_description', true );
+				} else {
+					$key = Seonix_SEO_Engine::post_desc_key( $engine );
+					if ( null !== $key ) {
+						$desc = (string) get_post_meta( $post->ID, $key, true );
+					}
+				}
+			}
+			if ( '' === $desc ) {
+				$own  = Seonix_Meta_Bridge::read_own( $post->ID );
+				$desc = $own['meta_description'];
+			}
+			if ( '' !== $desc && preg_match( '/%%?[a-z_]+%%?/i', $desc ) ) {
+				$desc = '';
+			}
+		}
+		if ( '' !== $desc ) {
+			return $this->clean_text( $desc );
+		}
+		$excerpt = get_the_excerpt( $post );
+		if ( $excerpt ) {
+			return $this->clean_text( wp_trim_words( $excerpt, 30, '…' ) );
+		}
+		return '';
 	}
 
 	/**
@@ -224,15 +472,21 @@ class Seonix_LLMTxt {
 	 */
 	private function format_link_line( $post ) {
 		$line = '- [' . $this->clean_text( $post->post_title ) . '](' . esc_url_raw( get_permalink( $post ) ) . ')';
-		$excerpt = get_the_excerpt( $post );
-		if ( $excerpt ) {
-			$line .= ': ' . $this->clean_text( wp_trim_words( $excerpt, 20, '...' ) );
+		$desc = $this->item_description( $post );
+		if ( $desc ) {
+			$line .= ': ' . $desc;
 		}
 		return $line;
 	}
 
 	/**
 	 * Build the llms-full.txt content.
+	 *
+	 * Applies the same should_include() curation as the index. That matters
+	 * beyond noise here: post_status=publish INCLUDES password-protected
+	 * posts, and this builder dumps full post_content as markdown — without
+	 * the filter it published protected content to any crawler, bypassing
+	 * the password entirely.
 	 *
 	 * @return string
 	 */
@@ -247,6 +501,7 @@ class Seonix_LLMTxt {
 			'orderby'        => 'date',
 			'order'          => 'DESC',
 		) );
+		$posts = array_values( array_filter( $posts, array( $this, 'should_include' ) ) );
 
 		$llm_full = "# {$site_name}\n\n";
 		if ( $site_desc ) {

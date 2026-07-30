@@ -98,6 +98,7 @@ if ( ! class_exists( 'WP_Post' ) ) {
         public string $post_title = '';
         public string $post_status = 'publish';
         public string $post_content = '';
+        public string $post_modified = '';
         public string $post_modified_gmt = '';
         // Needed by the redirect watcher, which decides from the type whether a
         // URL was ever public and from the parent where a trashed child should
