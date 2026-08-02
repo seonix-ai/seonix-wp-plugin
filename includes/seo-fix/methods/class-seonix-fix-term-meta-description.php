@@ -115,6 +115,27 @@ class Seonix_Fix_Term_Meta_Description implements Seonix_Fix_Method {
 			return new WP_Error( 'invalid_history_entry', 'History entry is missing term snapshot.', array( 'status' => 422 ) );
 		}
 
+		// Stale-guard: refuse when the description is no longer the value this
+		// fix wrote — restoring the snapshot would erase whoever edited it
+		// since. When the current value can't be read (SEO plugin deactivated
+		// since the apply), fall through: the write path below surfaces its
+		// own, more specific error.
+		$applied_val = $entry['after_state']['value'] ?? null;
+		if ( is_string( $applied_val ) ) {
+			$current = $this->read_description( $term_id, $taxonomy );
+			if ( ! ( $current instanceof WP_Error ) && (string) $current !== $applied_val ) {
+				return new WP_Error(
+					'rollback_stale',
+					'This description was changed after the fix was applied — rolling back now would erase that later change. Edit it manually instead.',
+					array(
+						'status'  => 409,
+						'applied' => $applied_val,
+						'current' => (string) $current,
+					)
+				);
+			}
+		}
+
 		$written = $this->write_description( $term_id, $taxonomy, $old_val );
 		if ( $written instanceof WP_Error ) {
 			return $written;

@@ -87,6 +87,25 @@ class Seonix_Fix_SSL_Mixed_Content implements Seonix_Fix_Method {
 			return new WP_Error( 'invalid_history_entry', 'History entry is missing post snapshot.', array( 'status' => 422 ) );
 		}
 
+		// Stale-guard: this rollback restores a FULL pre-fix copy of
+		// post_content, so it is only safe while the post still reads exactly
+		// as the apply left it. Any later edit (author rewrite, another fix)
+		// would be wiped by the snapshot — refuse in that case instead of
+		// silently destroying it. Entries from versions that predate
+		// after_state snapshots skip the guard (nothing to compare against).
+		$post            = get_post( $post_id );
+		$applied_content = $entry['after_state']['post_content'] ?? null;
+		if ( ! $post ) {
+			return new WP_Error( 'post_not_found', sprintf( 'Post %d not found.', $post_id ), array( 'status' => 404 ) );
+		}
+		if ( is_string( $applied_content ) && (string) $post->post_content !== $applied_content ) {
+			return new WP_Error(
+				'rollback_stale',
+				'The post content was edited after this fix was applied — restoring the pre-fix copy would erase those edits. Revert the URLs manually instead.',
+				array( 'status' => 409 )
+			);
+		}
+
 		$update = Seonix_Content_Write::update_preserving_modified( array(
 			'ID'           => $post_id,
 			// wp_slash: the snapshot holds the unslashed DB content, so restore

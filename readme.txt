@@ -4,7 +4,7 @@ Tags: seo, ai, content, automation, technical-seo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.13.1
+Stable tag: 2.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,6 +141,13 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.14.0 =
+* New: Review and ItemList structured data now survive alongside Yoast / Rank Math / AIOSEO — testimonial pages and service-area directories keep their rich-result markup instead of losing it to the anti-duplication trim.
+* New: developers can extend the supplemental structured-data allowlist via the `seonix_schema_supplemental_types` filter; the guard against duplicating the SEO plugin's own Article / WebPage / Organization nodes always stays on.
+* New: the sitewide business entity (address, phone, service area) now also enriches Rank Math's Organization schema — previously Yoast-only. AIOSEO exposes no comparable filter and is unaffected.
+* New: "noindex stub page" one-click fix — a page the site audit flags as a thin placeholder can be hidden from search through your SEO plugin's own robots meta (and its sitemap) until real content is written. One page per click, fully reversible.
+* Improved: rolling back a fix now refuses with a clear message when the value was edited after the fix was applied — restoring an old snapshot can no longer silently erase your later changes.
 
 = 2.13.1 =
 * New: the llms.txt business block accepts operator extensions via the `seonix_llmstxt_business_extra` filter — add pricing, availability or review facts so AI assistants can quote them directly.

@@ -15,7 +15,10 @@ use Seonix_Schema;
  *   • detect_active_engine() recognises an active SEO plugin (FakeYoast defines
  *     WPSEO_Options in the test bootstrap);
  *   • should_output() honours the mode and, in auto mode, suppresses output
- *     when a competing SEO plugin owns the graph.
+ *     when a competing SEO plugin owns the graph;
+ *   • supplemental_types() exposes the allowlist through the
+ *     `seonix_schema_supplemental_types` filter without ever weakening the
+ *     engine-owned-type drop in supplemental_only().
  */
 final class SchemaTest extends TestCase {
 
@@ -228,6 +231,145 @@ final class SchemaTest extends TestCase {
 		$out = Seonix_Schema::supplemental_only( $graph );
 		$this->assertIsString( $out );
 		$this->assertStringNotContainsString( 'LocalBusiness', $out );
+		$this->assertStringContainsString( 'FAQPage', $out );
+	}
+
+	public function test_supplemental_only_keeps_review_and_itemlist(): void {
+		// A testimonial page stores Review nodes and a service-area hub stores
+		// an ItemList (the wohnartstudio.de shape). No engine emits either, so
+		// both must survive under an active engine; the WebPage is Yoast's.
+		$graph = wp_json_encode( array(
+			'@context' => 'https://schema.org',
+			'@graph'   => array(
+				array( '@type' => 'WebPage', 'name' => 'Bewertungen' ),
+				array(
+					'@type'      => 'Review',
+					'reviewBody' => 'Sehr zuverlässig, gerne wieder.',
+					'author'     => array( '@type' => 'Person', 'name' => 'M. K.' ),
+				),
+				array(
+					'@type'           => 'ItemList',
+					'itemListElement' => array(
+						array(
+							'@type'    => 'ListItem',
+							'position' => 1,
+							'url'      => 'https://example.com/moebelmontage/berlin/',
+						),
+					),
+				),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringContainsString( '"@type":"Review"', $out );
+		$this->assertStringContainsString( '"@type":"ItemList"', $out );
+		$this->assertStringNotContainsString( 'WebPage', $out );
+	}
+
+	public function test_supplemental_only_escapes_slashes_to_protect_script_tag(): void {
+		// supplemental_only re-encodes through wp_json_encode just like
+		// sanitize_jsonld — a kept node containing "</script>" must come back
+		// slash-escaped so it cannot terminate the surrounding <script> block.
+		$graph = wp_json_encode( array(
+			'@graph' => array(
+				array( '@type' => 'Review', 'reviewBody' => 'a</script>b' ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringNotContainsString( '</script>', $out );
+		$this->assertStringContainsString( '<\/script>', $out );
+	}
+
+	// ─── supplemental_types: the allowlist filter ─────────────────────────
+
+	public function test_supplemental_and_engine_owned_lists_never_overlap(): void {
+		// Design invariant from the SUPPLEMENTAL_TYPES docblock: a type in both
+		// lists would be dead weight (the engine-owned drop always wins).
+		$this->assertSame(
+			array(),
+			array_intersect( Seonix_Schema::SUPPLEMENTAL_TYPES, Seonix_Schema::ENGINE_OWNED_TYPES )
+		);
+	}
+
+	public function test_supplemental_types_defaults_include_review_and_itemlist(): void {
+		// No filter registered → apply_filters passes the built-in list through.
+		$types = Seonix_Schema::supplemental_types();
+		$this->assertContains( 'FAQPage', $types );
+		$this->assertContains( 'Review', $types );
+		$this->assertContains( 'ItemList', $types );
+	}
+
+	public function test_supplemental_types_filter_extends_allowlist(): void {
+		// A site can allow an extra @type without forking the plugin.
+		Monkey\Filters\expectApplied( 'seonix_schema_supplemental_types' )
+			->andReturnUsing( static function ( array $types ) {
+				$types[] = 'Product';
+				return $types;
+			} );
+
+		$graph = wp_json_encode( array(
+			'@graph' => array(
+				array( '@type' => 'Product', 'name' => 'Regal nach Maß' ),
+				array( '@type' => 'WebPage', 'name' => 'drop me' ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringContainsString( '"@type":"Product"', $out );
+		$this->assertStringNotContainsString( 'WebPage', $out );
+	}
+
+	public function test_supplemental_types_filter_cannot_bypass_engine_owned_drop(): void {
+		// Filtering IN an engine-owned type must not reintroduce a duplicate
+		// core graph: the ENGINE_OWNED_TYPES drop runs regardless of the
+		// allowlist, for single- and multi-typed nodes alike.
+		Monkey\Filters\expectApplied( 'seonix_schema_supplemental_types' )
+			->andReturnUsing( static function ( array $types ) {
+				$types[] = 'Article';
+				return $types;
+			} );
+
+		$graph = wp_json_encode( array(
+			'@graph' => array(
+				array( '@type' => 'Article', 'headline' => 'still dropped' ),
+				array( '@type' => array( 'Review', 'Article' ), 'reviewBody' => 'dropped too' ),
+				array( '@type' => 'FAQPage', 'mainEntity' => array() ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringNotContainsString( 'Article', $out );
+		$this->assertStringNotContainsString( 'Review', $out );
+		$this->assertStringContainsString( 'FAQPage', $out );
+	}
+
+	public function test_supplemental_types_discards_non_string_filter_entries(): void {
+		// A sloppy callback mixing garbage into the list must not break the
+		// array_intersect in supplemental_only — non-strings are discarded.
+		Monkey\Filters\expectApplied( 'seonix_schema_supplemental_types' )
+			->andReturn( array( 'Review', 123, null, array( 'nested' ), 'ItemList' ) );
+
+		$this->assertSame( array( 'Review', 'ItemList' ), Seonix_Schema::supplemental_types() );
+	}
+
+	public function test_supplemental_types_filter_can_remove_a_default(): void {
+		// Returning a reduced list suppresses a default type — an operator can
+		// opt a site out of e.g. Review while keeping FAQ output.
+		Monkey\Filters\expectApplied( 'seonix_schema_supplemental_types' )
+			->andReturnUsing( static function ( array $types ) {
+				return array_values( array_diff( $types, array( 'Review' ) ) );
+			} );
+
+		$graph = wp_json_encode( array(
+			'@graph' => array(
+				array( '@type' => 'Review', 'reviewBody' => 'suppressed' ),
+				array( '@type' => 'FAQPage', 'mainEntity' => array() ),
+			),
+		) );
+		$out = Seonix_Schema::supplemental_only( $graph );
+		$this->assertIsString( $out );
+		$this->assertStringNotContainsString( 'Review', $out );
 		$this->assertStringContainsString( 'FAQPage', $out );
 	}
 }

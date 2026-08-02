@@ -151,6 +151,37 @@ abstract class Seonix_Fix_Single_Meta implements Seonix_Fix_Method {
 		}
 
 		$field = $this->bridge_field();
+
+		// Stale-guard: only roll back while the stored value is still the one
+		// THIS fix wrote. If an editor (or another tool) changed it after the
+		// apply, restoring the pre-fix snapshot would silently erase that later
+		// change — refuse and leave the decision to a human. Entries from
+		// versions that predate after_state snapshots skip the guard (nothing
+		// to compare against).
+		$applied_val = $entry['after_state']['value'] ?? null;
+		if ( is_string( $applied_val ) ) {
+			if ( null !== $field ) {
+				$current = $this->bridge_current( $post_id, $field );
+			} else {
+				$key = $this->resolve_meta_key();
+				if ( is_wp_error( $key ) ) {
+					return $key;
+				}
+				$current = (string) get_post_meta( $post_id, $key, true );
+			}
+			if ( $current !== $applied_val ) {
+				return new WP_Error(
+					'rollback_stale',
+					'This value was changed after the fix was applied — rolling back now would erase that later change. Edit it manually instead.',
+					array(
+						'status'  => 409,
+						'applied' => $applied_val,
+						'current' => $current,
+					)
+				);
+			}
+		}
+
 		if ( null !== $field ) {
 			// Restore the previous value everywhere the apply wrote it.
 			Seonix_Meta_Bridge::write( $post_id, array( $field => $old_val ) );

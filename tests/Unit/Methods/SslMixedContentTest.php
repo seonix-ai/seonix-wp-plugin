@@ -199,8 +199,13 @@ final class SslMixedContentTest extends TestCase {
     }
 
     public function test_rollback_restores_post_content_from_history(): void {
-        // Seonix_Content_Write probes the current modified date; null → plain update.
-        Functions\when( 'get_post' )->justReturn( null );
+        // The post still reads exactly as the apply left it (stale-guard passes);
+        // no modified date on the stub → Seonix_Content_Write falls back to a
+        // plain wp_update_post.
+        Functions\when( 'get_post' )->justReturn( (object) array(
+            'ID'           => 5,
+            'post_content' => '<a href="https://example.com/x">x</a>',
+        ) );
         $this->history->shouldReceive( 'get' )
             ->with( 42 )
             ->andReturn( array(

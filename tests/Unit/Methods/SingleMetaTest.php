@@ -185,8 +185,9 @@ final class SingleMetaTest extends TestCase {
             ) );
 
         // Bridge path: the restore is written to the canonical Seonix key AND
-        // the active engine's key, exactly like an apply.
-        Functions\when( 'get_post_meta' )->justReturn( '' );
+        // the active engine's key, exactly like an apply. Every meta read
+        // reports the applied value so the stale-guard sees an untouched field.
+        Functions\when( 'get_post_meta' )->justReturn( 'new' );
         $writes = array();
         Functions\when( 'update_post_meta' )->alias( function ( $post_id, $key, $value ) use ( &$writes ) {
             $writes[ $key ] = array( $post_id, $value );

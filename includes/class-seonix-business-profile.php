@@ -60,13 +60,18 @@ class Seonix_Business_Profile {
 	const MAX_AREAS = 20;
 
 	/**
-	 * Register the schema enrichment hook. The stored profile is only read
-	 * inside the callback, so registration is free when no profile exists.
+	 * Register the schema enrichment hooks. The stored profile is only read
+	 * inside the callbacks, so registration is free when no profile exists.
+	 *
+	 * Engine coverage: Yoast (per-node filter) and Rank Math (whole-graph
+	 * filter). AIOSEO builds its graph through its own models with no
+	 * comparable public node filter, so AIOSEO sites keep per-post nodes only.
 	 *
 	 * @return void
 	 */
 	public function register(): void {
 		add_filter( 'wpseo_schema_organization', array( $this, 'enrich_organization' ) );
+		add_filter( 'rank_math/json_ld', array( $this, 'enrich_rank_math' ), 20 );
 	}
 
 	/**
@@ -198,7 +203,65 @@ class Seonix_Business_Profile {
 		if ( null === $profile ) {
 			return $data;
 		}
+		return self::apply_profile( $data, $profile );
+	}
 
+	/**
+	 * rank_math/json_ld filter: same enrichment for Rank Math sites. Rank
+	 * Math hands the WHOLE graph (an array of entities); the sitewide
+	 * business node is the entity typed Organization whose @id carries the
+	 * `#organization` fragment (Rank Math's Knowledge-Graph "Organization"
+	 * mode). Person-mode sites have no such node and pass through untouched.
+	 * Enrichment stays strictly additive, same as the Yoast path.
+	 *
+	 * @param mixed $data Rank Math's entity array (entity-key => node).
+	 * @return mixed
+	 */
+	public function enrich_rank_math( $data ) {
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+		if ( ! apply_filters( 'seonix_business_entity_enabled', true ) ) {
+			return $data;
+		}
+		$profile = self::stored();
+		if ( null === $profile ) {
+			return $data;
+		}
+
+		foreach ( $data as $key => $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+			$types = isset( $node['@type'] ) ? (array) $node['@type'] : array();
+			if ( ! in_array( 'Organization', $types, true ) ) {
+				continue;
+			}
+			$id = isset( $node['@id'] ) && is_string( $node['@id'] ) ? $node['@id'] : '';
+			// Only the SITEWIDE entity — never per-post publisher copies or
+			// unrelated Organization mentions.
+			if ( '' === $id || false === strpos( $id, '#organization' ) ) {
+				continue;
+			}
+			$data[ $key ] = self::apply_profile( $node, $profile );
+			break;
+		}
+		return $data;
+	}
+
+	/**
+	 * The shared, strictly-additive enrichment: multi-type the node with the
+	 * LocalBusiness subtype and fill telephone/email/address/areaServed —
+	 * ONLY where the engine left the key empty. Keys the SEO plugin owns
+	 * (name, logo, sameAs, url, @id) are never overwritten, so the node
+	 * keeps its identity and merges cleanly with per-post nodes reusing the
+	 * same @id.
+	 *
+	 * @param array $data    Schema node to enrich.
+	 * @param array $profile Sanitized business profile.
+	 * @return array
+	 */
+	private static function apply_profile( array $data, array $profile ): array {
 		$types = isset( $data['@type'] ) ? (array) $data['@type'] : array( 'Organization' );
 		if ( ! in_array( $profile['business_type'], $types, true ) ) {
 			$types[] = $profile['business_type'];

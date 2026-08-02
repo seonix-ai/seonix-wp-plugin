@@ -11,10 +11,13 @@
  * keys Seonix writes (focus keyword, meta description). Emitting our own copy of
  * those @types would create two competing graphs — which makes Google ignore
  * both. So in the default "auto" mode, when an engine is detected, Seonix emits
- * ONLY the supplemental @types that engine does not produce — FAQPage / QAPage —
- * which add an AI-citation signal (AI Overviews, ChatGPT, Perplexity) without
+ * ONLY the supplemental @types that engine does not produce (FAQ/Q&A, Review,
+ * ItemList, the LocalBusiness family, Service — see SUPPLEMENTAL_TYPES) — which
+ * add an AI-citation signal (AI Overviews, ChatGPT, Perplexity) without
  * duplicating the core graph. When no engine is active we emit the full @graph.
  * Operators can force the full graph with mode "on" or disable output with "off".
+ * Sites can extend the supplemental allowlist via the
+ * `seonix_schema_supplemental_types` filter.
  *
  * @package Seonix
  */
@@ -39,11 +42,16 @@ class Seonix_Schema {
 
 	/**
 	 * @types Seonix may emit alongside a dedicated SEO engine. These add signals
-	 * a core engine does not produce: FAQ/Q&A citation blocks, and a LocalBusiness
-	 * node (NAP + service area). Yoast Free / Rank Math / AIOSEO do not emit
-	 * LocalBusiness unless a paid Local-SEO addon is configured, so it is
-	 * genuinely supplemental and never collides with the engine's core graph.
-	 * None of these appear in ENGINE_OWNED_TYPES, so supplemental_only keeps them.
+	 * a core engine does not produce: FAQ/Q&A citation blocks, a LocalBusiness
+	 * node (NAP + service area), Review testimonials and ItemList directories.
+	 * Yoast Free / Rank Math / AIOSEO do not emit LocalBusiness unless a paid
+	 * Local-SEO addon is configured, and none of them auto-emit Review or
+	 * ItemList, so all of these are genuinely supplemental and never collide
+	 * with the engine's core graph. None of these appear in ENGINE_OWNED_TYPES,
+	 * so supplemental_only keeps them.
+	 *
+	 * This is the built-in default; the effective list is supplemental_types(),
+	 * which sites can extend via the `seonix_schema_supplemental_types` filter.
 	 */
 	const SUPPLEMENTAL_TYPES = array(
 		'FAQPage',
@@ -58,6 +66,11 @@ class Seonix_Schema {
 		// schema.org-correct way to mark up a service/city landing page without
 		// spawning a second business entity. No SEO engine emits it.
 		'Service',
+		// Review (testimonial pages) and ItemList (service-area / hub pages).
+		// Engines emit BreadcrumbList, which is a distinct @type string, so the
+		// exact-match intersect below can never confuse the two.
+		'Review',
+		'ItemList',
 	);
 
 	/**
@@ -77,6 +90,24 @@ class Seonix_Schema {
 		'Person',
 		'ImageObject',
 	);
+
+	/**
+	 * The effective supplemental-type allowlist.
+	 *
+	 * The `seonix_schema_supplemental_types` filter lets a site add @types the
+	 * built-in list does not cover (e.g. 'Product', 'Event') — or remove some —
+	 * without forking the plugin. The filter cannot bypass the anti-duplication
+	 * guard: supplemental_only() drops nodes carrying an ENGINE_OWNED_TYPES
+	 * @type regardless of this list, so filtering in 'Article' still never
+	 * duplicates the engine's core graph.
+	 *
+	 * @return string[] Flat list of @type strings; non-string entries returned
+	 *                  by a filter callback are discarded.
+	 */
+	public static function supplemental_types(): array {
+		$types = apply_filters( 'seonix_schema_supplemental_types', self::SUPPLEMENTAL_TYPES );
+		return array_values( array_filter( (array) $types, 'is_string' ) );
+	}
 
 	/**
 	 * Validate and normalize a raw JSON-LD string from the publish payload.
@@ -226,10 +257,11 @@ class Seonix_Schema {
 	}
 
 	/**
-	 * Reduce a stored @graph to only the supplemental nodes (FAQPage / QAPage)
-	 * that a dedicated SEO engine does not emit. Nodes carrying an
-	 * engine-owned @type are dropped even when also tagged supplemental, so the
-	 * result can never duplicate the engine's Article / WebPage / Breadcrumb.
+	 * Reduce a stored @graph to only the supplemental nodes (FAQ / Review /
+	 * ItemList / LocalBusiness family — see supplemental_types()) that a
+	 * dedicated SEO engine does not emit. Nodes carrying an engine-owned @type
+	 * are dropped even when also tagged supplemental, so the result can never
+	 * duplicate the engine's Article / WebPage / Breadcrumb.
 	 *
 	 * Returns a re-encoded, slash-escaped JSON document wrapped in a fresh
 	 * @graph envelope, or null when the payload has nothing supplemental.
@@ -247,13 +279,15 @@ class Seonix_Schema {
 			? $decoded['@graph']
 			: array( $decoded );
 
+		$supplemental = self::supplemental_types();
+
 		$kept = array();
 		foreach ( $nodes as $node ) {
 			if ( ! is_array( $node ) || ! isset( $node['@type'] ) ) {
 				continue;
 			}
 			$types       = is_array( $node['@type'] ) ? $node['@type'] : array( $node['@type'] );
-			$is_supp     = array_intersect( $types, self::SUPPLEMENTAL_TYPES );
+			$is_supp     = array_intersect( $types, $supplemental );
 			$is_engine   = array_intersect( $types, self::ENGINE_OWNED_TYPES );
 			if ( $is_supp && ! $is_engine ) {
 				unset( $node['@context'] ); // context lives on the envelope, not per-node.
@@ -279,9 +313,10 @@ class Seonix_Schema {
 	 *
 	 * When no dedicated SEO engine is active (or mode is "on") the full stored
 	 * @graph is emitted. When an engine owns the core graph (auto mode) only the
-	 * supplemental FAQ/QA nodes are emitted, so we add an AI-citation signal
-	 * without duplicating Article / WebPage / Breadcrumb. No-op on archives, when
-	 * disabled, or when the post has no stored schema.
+	 * supplemental nodes (FAQ, Review, ItemList, LocalBusiness family) are
+	 * emitted, so we add an AI-citation signal without duplicating Article /
+	 * WebPage / Breadcrumb. No-op on archives, when disabled, or when the post
+	 * has no stored schema.
 	 *
 	 * @return void
 	 */
@@ -312,7 +347,7 @@ class Seonix_Schema {
 		}
 
 		// should_output() is true when no engine owns the graph (or mode "on") —
-		// emit everything. Otherwise emit only the supplemental FAQ/QA nodes.
+		// emit everything. Otherwise emit only the supplemental nodes.
 		if ( self::should_output() ) {
 			$emit = $jsonld;
 		} else {

@@ -103,6 +103,8 @@ final class ImageAltTest extends TestCase {
 				'after_state' => array( 'value' => self::ALT, 'post_rewrites' => array( '100' => 1 ) ),
 			) );
 
+		// Attachment meta still holds the value we wrote — the stale-guard passes.
+		Functions\when( 'get_post_meta' )->justReturn( self::ALT );
 		// Meta revert (base rollback) writes the old empty value.
 		Functions\expect( 'update_post_meta' )->once()->andReturn( true );
 
@@ -140,6 +142,8 @@ final class ImageAltTest extends TestCase {
 				'after_state' => array( 'value' => self::ALT, 'post_rewrites' => array( '100' => 1 ) ),
 			) );
 
+		// Attachment meta still holds the value we wrote — the stale-guard passes.
+		Functions\when( 'get_post_meta' )->justReturn( self::ALT );
 		Functions\expect( 'update_post_meta' )->once()->andReturn( true ); // meta still reverts
 
 		// An editor replaced our alt with their own caption — must NOT be clobbered.
@@ -195,6 +199,8 @@ final class ImageAltTest extends TestCase {
 				'before_state' => array( 'value' => '' ),
 				'after_state' => array( 'value' => self::ALT, 'post_rewrites' => array( '100' => 1 ) ),
 			) );
+		// Attachment meta still holds the value we wrote — the stale-guard passes.
+		Functions\when( 'get_post_meta' )->justReturn( self::ALT );
 		Functions\expect( 'update_post_meta' )->once()->andReturn( true );
 
 		$block = '<!-- wp:uagb/image {"id":9,"url":"' . self::IMG . '","alt":"' . self::ALT . '"} /-->';
@@ -228,6 +234,8 @@ final class ImageAltTest extends TestCase {
 				'after_state' => array( 'value' => self::ALT ), // no post_rewrites
 			) );
 
+		// Attachment meta still holds the value we wrote — the stale-guard passes.
+		Functions\when( 'get_post_meta' )->justReturn( self::ALT );
 		Functions\expect( 'update_post_meta' )->once()->andReturn( true );
 		Functions\expect( 'wp_update_post' )->never();
 
