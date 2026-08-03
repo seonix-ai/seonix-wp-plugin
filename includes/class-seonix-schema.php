@@ -71,6 +71,13 @@ class Seonix_Schema {
 		// exact-match intersect below can never confuse the two.
 		'Review',
 		'ItemList',
+		// HowTo: the backend generates a HowTo node for step-by-step articles,
+		// but until 2.15.0 it was silently dropped next to Rank Math/Yoast —
+		// neither engine auto-emits HowTo (Rank Math only via a manually
+		// inserted block), so on every engine-driven site the node vanished
+		// and how-to guides shipped without their richest markup (virus.nl
+		// audit v3 recommends HowTo for exactly those pages).
+		'HowTo',
 	);
 
 	/**

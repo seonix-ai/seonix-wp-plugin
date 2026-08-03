@@ -261,6 +261,7 @@ final class LLMTxtTest extends TestCase {
 			static fn ( $post ) => 'https://virus.test/' . $post->post_name . '/'
 		);
 		Functions\when( 'esc_url_raw' )->alias( static fn ( $u ) => $u );
+		Functions\when( 'home_url' )->alias( static fn ( $path = '' ) => 'https://virus.test' . $path );
 		Functions\when( 'get_the_excerpt' )->justReturn( 'Korte samenvatting van het artikel.' );
 		Functions\when( 'wp_trim_words' )->alias( static fn ( $t ) => $t );
 		Functions\when( 'is_plugin_active' )->justReturn( false );
@@ -276,11 +277,90 @@ final class LLMTxtTest extends TestCase {
 		// Both posts resolve to Rootkits (primary meta / deepest term) — the
 		// Malware ancestor section must not exist at all.
 		$this->assertStringNotContainsString( "## Malware\n", $out );
-		// Curation: stub and contact page are gone, the real page stays.
+		// Curation: the stub is gone, the real page stays in ## Pages.
 		$this->assertStringNotContainsString( 'Binnenkort', $out );
-		$this->assertStringNotContainsString( '/contact/', $out );
 		$this->assertStringContainsString( 'https://virus.test/over-ons/', $out );
 		$this->assertStringContainsString( '## Pages', $out );
+		// Utility pages move to ## Optional (llmstxt.org spec) instead of
+		// vanishing, and the section links the full-text companion file.
+		$this->assertStringContainsString( '## Optional', $out );
+		$this->assertSame( 1, substr_count( $out, 'https://virus.test/contact/' ) );
+		$this->assertGreaterThan(
+			strpos( $out, '## Optional' ),
+			strpos( $out, 'https://virus.test/contact/' ),
+			'contact page must be listed inside ## Optional, not in the main map'
+		);
+		$this->assertStringContainsString( 'https://virus.test/llms-full.txt', $out );
+	}
+
+	public function test_build_index_folds_single_link_sections_into_ancestor(): void {
+		$malware  = $this->makeTerm( 7, 'Malware' );
+		$rootkits = $this->makeTerm( 12, 'Rootkits' );
+		$spyware  = $this->makeTerm( 20, 'Spyware' );
+
+		// Two posts land in Malware; ONE lands in the child Rootkits and ONE in
+		// Spyware (no ancestor section) — Rootkits folds up, Spyware goes to Posts.
+		$a = $this->makePost( array( 'ID' => 1, 'post_name' => 'malware-a', 'post_title' => 'Malware A' ) );
+		$b = $this->makePost( array( 'ID' => 2, 'post_name' => 'malware-b', 'post_title' => 'Malware B' ) );
+		$c = $this->makePost( array( 'ID' => 3, 'post_name' => 'rootkit-c', 'post_title' => 'Rootkit C' ) );
+		$d = $this->makePost( array( 'ID' => 4, 'post_name' => 'spyware-d', 'post_title' => 'Spyware D' ) );
+
+		Functions\when( 'get_bloginfo' )->alias( static fn ( $k ) => 'name' === $k ? 'Virus Test' : '' );
+		Functions\when( 'get_posts' )->alias(
+			static function ( $args ) use ( $a, $b, $c, $d ) {
+				return 'page' === ( $args['post_type'] ?? 'post' ) ? array() : array( $a, $b, $c, $d );
+			}
+		);
+		Functions\when( 'get_option' )->justReturn( 0 );
+		Functions\when( 'strip_shortcodes' )->alias( static fn ( $s ) => (string) $s );
+		Functions\when( 'get_post_meta' )->alias( static fn ( $id, $key = '', $single = false ) => $single ? '' : array() );
+		Functions\when( 'get_the_terms' )->alias(
+			static function ( $post ) use ( $malware, $rootkits, $spyware ) {
+				switch ( (int) $post->ID ) {
+					case 1:
+					case 2:
+						return array( $malware );
+					case 3:
+						return array( $rootkits );
+					default:
+						return array( $spyware );
+				}
+			}
+		);
+		Functions\when( 'get_ancestors' )->alias(
+			static fn ( $term_id ) => 12 === $term_id ? array( 7 ) : array()
+		);
+		Functions\when( 'get_term' )->alias(
+			static function ( $term_id ) use ( $malware ) {
+				return 7 === (int) $term_id ? $malware : null;
+			}
+		);
+		Functions\when( 'get_permalink' )->alias(
+			static fn ( $post ) => 'https://virus.test/' . $post->post_name . '/'
+		);
+		Functions\when( 'esc_url_raw' )->alias( static fn ( $u ) => $u );
+		Functions\when( 'home_url' )->alias( static fn ( $path = '' ) => 'https://virus.test' . $path );
+		Functions\when( 'get_the_excerpt' )->justReturn( '' );
+		Functions\when( 'wp_trim_words' )->alias( static fn ( $t ) => $t );
+		Functions\when( 'is_plugin_active' )->justReturn( false );
+
+		$m = new \ReflectionMethod( \Seonix_LLMTxt::class, 'build_index' );
+		$m->setAccessible( true );
+		$out = $m->invoke( new \Seonix_LLMTxt() );
+
+		// No one-link "## Rootkits" / "## Spyware" sections survive.
+		$this->assertStringNotContainsString( '## Rootkits', $out );
+		$this->assertStringNotContainsString( '## Spyware', $out );
+		// The rootkit post folded into its ancestor Malware section.
+		$this->assertStringContainsString( '## Malware', $out );
+		$malware_at = strpos( $out, '## Malware' );
+		$posts_at   = strpos( $out, '## Posts' );
+		$rootkit_at = strpos( $out, 'https://virus.test/rootkit-c/' );
+		$spyware_at = strpos( $out, 'https://virus.test/spyware-d/' );
+		$this->assertNotFalse( $posts_at, 'ancestor-less single must produce the Posts tail' );
+		$this->assertGreaterThan( $malware_at, $rootkit_at );
+		$this->assertLessThan( $posts_at, $rootkit_at, 'rootkit post belongs to Malware, not Posts' );
+		$this->assertGreaterThan( $posts_at, $spyware_at, 'spyware post belongs to the Posts tail' );
 	}
 
 	public function test_description_rejects_template_variables(): void {
@@ -291,13 +371,28 @@ final class LLMTxtTest extends TestCase {
 				? '%%excerpt%% - %%sitename%%'
 				: ''
 		);
-		Functions\when( 'get_the_excerpt' )->justReturn( 'Real excerpt text.' );
-		Functions\when( 'wp_trim_words' )->alias(
-			static function ( $text, $num = 55, $more = '…' ) {
-				$words = preg_split( '/\s+/', trim( (string) $text ) );
-				return count( $words ) > $num ? implode( ' ', array_slice( $words, 0, $num ) ) . $more : $text;
-			}
-		);
-		$this->assertSame( 'Real excerpt text.', $this->itemDescription( $this->makePost() ) );
+		Functions\when( 'strip_shortcodes' )->alias( static fn ( $s ) => (string) $s );
+		$post = $this->makePost( array(
+			'post_content' => '<h2>Wat is een rootkit? | Diepgaande bescherming</h2><p>Eerste zin van het artikel. Tweede zin met wat meer detail erin.</p>',
+		) );
+		// Template-variable meta is rejected; the fallback description comes
+		// from the body WITHOUT the leading (title-like) heading and ends on a
+		// sentence boundary.
+		$desc = $this->itemDescription( $post );
+		$this->assertSame( 'Eerste zin van het artikel. Tweede zin met wat meer detail erin.', $desc );
+		$this->assertStringNotContainsString( 'rootkit? |', $desc );
+	}
+
+	public function test_fallback_description_cuts_on_sentence_boundary(): void {
+		Functions\when( 'strip_shortcodes' )->alias( static fn ( $s ) => (string) $s );
+		$long = str_repeat( 'Deze zin bevat een aantal woorden en eindigt netjes. ', 10 );
+		$post = $this->makePost( array( 'post_content' => '<p>' . $long . '</p>' ) );
+
+		$m = new \ReflectionMethod( \Seonix_LLMTxt::class, 'fallback_description' );
+		$m->setAccessible( true );
+		$desc = $m->invoke( new \Seonix_LLMTxt(), $post );
+
+		$this->assertLessThanOrEqual( 300, mb_strlen( $desc ) );
+		$this->assertMatchesRegularExpression( '/[.!?]$/u', $desc, 'description must end at a sentence boundary, not mid-word with …' );
 	}
 }

@@ -1,18 +1,20 @@
-=== Seonix SEO ===
+=== Seonix SEO – llms.txt, IndexNow & AI Search Visibility (GEO/AEO) ===
 Contributors: seonix
-Tags: seo, ai, content, automation, technical-seo
+Tags: seo, ai-search, llms-txt, indexnow, aeo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.14.0
+Stable tag: 2.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI search visibility out of the box — llms.txt and IndexNow, no account needed. Connect Seonix for site audits, AI articles, and SEO fixes.
+llms.txt + IndexNow, free, no account needed. AI search visibility (GEO/AEO) for ChatGPT, Perplexity and Gemini. Site audits, AI articles, SEO fixes.
 
 == Description ==
 
-**Seonix SEO gives your site AI-search visibility from the moment you activate it — and becomes a full growth agent when you connect a Seonix account.** Two features work immediately, free, with no account. Connect a Seonix project and the plugin brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search engines like ChatGPT, Gemini, and Perplexity.
+**Seonix SEO serves llms.txt and pings IndexNow from the moment you activate it — free, no account, no configuration.** That covers the technical layer of generative engine optimization (GEO) and answer engine optimization (AEO): AI assistants like ChatGPT, Perplexity, and Gemini get a machine-readable index of your content to discover and cite, and IndexNow-participating search engines (Bing, Yandex, Seznam, Naver) learn about every publish or update within minutes.
+
+Connect a Seonix account and the plugin becomes a full growth agent: it brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search alike.
 
 **Free — works right after activation, no account needed**
 
@@ -102,6 +104,22 @@ By installing the plugin and connecting it to a Seonix project, you accept the S
 
 == Frequently Asked Questions ==
 
+= What is llms.txt and why does my site need it? =
+
+llms.txt is a plain-text index of your site written for AI search — the AI counterpart of a sitemap. It gives AI assistants a machine-readable map of your published content so they can discover and cite your pages without parsing every template. This plugin serves `/llms.txt` (a curated index, most important pages first) and `/llms-full.txt` (the full text of your published content) live from your database — always in sync, with ETag/Last-Modified caching, and no static files written to your server.
+
+= Do llms.txt and IndexNow work without a Seonix account? =
+
+Yes. Both work immediately after activation — free, no account, no registration, no API key to obtain. llms.txt and llms-full.txt are generated live from your published content, and the IndexNow verification key is provisioned automatically on the first submission. Every other feature builds on a Seonix connection, but these two never require one.
+
+= What is IndexNow and which search engines support it? =
+
+IndexNow is an open protocol for telling search engines that a URL changed, instead of waiting for the next scheduled crawl. When you publish or update a public post or page, the plugin pings the shared IndexNow API, which distributes the URL to participating engines — Bing, Yandex, Seznam, and Naver — so they re-crawl it within minutes. Google does not participate in IndexNow. Drafts, private content, and pages marked noindex are skipped, and the same URL is not re-submitted more than once per 10 minutes. You can toggle it any time in the plugin settings.
+
+= Does this plugin help with GEO / AEO (AI search optimization)? =
+
+Yes — that is its core focus. Generative engine optimization (GEO) and answer engine optimization (AEO) mean making your content easy for AI engines to find, parse, and quote. Out of the box the plugin covers the technical layer: llms.txt / llms-full.txt for AI-crawler discovery and IndexNow for instant recrawl pings. With a connected Seonix project it goes further: structured data (JSON-LD) on published articles, an AI-search pillar in your site audit with concrete issues to fix, and articles written and structured for both Google results and AI answers.
+
 = How do I connect my site? =
 
 The easiest way is the **Seonix** menu in your WordPress admin: click "Connect to Seonix", choose your project in the Seonix app, and the connection completes automatically — no key to copy. You can also connect manually by pasting the API key (see below) into the Seonix dashboard.
@@ -141,6 +159,15 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.15.0 =
+* Improved: llms.txt now follows the llmstxt.org "## Optional" convention — utility pages (contact, privacy, terms) are listed there together with a link to llms-full.txt instead of being dropped entirely.
+* Improved: llms.txt sections with a single link fold into their parent category section (or the generic Posts list), so a young site no longer renders dozens of one-link headings.
+* Improved: llms.txt fallback descriptions (posts without an SEO meta description) now skip headings and end on a sentence boundary instead of cutting mid-word with an ellipsis.
+* Improved: publishing no longer bumps the post's modified date while localizing images — a freshly published article keeps modified = published instead of showing an "updated 9 seconds later" footprint.
+* Improved: HowTo structured data from Seonix articles is now emitted alongside Yoast / Rank Math / AIOSEO (neither engine outputs HowTo automatically, so step-by-step guides previously lost the markup).
+* Improved: publishing stores the SEO plugin's primary-category meta (deepest assigned category) when it is not already set, keeping breadcrumbs and the llms.txt grouping on the most specific term.
+* Improved: sitemap-cache invalidation after publishing now logs failures and falls back to purging Rank Math's cache storage directly when its API is unavailable; the publish response reports what was invalidated.
 
 = 2.14.0 =
 * New: Review and ItemList structured data now survive alongside Yoast / Rank Math / AIOSEO — testimonial pages and service-area directories keep their rich-result markup instead of losing it to the anti-duplication trim.

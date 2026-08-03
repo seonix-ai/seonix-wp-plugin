@@ -439,22 +439,62 @@ class Seonix_Meta_Bridge {
 	 * URL (and its lastmod) appears without waiting for the cache to expire.
 	 * Guarded per engine; never fatal.
 	 *
-	 * @return void
+	 * Diagnosability (2.15.0): this used to be a void with silent catch-alls —
+	 * when Rank Math renamed/moved its cache API the whole call became a
+	 * no-op with zero trace, and a freshly published article sat outside
+	 * post-sitemap.xml for days (virus.nl audit v3, P1-1). Every failure now
+	 * logs, a Rank-Math-present-but-API-missing situation falls back to
+	 * purging the documented cache storage directly, and the outcome is
+	 * returned so the publish response can carry it as telemetry.
+	 *
+	 * @return string What was invalidated: engine tokens joined with '+'
+	 *                ('yoast', 'rank_math', 'rank_math_fallback', suffixed
+	 *                ':error' on exception), or 'none' when no engine cache
+	 *                was found.
 	 */
-	public static function invalidate_sitemap_caches(): void {
-		try {
-			if ( class_exists( 'WPSEO_Sitemaps_Cache' ) && method_exists( 'WPSEO_Sitemaps_Cache', 'clear' ) ) {
+	public static function invalidate_sitemap_caches(): string {
+		$results = array();
+
+		if ( class_exists( 'WPSEO_Sitemaps_Cache' ) && method_exists( 'WPSEO_Sitemaps_Cache', 'clear' ) ) {
+			try {
 				WPSEO_Sitemaps_Cache::clear( array( 'post' ) );
+				$results[] = 'yoast';
+			} catch ( \Throwable $e ) {
+				$results[] = 'yoast:error';
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- production diagnostics: a silent failure here delays indexing of every published article.
+				error_log( 'Seonix: Yoast sitemap cache clear failed: ' . $e->getMessage() );
 			}
-		} catch ( \Throwable $e ) {
-			unset( $e );
 		}
-		try {
+
+		if ( defined( 'RANK_MATH_VERSION' ) ) {
 			if ( class_exists( '\RankMath\Sitemap\Cache' ) && method_exists( '\RankMath\Sitemap\Cache', 'invalidate_storage' ) ) {
-				\RankMath\Sitemap\Cache::invalidate_storage( 'post' );
+				try {
+					\RankMath\Sitemap\Cache::invalidate_storage( 'post' );
+					$results[] = 'rank_math';
+				} catch ( \Throwable $e ) {
+					$results[] = 'rank_math:error';
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- production diagnostics: a silent failure here delays indexing of every published article.
+					error_log( 'Seonix: Rank Math sitemap cache invalidation failed: ' . $e->getMessage() );
+				}
+			} else {
+				// Rank Math is active but its cache API is absent (version
+				// drift). Purge the documented storage directly — the same
+				// options invalidate_storage() clears — instead of silently
+				// leaving the stale sitemap in place.
+				try {
+					global $wpdb;
+					$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'rank\\_math\\_sitemap\\_cache\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- fallback purge of Rank Math sitemap cache storage when its API is unavailable.
+					$results[] = 'rank_math_fallback';
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- production diagnostics: surfaces the API drift that made the primary path a no-op.
+					error_log( 'Seonix: Rank Math sitemap cache API missing; purged cache storage directly (RANK_MATH_VERSION ' . RANK_MATH_VERSION . ')' );
+				} catch ( \Throwable $e ) {
+					$results[] = 'rank_math_fallback:error';
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- production diagnostics: a silent failure here delays indexing of every published article.
+					error_log( 'Seonix: Rank Math sitemap cache fallback purge failed: ' . $e->getMessage() );
+				}
 			}
-		} catch ( \Throwable $e ) {
-			unset( $e );
 		}
+
+		return empty( $results ) ? 'none' : implode( '+', $results );
 	}
 }

@@ -611,6 +611,16 @@ class Seonix_REST_API {
 			wp_set_post_tags( $post_id, $sanitized_tags );
 		}
 
+		// Primary-category meta for the active SEO engine. When a post sits in
+		// a nested taxonomy (leaf + its parents), Rank Math/Yoast breadcrumbs
+		// and our llms.txt grouping key off the primary term; without the meta
+		// they fall back to heuristics that often pick the generic parent.
+		// The deepest resolved term is the most specific one. Never overwrites
+		// a value an operator already picked in wp-admin.
+		if ( ! empty( $cat_ids ) ) {
+			$this->set_primary_category_meta( $post_id, $cat_ids );
+		}
+
 		// Handle featured image.
 		$featured_image_url = esc_url_raw( $request->get_param( 'featured_image_url' ) );
 		if ( ! empty( $featured_image_url ) ) {
@@ -656,7 +666,7 @@ class Seonix_REST_API {
 		}
 
 		// Surface the fresh URL to the engines' XML sitemaps immediately.
-		Seonix_Meta_Bridge::invalidate_sitemap_caches();
+		$sitemap_cache = Seonix_Meta_Bridge::invalidate_sitemap_caches();
 
 		// Mark site as connected on first successful publish (if not already).
 		if ( ! Seonix_Auth::is_connected() ) {
@@ -667,9 +677,13 @@ class Seonix_REST_API {
 		// Trimmed in 2.2.5: backend reads only `{post_id, post_url}` from this
 		// response (see publisher/wordpress.go::publishViaPlugin). Dropped:
 		// `success`, `edit_url`, `featured_image_id`, `categories_created`.
+		// `sitemap_cache` (2.15.0) is additive telemetry — which engine cache
+		// was invalidated ('none' = no engine cache found) — so a "published
+		// article missing from sitemap" report can be diagnosed from logs.
 		$response = array(
-			'post_id'  => $post_id,
-			'post_url' => get_permalink( $post_id ),
+			'post_id'       => $post_id,
+			'post_url'      => get_permalink( $post_id ),
+			'sitemap_cache' => $sitemap_cache,
 		);
 
 		return rest_ensure_response( $response );
@@ -1869,7 +1883,16 @@ class Seonix_REST_API {
 			// this, any backslash already in the post body — e.g. \uXXXX
 			// escapes inside Gutenberg block-attribute JSON — loses one level
 			// and the block markup corrupts.
-			$result = wp_update_post(
+			//
+			// Content_Write, not bare wp_update_post: this write happens
+			// seconds after wp_insert_post() finished downloading images, and
+			// a plain update stamps post_modified = publish time + a few
+			// seconds. That "published, then updated 9 seconds later" pattern
+			// on every article is a machine-generation footprint external
+			// audits flag (virus.nl audit v3, P1-9) — the src rewrite is
+			// publish housekeeping, not an editorial update, so the modified
+			// date must stay equal to the publish date.
+			$result = Seonix_Content_Write::update_preserving_modified(
 				wp_slash(
 					array(
 						'ID'           => $post_id,
@@ -1890,6 +1913,42 @@ class Seonix_REST_API {
 		}
 
 		return $sideloaded;
+	}
+
+	/**
+	 * Store the primary-category meta of the active SEO engine(s) for a
+	 * freshly published post. The deepest term among the assigned categories
+	 * wins (leaf over parent). Additive: an existing value — an operator's
+	 * manual pick in wp-admin — is never overwritten.
+	 *
+	 * @param int   $post_id Post ID.
+	 * @param array $cat_ids Category term IDs assigned at publish.
+	 */
+	private function set_primary_category_meta( $post_id, array $cat_ids ) {
+		$primary    = 0;
+		$best_depth = -1;
+		foreach ( $cat_ids as $cid ) {
+			$cid = (int) $cid;
+			if ( $cid <= 0 ) {
+				continue;
+			}
+			$depth = count( get_ancestors( $cid, 'category' ) );
+			if ( $depth > $best_depth ) {
+				$best_depth = $depth;
+				$primary    = $cid;
+			}
+		}
+		if ( $primary <= 0 ) {
+			return;
+		}
+		if ( defined( 'RANK_MATH_VERSION' )
+			&& '' === (string) get_post_meta( $post_id, 'rank_math_primary_category', true ) ) {
+			update_post_meta( $post_id, 'rank_math_primary_category', $primary );
+		}
+		if ( defined( 'WPSEO_VERSION' )
+			&& '' === (string) get_post_meta( $post_id, '_yoast_wpseo_primary_category', true ) ) {
+			update_post_meta( $post_id, '_yoast_wpseo_primary_category', $primary );
+		}
 	}
 
 	/**

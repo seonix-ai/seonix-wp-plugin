@@ -123,7 +123,9 @@ class Seonix_LLMTxt {
 	 * - # Site Name
 	 * - > Description
 	 * - ## Pages (ordered by importance)
-	 * - ## Category Name (each post listed ONCE, under its primary category)
+	 * - ## Category Name (each post listed ONCE, under its primary category;
+	 *   sections below the minimum link count fold into an ancestor section)
+	 * - ## Optional (utility pages + llms-full.txt companion)
 	 *
 	 * Curation rules (llms.txt is a curated map, not a sitemap dump):
 	 * - each post appears exactly once — under its primary category (SEO-plugin
@@ -166,14 +168,30 @@ class Seonix_LLMTxt {
 		$emitted   = 0;
 
 		// Pages section (ordered by menu_order).
-		$pages = get_posts( array(
+		$raw_pages = get_posts( array(
 			'post_type'      => 'page',
 			'post_status'    => 'publish',
 			'posts_per_page' => -1,
 			'orderby'        => 'menu_order',
 			'order'          => 'ASC',
 		) );
-		$pages = array_values( array_filter( $pages, array( $this, 'should_include' ) ) );
+		$pages = array_values( array_filter( $raw_pages, array( $this, 'should_include' ) ) );
+
+		// Utility pages (contact, privacy, terms …) are excluded from the main
+		// map but belong in the spec's "## Optional" section: secondary URLs a
+		// consumer may skip for a shorter context, yet exactly what an AI
+		// assistant needs for "how do I contact them" questions. Password-
+		// protected and noindex pages stay out entirely; the stub check is
+		// deliberately NOT applied — utility pages are legitimately short.
+		$optional_pages = array();
+		foreach ( $raw_pages as $p ) {
+			if ( '' !== (string) $p->post_password || $this->is_noindex( $p->ID ) ) {
+				continue;
+			}
+			if ( in_array( $p->post_name, $this->excluded_page_slugs(), true ) ) {
+				$optional_pages[] = $p;
+			}
+		}
 
 		if ( ! empty( $pages ) ) {
 			// Order by IMPORTANCE, not raw menu_order: front page first, then
@@ -222,8 +240,9 @@ class Seonix_LLMTxt {
 			'order'          => 'DESC',
 		) );
 
-		$groups   = array(); // cat name => post list, insertion order = date DESC per group.
-		$orphans  = array(); // posts without any category.
+		$groups      = array(); // cat name => post list, insertion order = date DESC per group.
+		$group_terms = array(); // cat name => WP_Term, for the ancestor-fold pass below.
+		$orphans     = array(); // posts without any category.
 		foreach ( $posts as $post ) {
 			if ( ! $this->should_include( $post ) ) {
 				continue;
@@ -235,9 +254,54 @@ class Seonix_LLMTxt {
 			}
 			$name = $this->clean_text( $term->name );
 			if ( ! isset( $groups[ $name ] ) ) {
-				$groups[ $name ] = array();
+				$groups[ $name ]      = array();
+				$group_terms[ $name ] = $term;
 			}
 			$groups[ $name ][] = $post;
+		}
+
+		// Section granularity: a "## Category" heading over a single link is
+		// taxonomy noise, not a curated map (a 30-post site rendered 25+
+		// one-link sections — virus.nl audit v3). Sections below the minimum
+		// fold into the nearest ANCESTOR category that has its own section;
+		// with no such ancestor the posts join the generic Posts tail.
+		// Deepest sections fold first so a child single can rescue its parent
+		// (two related singles become one two-link section instead of two
+		// orphans).
+		$min_section_links = max( 1, (int) apply_filters( 'seonix_llmstxt_min_section_links', 2 ) );
+		if ( $min_section_links > 1 ) {
+			$names = array_keys( $groups );
+			usort( $names, function ( $a, $b ) use ( $group_terms ) {
+				$da = isset( $group_terms[ $a ] ) ? count( get_ancestors( $group_terms[ $a ]->term_id, 'category' ) ) : 0;
+				$db = isset( $group_terms[ $b ] ) ? count( get_ancestors( $group_terms[ $b ]->term_id, 'category' ) ) : 0;
+				if ( $da !== $db ) {
+					return $db - $da; // deepest first
+				}
+				return strcasecmp( $a, $b );
+			} );
+			foreach ( $names as $name ) {
+				if ( ! isset( $groups[ $name ] ) || count( $groups[ $name ] ) >= $min_section_links ) {
+					continue;
+				}
+				$folded = false;
+				if ( isset( $group_terms[ $name ] ) ) {
+					foreach ( get_ancestors( $group_terms[ $name ]->term_id, 'category' ) as $anc_id ) {
+						$anc = get_term( (int) $anc_id, 'category' );
+						if ( $anc && ! is_wp_error( $anc ) && isset( $anc->name ) ) {
+							$anc_name = $this->clean_text( $anc->name );
+							if ( $anc_name !== $name && isset( $groups[ $anc_name ] ) ) {
+								$groups[ $anc_name ] = array_merge( $groups[ $anc_name ], $groups[ $name ] );
+								$folded              = true;
+								break;
+							}
+						}
+					}
+				}
+				if ( ! $folded ) {
+					$orphans = array_merge( $orphans, $groups[ $name ] );
+				}
+				unset( $groups[ $name ], $group_terms[ $name ] );
+			}
 		}
 		uksort( $groups, 'strcasecmp' );
 
@@ -267,6 +331,20 @@ class Seonix_LLMTxt {
 			}
 			$llm_txt .= "\n";
 		}
+
+		// "## Optional" per llmstxt.org: secondary URLs, safe to skip when the
+		// consumer wants a shorter context. Utility pages (capped) plus the
+		// full-text companion file.
+		$llm_txt .= "## Optional\n\n";
+		$optional_count = 0;
+		foreach ( $optional_pages as $post ) {
+			if ( $optional_count >= 5 ) {
+				break;
+			}
+			$llm_txt .= $this->format_link_line( $post ) . "\n";
+			$optional_count++;
+		}
+		$llm_txt .= '- [Full text version](' . esc_url_raw( home_url( '/llms-full.txt' ) ) . "): Complete article texts of this site in one markdown file.\n\n";
 
 		return $llm_txt;
 	}
@@ -466,11 +544,54 @@ class Seonix_LLMTxt {
 		if ( '' !== $desc ) {
 			return $this->clean_text( $desc );
 		}
-		$excerpt = get_the_excerpt( $post );
-		if ( $excerpt ) {
-			return $this->clean_text( wp_trim_words( $excerpt, 30, '…' ) );
+		return $this->fallback_description( $post );
+	}
+
+	/**
+	 * Build a description from the post body when no SEO meta description
+	 * exists. Differences from core's get_the_excerpt(), both audit findings
+	 * (virus.nl v3):
+	 * - headings are stripped BEFORE excerpting — core keeps their text, so
+	 *   every description opened with the post's first (title-like) heading;
+	 * - the cut lands on a sentence boundary, not the mid-word "…" of a double
+	 *   word-trim (core's 55 words, then our 30).
+	 *
+	 * @param WP_Post $post The post/page object.
+	 * @return string Sentence-bounded plain-text description ('' when empty).
+	 */
+	private function fallback_description( $post ) {
+		$content = strip_shortcodes( (string) $post->post_content );
+		// Drop headings with their text (h1-h6) so the description starts at
+		// the first real paragraph, and drop Gutenberg block comments.
+		$content = preg_replace( '/<h[1-6][^>]*>.*?<\/h[1-6]>/is', ' ', $content );
+		$content = preg_replace( '/<!--.*?-->/s', ' ', $content );
+		$text    = $this->clean_text( $content );
+		if ( '' === $text ) {
+			return '';
 		}
-		return '';
+
+		// Accumulate whole sentences up to ~220 chars; always keep at least
+		// one. A first sentence longer than 300 chars falls back to a
+		// word-boundary trim (rare degenerate case: no punctuation at all).
+		$sentences = preg_split( '/(?<=[.!?])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+		if ( empty( $sentences ) ) {
+			return $this->clean_text( wp_trim_words( $text, 30, '…' ) );
+		}
+		$out = '';
+		foreach ( $sentences as $sentence ) {
+			if ( '' === $out ) {
+				$out = $sentence;
+				continue;
+			}
+			if ( mb_strlen( $out . ' ' . $sentence ) > 220 ) {
+				break;
+			}
+			$out .= ' ' . $sentence;
+		}
+		if ( mb_strlen( $out ) > 300 ) {
+			return $this->clean_text( wp_trim_words( $out, 30, '…' ) );
+		}
+		return $out;
 	}
 
 	/**
