@@ -705,7 +705,8 @@ class Seonix_LLMTxt {
 	 * tags only — it decodes nothing and strips no format chars — so those
 	 * artifacts used to land verbatim in llms.txt (literal "&amp;", stray
 	 * U+200B). This helper strips tags, decodes entities, removes zero-width /
-	 * BOM / soft-hyphen characters, and collapses whitespace.
+	 * BOM / soft-hyphen characters, drops stray escape backslashes, and
+	 * collapses whitespace.
 	 *
 	 * @param string $s Raw WordPress string.
 	 * @return string Clean plain text.
@@ -715,6 +716,14 @@ class Seonix_LLMTxt {
 		$s = html_entity_decode( $s, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		// Strip zero-width space/joiner/non-joiner, BOM, and soft hyphen.
 		$s = preg_replace( '/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $s );
+		// Drop a backslash sitting in front of a character that never needs
+		// escaping in plain text. Such backslashes reach the database from
+		// shell-escaped CLI edits ("Jetzt anfragen\!" — a bash history-expansion
+		// escape saved literally) and from markdown-escaping editors; they are
+		// meaningless to a reader and to an AI crawler, but they used to be
+		// copied verbatim into llms.txt. Escapes that carry meaning — \\ and a
+		// backslash before a letter or digit — are left alone.
+		$s = preg_replace( '/\\\\([!?&$`*_~#%@])/u', '$1', $s );
 		// Collapse any whitespace run (incl. newlines) to a single space.
 		$s = preg_replace( '/\s+/u', ' ', $s );
 		return trim( $s );

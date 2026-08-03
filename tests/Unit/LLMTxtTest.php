@@ -63,6 +63,25 @@ final class LLMTxtTest extends TestCase {
 		$this->assertSame( 'Hello world', $this->cleanText( '<b>Hello</b> world' ) );
 	}
 
+	/**
+	 * Shell-escaped CLI edits ("Jetzt anfragen\!" — bash history-expansion
+	 * escape saved literally) and markdown-escaping editors leave backslashes
+	 * in meta descriptions. They are meaningless in plain text and used to be
+	 * copied verbatim into llms.txt (found on a live site, 2026-08-04).
+	 */
+	public function test_strips_stray_escape_backslashes(): void {
+		$this->assertSame( 'Jetzt anfragen!', $this->cleanText( 'Jetzt anfragen\!' ) );
+		$this->assertSame( 'Aufbau & Transport', $this->cleanText( 'Aufbau \& Transport' ) );
+		$this->assertSame( 'Preis ab 50$ pro Stunde', $this->cleanText( 'Preis ab 50\$ pro Stunde' ) );
+		$this->assertSame( 'Wirklich? Ja!', $this->cleanText( 'Wirklich\? Ja\!' ) );
+	}
+
+	/** A backslash that carries meaning (\\ or before a word char) survives. */
+	public function test_keeps_meaningful_backslashes(): void {
+		$this->assertSame( 'C:\\Users\\Docs', $this->cleanText( 'C:\\Users\\Docs' ) );
+		$this->assertSame( 'regex \d+ matcht Ziffern', $this->cleanText( 'regex \d+ matcht Ziffern' ) );
+	}
+
 	// ------------------------------------------------------------------
 	// Curation: should_include / primary_category / item_description
 	// (dedup + noise filtering — a 71-post site used to emit ~380 lines,
