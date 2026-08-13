@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.15.0
+ * Version:     2.16.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.15.0' );
+define( 'SEONIX_VERSION', '2.16.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -76,6 +76,7 @@ require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-content-write.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-registry.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-history.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-cache-purger.php';
+require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-robots-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-controller.php';
 
 // SEO Fix methods.
@@ -89,6 +90,10 @@ require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-term-meta-d
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-image-alt.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-pagination-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-post-noindex.php';
+require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-set-post-robots-noindex.php';
+require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-set-term-robots-noindex.php';
+require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-revert-post-robots-noindex.php';
+require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-revert-term-robots-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-agent-accessibility.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-agent-webmcp.php';
 
@@ -346,6 +351,10 @@ function seonix_seo_fix_build_registry(): Seonix_SEO_Fix_Registry {
 	$registry->register( new Seonix_Fix_Image_Alt( $history ) );
 	$registry->register( new Seonix_Fix_Pagination_Noindex( $history ) );
 	$registry->register( new Seonix_Fix_Post_Noindex( $history ) );
+	$registry->register( new Seonix_Fix_Set_Post_Robots_Noindex( $history ) );
+	$registry->register( new Seonix_Fix_Set_Term_Robots_Noindex( $history ) );
+	$registry->register( new Seonix_Fix_Revert_Post_Robots_Noindex( $history ) );
+	$registry->register( new Seonix_Fix_Revert_Term_Robots_Noindex( $history ) );
 	$registry->register( new Seonix_Fix_Agent_Accessibility( $history ) );
 	$registry->register( new Seonix_Fix_Agent_WebMCP( $history ) );
 

@@ -196,11 +196,17 @@ class Seonix_SEO_Fix_Controller {
 			Seonix_SEO_Fix_History::STATUS_APPLIED,
 			Seonix_SEO_Fix_History::STATUS_ALREADY_APPLIED,
 		), true ) ) {
-			return new WP_REST_Response( array(
-				'history_id' => (int) $existing['id'],
-				'status'     => 'already_applied',
-				'before'     => $this->maybe_decode( $existing['before_state'] ?? null ),
-				'after'      => $this->maybe_decode( $existing['after_state'] ?? null ),
+			$after = $this->maybe_decode( $existing['after_state'] ?? null );
+			return new WP_REST_Response( $this->with_contract_fields(
+				array(
+					'history_id' => (int) $existing['id'],
+					'status'     => 'already_applied',
+					'before'     => $this->maybe_decode( $existing['before_state'] ?? null ),
+					'after'      => $after,
+				),
+				// Self-verifying methods mirror their contract fields into
+				// `after`, so a replayed fix_id still serves them top-level.
+				is_array( $after ) ? $after : array()
 			) );
 		}
 
@@ -224,11 +230,14 @@ class Seonix_SEO_Fix_Controller {
 				$result['before'] ?? null
 			);
 
-			return new WP_REST_Response( array(
-				'history_id' => $id,
-				'status'     => 'already_applied',
-				'before'     => $result['before'] ?? null,
-				'after'      => $result['after'] ?? null,
+			return new WP_REST_Response( $this->with_contract_fields(
+				array(
+					'history_id' => $id,
+					'status'     => 'already_applied',
+					'before'     => $result['before'] ?? null,
+					'after'      => $result['after'] ?? null,
+				),
+				$result
 			) );
 		}
 
@@ -242,11 +251,14 @@ class Seonix_SEO_Fix_Controller {
 			$result['after'] ?? null
 		);
 
-		return new WP_REST_Response( array(
-			'history_id' => $id,
-			'status'     => 'applied',
-			'before'     => $result['before'] ?? null,
-			'after'      => $result['after'] ?? null,
+		return new WP_REST_Response( $this->with_contract_fields(
+			array(
+				'history_id' => $id,
+				'status'     => 'applied',
+				'before'     => $result['before'] ?? null,
+				'after'      => $result['after'] ?? null,
+			),
+			$result
 		) );
 	}
 
@@ -485,6 +497,27 @@ class Seonix_SEO_Fix_Controller {
 		}
 		$decoded = json_decode( $value, true );
 		return null === $decoded ? $value : $decoded;
+	}
+
+	/**
+	 * Lift the self-verification contract fields a method may return into the
+	 * top level of the /apply response. Introduced in 2.16.0 for the robots
+	 * noindex fixes, whose backend contract reads `applied` / `verified` /
+	 * `note` / `verify_details` off the envelope itself. Purely additive: a
+	 * method that returns none of these (every pre-2.16.0 method) produces a
+	 * byte-identical response, and existing envelope keys always win.
+	 *
+	 * @param array<string,mixed> $payload Response envelope under construction.
+	 * @param array<string,mixed> $source  Method result (or decoded after_state on replay).
+	 * @return array<string,mixed>
+	 */
+	private function with_contract_fields( array $payload, array $source ): array {
+		foreach ( array( 'applied', 'verified', 'verify_details', 'note', 'unsupported_reason' ) as $key ) {
+			if ( array_key_exists( $key, $source ) && ! array_key_exists( $key, $payload ) ) {
+				$payload[ $key ] = $source[ $key ];
+			}
+		}
+		return $payload;
 	}
 
 	/**

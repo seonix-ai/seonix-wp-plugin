@@ -4,7 +4,7 @@ Tags: seo, ai-search, llms-txt, indexnow, aeo
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.15.0
+Stable tag: 2.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -159,6 +159,13 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.16.0 =
+* New: one-click "hide from search" fixes dispatched from the Seonix dashboard — `set_post_robots_noindex` noindexes a placeholder (stub) page and `set_term_robots_noindex` noindexes a category/tag archive that duplicates a real content page. Both write through the active SEO plugin's own robots settings (Yoast SEO postmeta / Rank Math robots list; term overrides go through Yoast's public taxonomy-meta API), so the change shows up in that plugin's UI and its XML sitemap drops the URL automatically. Sites without a supported SEO plugin report `no_supported_seo_plugin` instead of writing robots state nothing would render.
+* New: every robots fix stores an undo snapshot keyed by the dashboard's revert token; `revert_post_robots_noindex` / `revert_term_robots_noindex` restore the exact previous robots value (down to "no override at all"), refuse to clobber a state the owner changed by hand since, and are idempotent on retries. Snapshot storage is bounded (100 entries, oldest pruned first).
+* New: robots fixes verify themselves — after writing, the plugin fetches the affected URL server-side (purging the Seonix Optimizer page cache for it first when the Optimizer plugin is installed, plus a cache-buster) and reports whether the rendered HTML or X-Robots-Tag header actually carries the noindex; `verified=false` with a reason when a page cache still serves the old markup.
+* Improved: Yoast term robots changes sync the indexables table immediately, so the live archive renders the new robots meta on the next request instead of waiting for Yoast's own rebuild.
+* Improved: SEO-fix apply responses now carry top-level `applied` / `verified` fields for methods that self-verify (existing methods are byte-identical on the wire).
 
 = 2.15.0 =
 * Improved: llms.txt now follows the llmstxt.org "## Optional" convention — utility pages (contact, privacy, terms) are listed there together with a link to llms-full.txt instead of being dropped entirely.

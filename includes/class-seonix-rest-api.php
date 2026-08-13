@@ -594,7 +594,20 @@ class Seonix_REST_API {
 		// level is eaten from everything we store — which silently corrupted
 		// every \uXXXX escape in the schema JSON-LD and key-takeaways meta
 		// ("ö" stored as "u00f6") up to 2.12.10.
-		$post_id = wp_insert_post( wp_slash( $post_data ), true );
+		//
+		// preserve_modified (updates only): housekeeping republishes from the
+		// backend — e.g. cluster internal-link insertion — change the post
+		// for the site graph, not for readers. Route them through
+		// Seonix_Content_Write so the public "last modified" date stays put
+		// (same rule the SEO-fix repairs follow). Backends that never send
+		// the flag get the plain date-bumping update, unchanged.
+		$preserve_modified = ! empty( $post_data['ID'] )
+			&& rest_sanitize_boolean( $request->get_param( 'preserve_modified' ) );
+		if ( $preserve_modified ) {
+			$post_id = Seonix_Content_Write::update_preserving_modified( wp_slash( $post_data ), true );
+		} else {
+			$post_id = wp_insert_post( wp_slash( $post_data ), true );
+		}
 
 		if ( is_wp_error( $post_id ) ) {
 			return new WP_Error(
