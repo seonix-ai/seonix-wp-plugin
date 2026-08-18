@@ -91,7 +91,7 @@ class Seonix_Sync {
 			'order'          => 'ASC',
 		) );
 		foreach ( $pages as $page ) {
-			$items[] = $this->format_item( $page, 'page' );
+			$items[] = self::format_item( $page, 'page' );
 		}
 
 		// Collect posts.
@@ -103,7 +103,7 @@ class Seonix_Sync {
 			'order'          => 'DESC',
 		) );
 		foreach ( $posts as $post ) {
-			$items[] = $this->format_item( $post, 'post' );
+			$items[] = self::format_item( $post, 'post' );
 		}
 
 		// Collect WooCommerce products if available.
@@ -116,7 +116,7 @@ class Seonix_Sync {
 				'order'          => 'ASC',
 			) );
 			foreach ( $products as $product ) {
-				$items[] = $this->format_item( $product, 'product' );
+				$items[] = self::format_item( $product, 'product' );
 			}
 		}
 
@@ -356,11 +356,16 @@ class Seonix_Sync {
 	/**
 	 * Format a WP_Post into a sync item.
 	 *
+	 * Static and public since 2.17.0: the same shape is served by the
+	 * /inventory REST route (Seonix_REST_API::handle_inventory), so the pushed
+	 * and the pulled inventory are byte-for-byte the same contract and the
+	 * backend cannot tell which road an item arrived by.
+	 *
 	 * @param WP_Post $post         The post object.
 	 * @param string  $content_type One of 'page', 'post', 'product'.
 	 * @return array
 	 */
-	private function format_item( $post, $content_type ) {
+	public static function format_item( $post, $content_type ) {
 		return array(
 			'wp_id'        => $post->ID,
 			'content_type' => $content_type,

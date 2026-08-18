@@ -68,6 +68,40 @@ Sync semantics: `upsert` matches by `seonix_id` (insert or update; an upsert wit
 
 The seo-fix `redirect` method writes into this table (rows with `seonix_id` NULL) and no longer requires the Redirection plugin; rollback of history entries created by pre-2.7.0 versions still reverses against the Redirection table. `GET /seo-fix/capabilities` advertises the module as `"redirects": {"version": 1}`.
 
+## Content inventory (developer notes)
+
+Seonix needs to know what already exists on the site — it is what internal-link
+suggestions, cluster planning and "don't write this twice" are built on. There
+are two roads, and they carry the same item shape (`Seonix_Sync::format_item`):
+
+**Push.** `push_full_sync()` POSTs every published page/post/product to
+`{engine}/api/plugin/sync`. Fires on the weekly `seonix_weekly_sync` cron, on
+**Sync now** in Settings → Seonix, and — since 2.17.0 — on a one-off
+`seonix_engine_url_sync` event scheduled a minute after a verify hands the site
+a new `engine_url`. That last one closes a real hole: the weekly cron is
+scheduled at *activation*, when no engine URL exists yet, so its first firing
+pushed nothing and the next was seven days later. A site connected today used to
+appear empty in Seonix for a week.
+
+**Pull** (2.17.0+). `GET /wp-json/seonix/v1/inventory?page=1&per_page=100`,
+Bearer-authenticated like every machine route:
+
+```
+→ 200 {
+    "items": [ {"wp_id":11, "content_type":"page", "title":"About",
+                "slug":"about", "url":"https://…/about/", "status":"publish",
+                "updated_at":"2026-08-01T10:30:00+00:00"} ],
+    "has_more": true
+  }
+```
+
+Published content only, ID-ordered so pagination stays stable while the site is
+being edited, `per_page` clamped to 100, and `product` included only when
+WooCommerce is active. Deliberately not `/posts?post_type=…`: that route returns
+full post content plus SEO meta per row, which for an inventory of a few
+thousand posts is tens of megabytes the caller discards. Term and meta caches
+are switched off for the query — the route reads seven scalar columns.
+
 ## Installation
 
 1. Upload the `seonix` folder to `/wp-content/plugins/`, or install the `.zip` via **Plugins → Add New → Upload Plugin**.

@@ -196,6 +196,28 @@ class Seonix_REST_API {
 				'callback'            => array( $this, 'handle_tasks' ),
 				'permission_callback' => array( 'Seonix_Auth', 'validate_request' ),
 			) );
+
+			// Content inventory (2.17.0). The site's pages, posts and products
+			// as one lightweight row each — id, type, title, slug, url, status,
+			// modified — so Seonix can READ the inventory instead of only
+			// receiving it.
+			//
+			// Why this exists next to push_full_sync(): the push runs on a
+			// weekly cron scheduled at ACTIVATION, before the site knows which
+			// backend it belongs to, so the first firing sends nothing and a
+			// freshly connected site had no known pages in Seonix for up to a
+			// week. Pulling closes that window, and also covers sites where
+			// WP-Cron is disabled (DISABLE_WP_CRON) — a real share of hosts.
+			//
+			// Deliberately NOT /posts with a post_type param: that route
+			// returns full post content plus SEO meta per row, which for an
+			// inventory of a few thousand posts is tens of megabytes of data
+			// the caller throws away.
+			register_rest_route( $ns, '/inventory', array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'handle_inventory' ),
+				'permission_callback' => array( 'Seonix_Auth', 'validate_request' ),
+			) );
 		}
 
 		// Live content scoring for the editor panel.
@@ -605,6 +627,17 @@ class Seonix_REST_API {
 			&& rest_sanitize_boolean( $request->get_param( 'preserve_modified' ) );
 		if ( $preserve_modified ) {
 			$post_id = Seonix_Content_Write::update_preserving_modified( wp_slash( $post_data ), true );
+		} elseif ( ! empty( $post_data['ID'] ) ) {
+			// Updates MUST go through wp_update_post(), never raw
+			// wp_insert_post(): wp_update_post() merges the stored row first,
+			// while raw wp_insert_post() treats every field absent from
+			// $post_data as a new-post default — and post_date's default is
+			// current_time(). Routing updates through wp_insert_post()
+			// silently re-stamped the ORIGINAL publish date on every
+			// republish: on virus.nl the 2026-08-13 internal-links wave
+			// re-dated 12 July articles to the same day, erasing their age
+			// for search engines.
+			$post_id = wp_update_post( wp_slash( $post_data ), true );
 		} else {
 			$post_id = wp_insert_post( wp_slash( $post_data ), true );
 		}
@@ -743,6 +776,88 @@ class Seonix_REST_API {
 		return rest_ensure_response( array(
 			'posts' => $items,
 		) );
+	}
+
+	/**
+	 * GET /inventory - The site's content inventory, one lightweight row each.
+	 *
+	 * Same item shape as the weekly push (Seonix_Sync::format_item), so the
+	 * backend stores a pulled row exactly as it stores a pushed one. Published
+	 * content only — matching push_full_sync(), and matching what the inventory
+	 * is for: a draft is not a link target.
+	 *
+	 * All types come back in one ID-ordered stream so pagination stays stable
+	 * across requests even while the site is being edited. `has_more` is the
+	 * caller's stop signal.
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response
+	 */
+	public function handle_inventory( WP_REST_Request $request ) {
+		$page = (int) $request->get_param( 'page' );
+		if ( $page < 1 ) {
+			$page = 1;
+		}
+
+		// Anything non-positive falls back to the default rather than clamping
+		// up to 1: a per_page of 1 would answer honestly and still turn a
+		// 3000-post site into 3000 requests.
+		$per_page = (int) $request->get_param( 'per_page' );
+		if ( $per_page < 1 ) {
+			$per_page = 100;
+		}
+		$per_page = min( 100, $per_page );
+
+		$post_types = array( 'page', 'post' );
+		if ( class_exists( 'WooCommerce' ) ) {
+			$post_types[] = 'product';
+		}
+
+		$query = new WP_Query( array(
+			'post_type'              => $post_types,
+			'post_status'            => 'publish',
+			'posts_per_page'         => $per_page,
+			'paged'                  => $page,
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			// An inventory reads seven scalar columns per row; loading term and
+			// meta caches for every post would multiply the queries for data
+			// nothing here touches.
+			'update_post_term_cache' => false,
+			'update_post_meta_cache' => false,
+			'ignore_sticky_posts'    => true,
+		) );
+
+		$items = array();
+		foreach ( $query->posts as $post ) {
+			$items[] = Seonix_Sync::format_item( $post, $this->inventory_content_type( $post->post_type ) );
+		}
+
+		return rest_ensure_response( array(
+			'items'    => $items,
+			'has_more' => $page < (int) $query->max_num_pages,
+		) );
+	}
+
+	/**
+	 * Map a WordPress post type to the inventory's content_type value.
+	 *
+	 * Anything unexpected is reported as 'post': the backend's column is a
+	 * three-value enum, and a custom post type that slipped into the query is
+	 * still closer to a post than to a page or a product.
+	 *
+	 * @param string $post_type
+	 * @return string
+	 */
+	private function inventory_content_type( $post_type ) {
+		switch ( $post_type ) {
+			case 'page':
+				return 'page';
+			case 'product':
+				return 'product';
+			default:
+				return 'post';
+		}
 	}
 
 	/**
@@ -1070,7 +1185,25 @@ class Seonix_REST_API {
 		// because the params are optional and silently skipped when missing.
 		$engine_url = (string) $request->get_param( 'engine_url' );
 		if ( '' !== $engine_url && Seonix_Sync::is_safe_url( $engine_url ) ) {
+			$previous = (string) get_option( 'seonix_engine_url', '' );
 			update_option( 'seonix_engine_url', esc_url_raw( $engine_url ) );
+
+			// 2.17.0: push the inventory as soon as the site learns which
+			// backend it belongs to.
+			//
+			// Without this the first push waited for the weekly cron — which is
+			// scheduled on ACTIVATION, i.e. one firing BEFORE engine_url exists
+			// (push_full_sync() then returns early) and the next one seven days
+			// later. A site that connected today had no known pages in Seonix
+			// until then: no internal-link targets, nothing to optimise, an
+			// empty content browser.
+			//
+			// Only on a change, so the routine verifies the dashboard performs
+			// do not re-push a full inventory every time. A single event a
+			// minute out keeps it off the verify response's own request.
+			if ( $previous !== $engine_url && ! wp_next_scheduled( 'seonix_engine_url_sync' ) ) {
+				wp_schedule_single_event( time() + 60, 'seonix_engine_url_sync' );
+			}
 		}
 
 		$project_id = sanitize_text_field( (string) $request->get_param( 'project_id' ) );

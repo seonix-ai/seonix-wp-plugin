@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.16.0
+ * Version:     2.17.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.16.0' );
+define( 'SEONIX_VERSION', '2.17.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -257,6 +257,11 @@ function seonix_init() {
 	// Weekly full sync via WP cron.
 	add_action( 'seonix_weekly_sync', array( $sync, 'push_full_sync' ) );
 
+	// One-off full sync, scheduled by a verify that (re)pointed the site at a
+	// backend — see Seonix_REST_API::handle_verify. Same callback as the weekly
+	// one; a separate hook so scheduling it never disturbs the weekly schedule.
+	add_action( 'seonix_engine_url_sync', array( $sync, 'push_full_sync' ) );
+
 	// Flush rewrite rules on plugin version update (so new rules take effect without deactivate/reactivate).
 	// Deferred to `init` because $wp_rewrite is not initialised during plugins_loaded
 	// in WP-CLI's bootstrap order, which would crash the version migration there.
@@ -473,6 +478,7 @@ register_activation_hook( __FILE__, 'seonix_activate' );
  */
 function seonix_deactivate() {
 	wp_clear_scheduled_hook( 'seonix_weekly_sync' );
+	wp_clear_scheduled_hook( 'seonix_engine_url_sync' );
 	flush_rewrite_rules();
 }
 

@@ -4,7 +4,7 @@ Tags: seo, ai-search, llms-txt, indexnow, aeo
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.16.0
+Stable tag: 2.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -159,6 +159,14 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.17.0 =
+* New: Seonix can now READ the site's content inventory, not only receive it — a new authenticated `GET /wp-json/seonix/v1/inventory` route lists published pages, posts and WooCommerce products as one lightweight paginated row each (id, type, title, slug, url, status, modified). Same item shape as the weekly push, so nothing downstream can tell the two roads apart.
+* Fixed: a freshly connected site no longer waits up to a week before its content appears in Seonix. The full sync runs on a weekly cron scheduled at plugin ACTIVATION — before the plugin knows which Seonix backend it belongs to — so the first firing sent nothing and the next was seven days later. A verify that (re)points the site at a backend now schedules a one-off sync a minute later; routine verifies with an unchanged backend do not re-push.
+* Improved: the inventory read also covers sites where WP-Cron is disabled (`DISABLE_WP_CRON`), which previously never pushed at all.
+
+= 2.16.1 =
+* Fixed: republishing an article from the dashboard no longer changes the post's original publish date. Updates used to route through raw wp_insert_post(), which silently reset post_date to "now" on every republish — a bulk internal-linking republish could re-date a month of articles to a single day. Updates now go through wp_update_post(), which keeps the stored dates; creating new posts is unchanged.
 
 = 2.16.0 =
 * New: one-click "hide from search" fixes dispatched from the Seonix dashboard — `set_post_robots_noindex` noindexes a placeholder (stub) page and `set_term_robots_noindex` noindexes a category/tag archive that duplicates a real content page. Both write through the active SEO plugin's own robots settings (Yoast SEO postmeta / Rank Math robots list; term overrides go through Yoast's public taxonomy-meta API), so the change shows up in that plugin's UI and its XML sitemap drops the URL automatically. Sites without a supported SEO plugin report `no_supported_seo_plugin` instead of writing robots state nothing would render.

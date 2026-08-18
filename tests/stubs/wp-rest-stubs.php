@@ -118,3 +118,44 @@ if ( ! class_exists( 'WP_Post' ) ) {
         }
     }
 }
+
+/**
+ * WP_Query stub for the inventory route.
+ *
+ * The real class runs a database query in its constructor; here the rows are
+ * seeded by the test through the static queue and the constructor just records
+ * the args it was given, so a test can assert BOTH what came back and how it
+ * was asked for (post types, status, ordering, and the cache flags that keep an
+ * inventory of a few thousand rows from turning into a per-row meta lookup).
+ */
+if ( ! class_exists( 'WP_Query' ) ) {
+    class WP_Query {
+        /** Rows the next instance returns. @var array<int,object> */
+        public static array $next_posts = array();
+
+        /** Value the next instance reports as max_num_pages. */
+        public static int $next_max_num_pages = 1;
+
+        /** Args every instance was constructed with, in order. @var array<int,array> */
+        public static array $calls = array();
+
+        /** @var array<int,object> */
+        public array $posts = array();
+
+        public int $max_num_pages = 1;
+
+        /** @param array<string,mixed> $args */
+        public function __construct( array $args = array() ) {
+            self::$calls[]       = $args;
+            $this->posts         = self::$next_posts;
+            $this->max_num_pages = self::$next_max_num_pages;
+        }
+
+        /** Reset between tests — static state must not leak across cases. */
+        public static function reset(): void {
+            self::$next_posts         = array();
+            self::$next_max_num_pages = 1;
+            self::$calls              = array();
+        }
+    }
+}

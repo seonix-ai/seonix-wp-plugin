@@ -24,6 +24,9 @@ final class VerifyTest extends TestCase {
     /** Captured options written during the request, keyed by option name. */
     private array $updated = [];
 
+    /** Captured one-off cron events, keyed by hook name. */
+    private array $scheduled = [];
+
     protected function setUp(): void {
         parent::setUp();
         Monkey\setUp();
@@ -33,7 +36,8 @@ final class VerifyTest extends TestCase {
         // pre-existing verify-contract tests exercise their own path only.
         Functions\when( 'is_plugin_active' )->justReturn( false );
 
-        $this->updated = [];
+        $this->updated   = [];
+        $this->scheduled = [];
 
         // Skip the `if ( ! is_connected() )` branch — those writes aren't
         // what these tests are about.
@@ -52,6 +56,22 @@ final class VerifyTest extends TestCase {
         Functions\when( 'get_bloginfo' )->justReturn( 'Example Studio' );
         Functions\when( 'home_url' )->justReturn( 'https://example.com' );
         Functions\when( 'rest_ensure_response' )->returnArg();
+
+        // A verify that (re)points the site at a backend schedules a one-off
+        // inventory push (2.17.0). Captured rather than stubbed away so the
+        // tests below can assert on it.
+        $scheduled =& $this->scheduled;
+        Functions\when( 'wp_next_scheduled' )->alias(
+            static function ( $hook ) use ( &$scheduled ) {
+                return isset( $scheduled[ $hook ] ) ? $scheduled[ $hook ] : false;
+            }
+        );
+        Functions\when( 'wp_schedule_single_event' )->alias(
+            static function ( $timestamp, $hook ) use ( &$scheduled ) {
+                $scheduled[ $hook ] = $timestamp;
+                return true;
+            }
+        );
 
         // Capture every update_option(name, value) so tests can assert which
         // ones the handler wrote without round-tripping through a real DB.
@@ -92,6 +112,59 @@ final class VerifyTest extends TestCase {
             $this->updated['seonix_project_id'] ?? null
         );
         $this->assertSame( 'Example', $this->updated['seonix_project_name'] ?? null );
+    }
+
+    public function test_verify_schedules_immediate_sync_when_engine_url_appears(): void {
+        // The gap this closes: the plugin's weekly sync cron is scheduled on
+        // ACTIVATION, when engine_url is still empty, so push_full_sync()
+        // returns early and the next firing is seven days out. A site that
+        // connected today would have no inventory in Seonix until then.
+        $request = $this->makeRequest( [ 'engine_url' => 'https://example.com' ] );
+
+        $this->api->handle_verify( $request );
+
+        $this->assertArrayHasKey(
+            'seonix_engine_url_sync',
+            $this->scheduled,
+            'A newly learned engine_url must schedule a one-off inventory push'
+        );
+        $this->assertGreaterThan(
+            time(),
+            $this->scheduled['seonix_engine_url_sync'],
+            'The push belongs on a later cron tick, not inside the verify request'
+        );
+    }
+
+    public function test_verify_does_not_reschedule_sync_for_unchanged_engine_url(): void {
+        // The dashboard verifies routinely (channel panel, connect flow). Those
+        // must not each re-push the whole inventory.
+        Functions\when( 'get_option' )->alias(
+            static fn ( $name, $default = '' ) => match ( $name ) {
+                'seonix_connected'  => true,
+                'seonix_engine_url' => 'https://example.com',
+                default             => $default,
+            }
+        );
+
+        $this->api->handle_verify( $this->makeRequest( [ 'engine_url' => 'https://example.com' ] ) );
+
+        $this->assertArrayNotHasKey( 'seonix_engine_url_sync', $this->scheduled );
+    }
+
+    public function test_verify_schedules_sync_when_engine_url_changes_backend(): void {
+        // Moving a site between backends (dev → prod) or between projects has
+        // to re-push, or the new backend inherits an empty inventory.
+        Functions\when( 'get_option' )->alias(
+            static fn ( $name, $default = '' ) => match ( $name ) {
+                'seonix_connected'  => true,
+                'seonix_engine_url' => 'https://old-backend.example.com',
+                default             => $default,
+            }
+        );
+
+        $this->api->handle_verify( $this->makeRequest( [ 'engine_url' => 'https://example.com' ] ) );
+
+        $this->assertArrayHasKey( 'seonix_engine_url_sync', $this->scheduled );
     }
 
     public function test_verify_skips_empty_params_for_backwards_compat(): void {
