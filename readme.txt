@@ -14,7 +14,7 @@ llms.txt + IndexNow, free, no account needed. AI search visibility (GEO/AEO) for
 
 **Seonix SEO serves llms.txt and pings IndexNow from the moment you activate it — free, no account, no configuration.** That covers the technical layer of generative engine optimization (GEO) and answer engine optimization (AEO): AI assistants like ChatGPT, Perplexity, and Gemini get a machine-readable index of your content to discover and cite, and IndexNow-participating search engines (Bing, Yandex, Seznam, Naver) learn about every publish or update within minutes.
 
-Connect a Seonix account and the plugin becomes a full growth agent: it brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search alike.
+Connect a [Seonix](https://seonix.ai) account and the plugin becomes a full growth agent: it brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search alike.
 
 **Free — works right after activation, no account needed**
 
@@ -40,7 +40,7 @@ Connect a Seonix account and the plugin becomes a full growth agent: it brings y
 
 **How the WordPress plugin fits in**
 
-The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — serving llms.txt, pinging IndexNow, receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the Seonix platform.
+The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — serving llms.txt, pinging IndexNow, receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the [Seonix platform](https://seonix.ai).
 
 **How it works:**
 
@@ -52,7 +52,7 @@ Prefer to connect manually? Copy the auto-generated API key from `Seonix → Set
 
 == External Service ==
 
-This plugin connects your WordPress site to the **Seonix service** (https://seonix.ai), a third-party SaaS platform that generates and publishes SEO-optimized articles to your site. Using Seonix requires a Seonix account.
+This plugin connects your WordPress site to the **Seonix service** ([seonix.ai](https://seonix.ai)), a third-party SaaS platform that generates and publishes SEO-optimized articles to your site. Using Seonix requires a Seonix account.
 
 **What the service does**
 
@@ -91,9 +91,9 @@ Until step 3 succeeds, no outbound calls leave your site.
 
 By installing the plugin and connecting it to a Seonix project, you accept the Seonix Terms of Service and Privacy Policy:
 
-* Service: https://seonix.ai
-* Terms of Service: https://seonix.ai/terms-of-use
-* Privacy Policy: https://seonix.ai/privacy-policy
+* Service: [https://seonix.ai](https://seonix.ai)
+* Terms of Service: [https://seonix.ai/terms-of-use](https://seonix.ai/terms-of-use)
+* Privacy Policy: [https://seonix.ai/privacy-policy](https://seonix.ai/privacy-policy)
 
 == Installation ==
 
