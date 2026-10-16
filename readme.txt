@@ -14,7 +14,7 @@ llms.txt + IndexNow, free, no account needed. AI search visibility (GEO/AEO) for
 
 **Seonix SEO serves llms.txt and pings IndexNow from the moment you activate it — free, no account, no configuration.** That covers the technical layer of generative engine optimization (GEO) and answer engine optimization (AEO): AI assistants like ChatGPT, Perplexity, and Gemini get a machine-readable index of your content to discover and cite, and IndexNow-participating search engines (Bing, Yandex, Seznam, Naver) learn about every publish or update within minutes.
 
-Connect a [Seonix](https://seonix.ai) account and the plugin becomes a full growth agent: it brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search alike.
+Connect a [Seonix](https://seonix.ai/plugins/wordpress) account and the plugin becomes a full growth agent: it brings your site audit into WordPress, receives AI-written articles, applies one-click technical fixes, and publishes on autopilot — for Google and AI search alike.
 
 **Free — works right after activation, no account needed**
 
@@ -27,7 +27,7 @@ Connect a [Seonix](https://seonix.ai) account and the plugin becomes a full grow
 * **Page audit in the editor** — the current page's issues from the last scan, in the block editor sidebar and the classic editor.
 * **Structured data (JSON-LD)** on articles published through Seonix — and it stays silent when another SEO plugin already outputs schema.
 
-**What requires a paid Seonix plan**
+**What requires a paid [Seonix plan](https://seonix.ai/pricing)**
 
 * **One-click SEO fixes** — apply AI-suggested fixes for the most common technical issues directly from WordPress or the Seonix dashboard. Rollback any change if you don't like the result.
 * **AI-written articles, SEO-tuned end-to-end** — Seonix learns your site, audience, voice, and topics, then generates articles with optimized titles, meta descriptions, internal links, headings, and schema markup.
@@ -40,7 +40,7 @@ Connect a [Seonix](https://seonix.ai) account and the plugin becomes a full grow
 
 **How the WordPress plugin fits in**
 
-The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — serving llms.txt, pinging IndexNow, receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the [Seonix platform](https://seonix.ai).
+The Seonix WordPress plugin is the bridge between your site and the Seonix service. The plugin handles the WordPress side — serving llms.txt, pinging IndexNow, receiving published articles, syncing your site structure for internal linking, and applying SEO fixes — while the AI heavy-lifting runs on the [Seonix platform](https://seonix.ai/wordpress-seo-automation).
 
 **How it works:**
 
@@ -106,7 +106,7 @@ By installing the plugin and connecting it to a Seonix project, you accept the S
 
 = What is llms.txt and why does my site need it? =
 
-llms.txt is a plain-text index of your site written for AI search — the AI counterpart of a sitemap. It gives AI assistants a machine-readable map of your published content so they can discover and cite your pages without parsing every template. This plugin serves `/llms.txt` (a curated index, most important pages first) and `/llms-full.txt` (the full text of your published content) live from your database — always in sync, with ETag/Last-Modified caching, and no static files written to your server.
+llms.txt is a plain-text index of your site written for AI search — the AI counterpart of a sitemap. It gives AI assistants a machine-readable map of your published content so they can discover and cite your pages without parsing every template. This plugin serves `/llms.txt` (a curated index, most important pages first) and `/llms-full.txt` (the full text of your published content) live from your database — always in sync, with ETag/Last-Modified caching, and no static files written to your server. llms.txt only helps if AI crawlers are allowed to read your site in the first place — the free [AI Crawler Checker](https://seonix.ai/tools/ai-crawler-checker) shows which ones your robots.txt lets in.
 
 = Do llms.txt and IndexNow work without a Seonix account? =
 
@@ -118,7 +118,7 @@ IndexNow is an open protocol for telling search engines that a URL changed, inst
 
 = Does this plugin help with GEO / AEO (AI search optimization)? =
 
-Yes — that is its core focus. Generative engine optimization (GEO) and answer engine optimization (AEO) mean making your content easy for AI engines to find, parse, and quote. Out of the box the plugin covers the technical layer: llms.txt / llms-full.txt for AI-crawler discovery and IndexNow for instant recrawl pings. With a connected Seonix project it goes further: structured data (JSON-LD) on published articles, an AI-search pillar in your site audit with concrete issues to fix, and articles written and structured for both Google results and AI answers.
+Yes — that is its core focus. Generative engine optimization (GEO) and answer engine optimization (AEO) mean making your content easy for AI engines to find, parse, and quote. Out of the box the plugin covers the technical layer: llms.txt / llms-full.txt for AI-crawler discovery and IndexNow for instant recrawl pings. With a connected Seonix project it goes further: structured data (JSON-LD) on published articles, an AI-search pillar in your site audit with concrete issues to fix, and articles written and structured for both Google results and AI answers. To see where a page stands today, run it through the free [AI SEO Checker](https://seonix.ai/tools/ai-seo-checker).
 
 = How do I connect my site? =
 
