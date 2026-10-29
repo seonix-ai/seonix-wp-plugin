@@ -89,6 +89,7 @@ require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-meta-descri
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-term-meta-description.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-image-alt.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-pagination-noindex.php';
+require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-clear-pagination-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-post-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-set-post-robots-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-set-term-robots-noindex.php';
@@ -355,6 +356,7 @@ function seonix_seo_fix_build_registry(): Seonix_SEO_Fix_Registry {
 	$registry->register( new Seonix_Fix_Term_Meta_Description( $history ) );
 	$registry->register( new Seonix_Fix_Image_Alt( $history ) );
 	$registry->register( new Seonix_Fix_Pagination_Noindex( $history ) );
+	$registry->register( new Seonix_Fix_Clear_Pagination_Noindex( $history ) );
 	$registry->register( new Seonix_Fix_Post_Noindex( $history ) );
 	$registry->register( new Seonix_Fix_Set_Post_Robots_Noindex( $history ) );
 	$registry->register( new Seonix_Fix_Set_Term_Robots_Noindex( $history ) );

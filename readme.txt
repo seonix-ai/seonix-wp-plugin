@@ -164,6 +164,8 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 * Fixed: republishing into an existing page or custom-post-type entry no longer converts it into a post. Updates used to force the post type to "post", which changed the URL and dropped a page out of its hierarchy; an update now keeps the post's own type (creating new posts is unchanged).
 * Fixed: categories and tags sent with a publish are applied only when the target post type supports them. A page (or custom post type) without the category / tag taxonomy ignores them instead of getting stray terms attached and new categories created.
 * Improved: the authenticated `GET /posts/{id}` route also returns pages, so Seonix can check a page's current body before it updates it.
+* New: one-click fix for paginated pages kept out of search. When your SEO plugin's site-wide settings mark /page/2/ and beyond as noindex, Seonix can switch them off so those pages are indexable again, as Google recommends, and clears the page cache so the change shows at once. Offered only while such a setting is on, and can be rolled back.
+* Changed: the old "noindex paginated archives" fix is no longer offered. Google wants paginated pages indexable, and the setting that fix wrote has had no effect since 2018.
 
 = 2.17.0 =
 * New: Seonix can now READ the site's content inventory, not only receive it — a new authenticated `GET /wp-json/seonix/v1/inventory` route lists published pages, posts and WooCommerce products as one lightweight paginated row each (id, type, title, slug, url, status, modified). Same item shape as the weekly push, so nothing downstream can tell the two roads apart.

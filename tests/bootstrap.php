@@ -28,6 +28,10 @@ require_once __DIR__ . '/stubs/wp-rest-stubs.php';
 // and the title-template reader talk only to these public surfaces.
 require_once __DIR__ . '/Fakes/FakeYoast.php';
 
+// Rank Math's public settings writer (RankMath\Helper::update_all_settings). Its
+// namespace is outside the Seonix\Tests PSR-4 map, so it is loaded here.
+require_once __DIR__ . '/Fakes/FakeRankMath.php';
+
 // WordPress constants the plugin checks before bailing out.
 if ( ! defined( 'ABSPATH' ) ) {
     define( 'ABSPATH', __DIR__ . '/' );

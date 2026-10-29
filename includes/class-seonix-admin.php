@@ -639,8 +639,13 @@ class Seonix_Admin {
 			'meta_desc_too_short',
 			'duplicate_meta_desc',
 			'images_missing_alt',
-			'pagination_noindex_recommended',
 		);
+		if ( 'pagination_not_indexable' === $code ) {
+			// Fixable only while the site-wide setting the fix switches off is on;
+			// anywhere else the button would apply nothing. Same gate the
+			// /seo-fix/capabilities handshake gives the dashboard.
+			return Seonix_Fix_Clear_Pagination_Noindex::is_applicable();
+		}
 		return in_array( $code, $fixable, true );
 	}
 
