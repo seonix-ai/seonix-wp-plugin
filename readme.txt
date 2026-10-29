@@ -160,6 +160,11 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 == Changelog ==
 
+= Unreleased =
+* Fixed: republishing into an existing page or custom-post-type entry no longer converts it into a post. Updates used to force the post type to "post", which changed the URL and dropped a page out of its hierarchy; an update now keeps the post's own type (creating new posts is unchanged).
+* Fixed: categories and tags sent with a publish are applied only when the target post type supports them. A page (or custom post type) without the category / tag taxonomy ignores them instead of getting stray terms attached and new categories created.
+* Improved: the authenticated `GET /posts/{id}` route also returns pages, so Seonix can check a page's current body before it updates it.
+
 = 2.17.0 =
 * New: Seonix can now READ the site's content inventory, not only receive it — a new authenticated `GET /wp-json/seonix/v1/inventory` route lists published pages, posts and WooCommerce products as one lightweight paginated row each (id, type, title, slug, url, status, modified). Same item shape as the weekly push, so nothing downstream can tell the two roads apart.
 * Fixed: a freshly connected site no longer waits up to a week before its content appears in Seonix. The full sync runs on a weekly cron scheduled at plugin ACTIVATION — before the plugin knows which Seonix backend it belongs to — so the first firing sent nothing and the next was seven days later. A verify that (re)points the site at a backend now schedules a one-off sync a minute later; routine verifies with an unchanged backend do not re-push.

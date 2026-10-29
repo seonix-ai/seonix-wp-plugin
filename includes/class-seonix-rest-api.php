@@ -524,6 +524,12 @@ class Seonix_REST_API {
 			'meta_input'   => $meta_input,
 		);
 
+		// Post type the write lands in: 'post' on create (and on the
+		// _ce_article_id idempotency match, which only looks up posts), the
+		// existing post's own type on an explicit wp_post_id update. Drives
+		// which taxonomies (category / post_tag) the call may touch.
+		$target_post_type = 'post';
+
 		// If wp_post_id is provided, update existing post instead of creating new.
 		$wp_post_id = (int) $request->get_param( 'wp_post_id' );
 		if ( $wp_post_id > 0 ) {
@@ -542,6 +548,14 @@ class Seonix_REST_API {
 				);
 			}
 			$post_data['ID'] = $wp_post_id;
+			// The update target keeps its own post type. Forcing 'post' here
+			// turned a page (or a custom post type) into a post on republish:
+			// its URL changed and it dropped out of its page hierarchy. The
+			// target may be a page the site owner wrote (stub rewrite), not
+			// only a post Seonix created. wp_update_post() merges the stored
+			// row, so leaving post_type out keeps whatever the post already is.
+			unset( $post_data['post_type'] );
+			$target_post_type = (string) get_post_type( $wp_post_id );
 		} elseif ( ! empty( $ce_article_id ) ) {
 			// Idempotency guard: a previous publish call may have created the
 			// post here but the response never reached the backend (network
@@ -584,10 +598,14 @@ class Seonix_REST_API {
 		}
 
 		// Handle categories BEFORE insert to pass as post_category.
+		// Only for post types that carry the category taxonomy: a page or a
+		// custom post type without it ignores the param entirely — no
+		// post_category, no new terms created, no primary-category meta.
 		$categories_param = $request->get_param( 'categories' );
 		$cat_ids          = array();
 
-		if ( is_array( $categories_param ) && ! empty( $categories_param ) ) {
+		if ( is_array( $categories_param ) && ! empty( $categories_param )
+			&& is_object_in_taxonomy( $target_post_type, 'category' ) ) {
 			foreach ( $categories_param as $cat_name ) {
 				$cat_name = sanitize_text_field( $cat_name );
 				if ( empty( $cat_name ) ) {
@@ -650,9 +668,12 @@ class Seonix_REST_API {
 			);
 		}
 
-		// Handle tags.
+		// Handle tags. Same rule as categories: wp_set_post_tags() attaches
+		// post_tag terms to any object without checking the type, so gate it
+		// on the target type actually supporting the taxonomy.
 		$tags = $request->get_param( 'tags' );
-		if ( is_array( $tags ) && ! empty( $tags ) ) {
+		if ( is_array( $tags ) && ! empty( $tags )
+			&& is_object_in_taxonomy( $target_post_type, 'post_tag' ) ) {
 			$sanitized_tags = array_map( 'sanitize_text_field', $tags );
 			wp_set_post_tags( $post_id, $sanitized_tags );
 		}
@@ -870,7 +891,10 @@ class Seonix_REST_API {
 		$post_id = (int) $request['id'];
 		$post    = get_post( $post_id );
 
-		if ( ! $post || 'post' !== $post->post_type ) {
+		// Pages are readable too: before Seonix writes a full article over a
+		// placeholder page (stub rewrite) the backend reads its current body
+		// to make sure it really is a placeholder, not a form or embed page.
+		if ( ! $post || ! in_array( $post->post_type, array( 'post', 'page' ), true ) ) {
 			return new WP_Error(
 				'not_found',
 				'Post not found.',
