@@ -4,7 +4,7 @@ Tags: seo, ai-search, llms-txt, indexnow, aeo
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.17.0
+Stable tag: 2.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -160,7 +160,7 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 
 == Changelog ==
 
-= Unreleased =
+= 2.18.0 =
 * Fixed: republishing into an existing page or custom-post-type entry no longer converts it into a post. Updates used to force the post type to "post", which changed the URL and dropped a page out of its hierarchy; an update now keeps the post's own type (creating new posts is unchanged).
 * Fixed: categories and tags sent with a publish are applied only when the target post type supports them. A page (or custom post type) without the category / tag taxonomy ignores them instead of getting stray terms attached and new categories created.
 * Improved: the authenticated `GET /posts/{id}` route also returns pages, so Seonix can check a page's current body before it updates it.
