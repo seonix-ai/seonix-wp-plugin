@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Seonix SEO
  * Description: AI search visibility out of the box — llms.txt and IndexNow work without an account. Connect Seonix for site audits inside WordPress, AI-written articles, one-click technical fixes, and publishing on autopilot.
- * Version:     2.18.0
+ * Version:     2.19.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author:      Seonix
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEONIX_VERSION', '2.18.0' );
+define( 'SEONIX_VERSION', '2.19.0' );
 define( 'SEONIX_FILE', __FILE__ );
 define( 'SEONIX_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SEONIX_URL', plugin_dir_url( __FILE__ ) );
@@ -78,6 +78,7 @@ require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-history.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-cache-purger.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-robots-noindex.php';
 require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-seo-fix-controller.php';
+require_once SEONIX_DIR . 'includes/seo-fix/class-seonix-robots-txt-fix.php';
 
 // SEO Fix methods.
 require_once SEONIX_DIR . 'includes/seo-fix/methods/class-seonix-fix-ssl-mixed-content.php';
@@ -239,6 +240,10 @@ function seonix_init() {
 	// key; the backend gates it on a paid subscription and runs the same fix
 	// orchestration as the dashboard.
 	add_action( 'wp_ajax_seonix_seo_fix', array( $admin, 'ajax_seo_fix' ) );
+	// Reviewable robots.txt fix. Runs on this site only, never through the backend.
+	add_action( 'wp_ajax_seonix_robots_inspect', array( $admin, 'ajax_robots_inspect' ) );
+	add_action( 'wp_ajax_seonix_robots_apply', array( $admin, 'ajax_robots_apply' ) );
+	add_action( 'wp_ajax_seonix_robots_undo', array( $admin, 'ajax_robots_undo' ) );
 	// IndexNow auto-submit toggle (standalone feature card on Settings /
 	// the unconnected Dashboard).
 	add_action( 'wp_ajax_seonix_save_indexnow', array( $admin, 'ajax_save_indexnow' ) );

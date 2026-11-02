@@ -342,4 +342,31 @@ final class TasksTest extends TestCase {
 		$this->assertSame( array( 'success' => true ), $response );
 		$this->assertArrayHasKey( 'seonix_tasks_synced_at', $this->updated );
 	}
+
+	/**
+	 * Cyrillic addresses arrive percent-encoded and fill the screen with %D0%BA.
+	 * Readable for people, but never at the cost of showing a misleading address.
+	 *
+	 * @dataProvider readableUrls
+	 */
+	public function test_readable_url( string $url, string $expected ): void {
+		$this->assertSame( $expected, \Seonix_Tasks::readable_url( $url ) );
+	}
+
+	public function readableUrls(): array {
+		return array(
+			'plain path'           => array( '/about/', '/about/' ),
+			'cyrillic path'        => array( '/%D0%BA%D0%B0%D0%BA-%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D1%8C%D0%BD%D0%BE/', '/как-правильно/' ),
+			'full url and query'   => array( 'https://site.test/%D0%B1%D0%BB%D0%BE%D0%B3/?q=%D1%82', 'https://site.test/блог/?q=т' ),
+			'lowercase hex'        => array( '/%d0%b1/', '/б/' ),
+			'ascii stays encoded'  => array( '/a+b%20c', '/a+b%20c' ),
+			'delimiters stay coded' => array( '/%D0%B1?next=%2Fcart%3Fa%3D1%26b', '/б?next=%2Fcart%3Fa%3D1%26b' ),
+			'encoded percent'      => array( '/100%25', '/100%25' ),
+			'one bad run only'     => array( '/%E1%EB/%D0%B1/', '/%E1%EB/б/' ),
+			'legacy cp1251 slug'   => array( '/%E1%EB%EE%E3/', '/%E1%EB%EE%E3/' ),
+			'newline stays coded'  => array( '/a%0Ab', '/a%0Ab' ),
+			'bidi override coded'  => array( '/%E2%80%AEgnp.exe', '/%E2%80%AEgnp.exe' ),
+			'broken sequence'      => array( '/100%/', '/100%/' ),
+		);
+	}
 }

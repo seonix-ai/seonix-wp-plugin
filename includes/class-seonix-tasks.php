@@ -348,6 +348,34 @@ class Seonix_Tasks {
 	}
 
 	/**
+	 * A URL or path as a person reads it: /блог/ instead of /%D0%B1%D0%BB%D0%BE%D0%B3/.
+	 * For display and search only: links keep the original, encoded address.
+	 *
+	 * Only non-ASCII sequences are decoded. An encoded %2F, %3F, %26 or %25 means
+	 * something different from its plain character, so showing it plain would show
+	 * another address. A sequence stays encoded when its bytes are not valid UTF-8
+	 * (a legacy single-byte slug) or decode to control or bidi-override characters,
+	 * which could make one address look like another. The caller escapes on emit.
+	 *
+	 * @param string $url URL or path.
+	 * @return string
+	 */
+	public static function readable_url( string $url ): string {
+		$readable = preg_replace_callback(
+			'/(?:%[89A-Fa-f][0-9A-Fa-f])+/',
+			static function ( $match ) {
+				$decoded = rawurldecode( $match[0] );
+				if ( 1 !== preg_match( '//u', $decoded ) || 0 !== preg_match( '/[\p{Cc}\p{Cf}]/u', $decoded ) ) {
+					return $match[0];
+				}
+				return $decoded;
+			},
+			$url
+		);
+		return null === $readable ? $url : $readable;
+	}
+
+	/**
 	 * Decode a stored affected_pages JSON string into a safe, indexed list of
 	 * `[ 'url' => string, 'status' => string ]` entries. Garbage in (non-JSON,
 	 * non-array, missing url) yields an empty array — the renderer falls back to

@@ -200,4 +200,129 @@ final class AdminScreenTest extends TestCase {
 		$this->assertStringContainsString( '/alte-seite', $html );
 		$this->assertStringNotContainsString( 'rdr-noise', $html, 'no probes, no disclosure' );
 	}
+
+	/**
+	 * The empty rules table used to return without closing its card, so the 404
+	 * section rendered inside that card: heading flush against its border, no
+	 * gap, the card's bottom edge gone, and the shell's own markup left unclosed.
+	 */
+	public function test_empty_rules_table_closes_its_card_before_the_404_log(): void {
+		$html = $this->renderWithLog( array(
+			self::logRow( 1, '/sitemap_index.xml' ),
+		) );
+
+		$this->assertSame(
+			substr_count( $html, '<div' ),
+			substr_count( $html, '</div>' ),
+			'every <div> on the screen is closed'
+		);
+
+		$table = strpos( $html, '<div class="rdrtable">' );
+		$log   = strpos( $html, 'Not found (404s)' );
+		$this->assertNotFalse( $table );
+		$this->assertNotFalse( $log );
+
+		$between = substr( $html, $table, $log - $table );
+		$this->assertSame(
+			1,
+			substr_count( $between, '<div class="issues-head">' ),
+			'the 404 header opens after the card has closed'
+		);
+		$this->assertSame(
+			substr_count( substr( $between, 0, (int) strpos( $between, '<div class="issues-head">' ) ), '<div' ),
+			substr_count( substr( $between, 0, (int) strpos( $between, '<div class="issues-head">' ) ), '</div>' ),
+			'the rules card is fully closed before the 404 header starts'
+		);
+	}
+
+	/** A Cyrillic dead URL or rule reads as text; the link it drives stays encoded. */
+	public function test_percent_encoded_paths_read_as_text(): void {
+		$store = new FakeRedirectsStore();
+		$row   = array(
+			'id'         => 1,
+			'from_path'  => '/%D0%B1%D0%BB%D0%BE%D0%B3/',
+			'to_url'     => '/%D0%BD%D0%BE%D0%B2%D1%8B%D0%B9/',
+			'status_code' => 301,
+			'is_regex'   => 0,
+			'enabled'    => 1,
+			'seonix_id'  => null,
+			'hits'       => 0,
+			'created_at' => '2026-07-17 10:00:00',
+			'last_hit_at' => null,
+		);
+		$html = $this->renderRow( $store, $row );
+
+		$this->assertStringContainsString( '<span class="rdr-url">/блог/</span>', $html );
+		$this->assertStringContainsString( '>/новый/</code>', $html );
+		$this->assertStringNotContainsString( '<span class="rdr-url">/%D0', $html );
+	}
+
+	/**
+	 * Which fixes get the blind one-click in the plugin. The noindex ones must
+	 * stay out: hiding pages from search needs the dashboard's preview and rollback.
+	 */
+	public function test_one_click_covers_the_safe_fixes_and_not_the_noindex_ones(): void {
+		$options = array();
+		Functions\when( 'get_option' )->alias( function ( $key, $default = false ) use ( &$options ) {
+			return $options[ $key ] ?? $default;
+		} );
+		$admin = ( new \ReflectionClass( \Seonix_Admin::class ) )->newInstanceWithoutConstructor();
+		$m     = new \ReflectionMethod( \Seonix_Admin::class, 'is_auto_fixable' );
+		$m->setAccessible( true );
+
+		foreach ( array( 'published_url_not_redirected', 'link_text_missing', 'webmcp_not_implemented' ) as $code ) {
+			$this->assertTrue( $m->invoke( $admin, $code ), $code );
+		}
+		foreach ( array( 'stub_page', 'taxonomy_archive_duplicate_title', 'internal_link_to_redirect', 'robots_blocks_all', 'a11y_low_contrast_text' ) as $code ) {
+			$this->assertFalse( $m->invoke( $admin, $code ), $code );
+		}
+		$this->assertFalse( defined( 'WPCF7_VERSION' ) );
+		$this->assertFalse( $m->invoke( $admin, 'form_control_no_accessible_name' ), 'without Contact Form 7 the switch names no form field' );
+
+		// A module that is already on leaves the button nothing to do.
+		$options[ \Seonix_Agent_Accessibility::OPTION ] = 1;
+		$options[ \Seonix_WebMCP::OPTION ]              = 1;
+		$this->assertFalse( $m->invoke( $admin, 'link_text_missing' ) );
+		$this->assertFalse( $m->invoke( $admin, 'webmcp_not_implemented' ) );
+	}
+
+	/** A regex is shown exactly as written. */
+	public function test_regex_rules_are_not_decoded(): void {
+		$row  = array(
+			'id'         => 1,
+			'from_path'  => '^/%D0%B1/(.*)$',
+			'to_url'     => '/x/$1',
+			'status_code' => 301,
+			'is_regex'   => 1,
+			'enabled'    => 1,
+			'seonix_id'  => null,
+			'hits'       => 0,
+			'created_at' => '2026-07-17 10:00:00',
+			'last_hit_at' => null,
+		);
+		$html = $this->renderRow( new FakeRedirectsStore(), $row );
+
+		$this->assertStringContainsString( '<span class="rdr-url">^/%D0%B1/(.*)$</span>', $html );
+	}
+
+	private function renderRow( FakeRedirectsStore $store, array $row ): string {
+		Functions\when( 'esc_js' )->returnArg();
+		Functions\when( 'human_time_diff' )->justReturn( '2 hours' );
+		Functions\when( 'number_format_i18n' )->alias( function ( $n ) {
+			return (string) $n;
+		} );
+		Functions\when( 'esc_html_x' )->returnArg();
+		Functions\when( '_x' )->returnArg();
+		Functions\when( 'mysql2date' )->justReturn( '17 Jul' );
+		Functions\when( 'get_date_from_gmt' )->justReturn( '2026-07-17 10:00:00' );
+		Functions\when( 'date_i18n' )->justReturn( '17 Jul' );
+		Functions\when( 'wp_date' )->justReturn( '17 Jul' );
+		Functions\when( 'current_time' )->justReturn( time() );
+		$screen = new Seonix_Redirects_Admin( $store );
+		$m      = new \ReflectionMethod( Seonix_Redirects_Admin::class, 'render_row' );
+		$m->setAccessible( true );
+		ob_start();
+		$m->invoke( $screen, $row );
+		return (string) ob_get_clean();
+	}
 }

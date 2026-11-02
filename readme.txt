@@ -4,7 +4,7 @@ Tags: seo, ai-search, llms-txt, indexnow, aeo
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.18.0
+Stable tag: 2.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -159,6 +159,15 @@ Go to `Seonix > Settings` and click "Regenerate Key". The previous key becomes i
 3. Built-in llms.txt and IndexNow — AI-search discovery and instant search-engine pings that work without a Seonix account.
 
 == Changelog ==
+
+= 2.19.0 =
+* New: a robots.txt review in the Site Health task. When robots.txt blocks the whole site, the task shows the file your site really serves, works out where the block comes from and, if it is a robots.txt file in the site root, shows the exact line that will change. You confirm the change, Seonix re-checks the live file afterwards, and you can undo it. If the block comes from another plugin, your host or a CDN, or the site is not production, nothing is offered and the task explains where to look. Runs on your site, on every plan.
+* New: if "Discourage search engines" is ticked, that same task warns you: WordPress then prints a noindex on every page, so lifting a robots.txt block alone will not get the site into search.
+* New: "Fix it for me" for more tasks: a missing 301 from an old article address, links with no text, Contact Form 7 fields with no name, and WebMCP markup for forms. Each button says exactly what it changes.
+* Improved: Cyrillic and other non-Latin addresses now read as text instead of %D0%BA%D0%B0%D0%BA in Site Health and Redirects, and searching for a word finds them. Links still use the original address.
+* Fixed: on the Redirects screen, the Not found (404s) section rendered inside the empty "No redirects yet" card.
+* Fixed: a timeout on "Fix it for me" shows a clear message instead of a raw connection error.
+* Fixed: code examples in task details no longer show grey stripes across each line.
 
 = 2.18.0 =
 * Fixed: republishing into an existing page or custom-post-type entry no longer converts it into a post. Updates used to force the post type to "post", which changed the URL and dropped a page out of its hierarchy; an update now keeps the post's own type (creating new posts is unchanged).

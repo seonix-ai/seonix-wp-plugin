@@ -2748,6 +2748,15 @@ body.seonix-modal-open {
   color: var(--sx-ink-2);
   background: transparent;
 }
+/* wp-admin paints every <code> grey with its own padding, which striped each line. */
+.seonix-modal__body .seonix-bg-code code {
+  display: block;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
 .seonix-modal__body .seonix-bg-cap {
   margin-top: 6px;
   font-size: 11px;
@@ -2809,6 +2818,75 @@ body.seonix-modal-open {
   color: var(--sx-ink-2);
   line-height: 1.5;
 }
+
+/* robots.txt review panel: this site's real file and the exact change. */
+.seonix-robotsfix [hidden] { display: none !important; }
+.seonix-robotsfix__result {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sx-green-ink);
+  background: var(--sx-green-soft);
+}
+.seonix-robotsfix__result--bad {
+  color: var(--sx-red-ink);
+  background: var(--sx-red-soft);
+}
+.seonix-robotsfix__headline {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sx-ink);
+}
+.seonix-robotsfix__detail,
+.seonix-robotsfix__note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sx-ink-2);
+}
+.seonix-robotsfix__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--sx-mute);
+}
+.seonix-robotsfix__changes {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: 13px;
+  color: var(--sx-ink-2);
+}
+.seonix-robotsfix__changes li { margin: 2px 0; }
+.seonix-modal__body .seonix-bg-grid.seonix-robotsfix__grid--single { grid-template-columns: 1fr; }
+.seonix-modal__body .seonix-robotsfix .seonix-bg-code { max-height: 260px; overflow: auto; }
+.seonix-robotsfix__line {
+  background: rgba(15, 10, 36, .1);
+  border-radius: 3px;
+  font-weight: 700;
+}
+.seonix-robotsfix__confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}
+.seonix-robotsfix__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sx-ink);
+  cursor: pointer;
+}
+.seonix-robotsfix__check input { margin: 0; }
+.seonix-robotsfix [data-rf="undo"] { margin-top: 12px; }
+.seonix-robotsfix__discouraged { margin-top: 12px; }
+.seonix-robotsfix__discouraged a { color: inherit; font-weight: 600; }
 
 .seonix-openapp__ico {
   font-size: 13px;

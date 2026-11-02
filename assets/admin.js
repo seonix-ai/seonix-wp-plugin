@@ -592,6 +592,8 @@
           modalBody.appendChild(clone);
         }
         modalBody.scrollTop = 0;
+        var robotsPanel = modalBody.querySelector('.seonix-robotsfix');
+        if (robotsPanel) robotsRequest(robotsPanel, 'seonix_robots_inspect');
       }
       modal.hidden = false;
       modal.setAttribute('aria-hidden', 'false');
@@ -732,6 +734,137 @@
         btn.innerHTML = originalHtml;
         showNotice('error', i18n('networkError', 'Network error.'));
       });
+  });
+
+  // ── robots.txt review (inside the task modal) ──
+  // The panel is cloned into the modal and filled from the server when it opens:
+  // the real file, who produces it, and the exact change. Everything from the
+  // server goes in through textContent. Clicks are delegated like the Fix button.
+  function robotsPart(panel, name) {
+    return panel.querySelector('[data-rf="' + name + '"]');
+  }
+
+  // Changed lines get highlighted, so a one-line change in a long file is the first
+  // thing the eye lands on. A file edit keeps its line count, so lines compare by
+  // position: the same "Disallow: /" can stay under GPTBot and go under "*". When
+  // the count differs the two are different files, and a line changed if the other
+  // side does not have it at all.
+  function robotsLines(el, text, other) {
+    var mine = text.split(/\r\n|\n|\r/);
+    var theirs = (other === null ? text : other).split(/\r\n|\n|\r/);
+    var sameShape = mine.length === theirs.length;
+    el.textContent = '';
+    mine.forEach(function (line, i) {
+      var span = document.createElement('span');
+      span.textContent = line + (i < mine.length - 1 ? '\n' : '');
+      var changed = sameShape ? theirs[i] !== line : theirs.indexOf(line) === -1;
+      if (changed && line !== '') span.className = 'seonix-robotsfix__line';
+      el.appendChild(span);
+    });
+  }
+
+  function robotsRender(panel, d) {
+    var fixable = d.state === 'fixable';
+    var hasProposal = typeof d.proposed === 'string';
+    robotsPart(panel, 'headline').textContent = d.headline || '';
+
+    var detail = robotsPart(panel, 'detail');
+    detail.textContent = d.detail || '';
+    detail.hidden = !d.detail;
+
+    var changes = robotsPart(panel, 'changes');
+    changes.textContent = '';
+    (d.changes || []).forEach(function (text) {
+      var li = document.createElement('li');
+      li.textContent = text;
+      changes.appendChild(li);
+    });
+    changes.hidden = !fixable || !(d.changes || []).length;
+
+    robotsPart(panel, 'grid').hidden = false;
+    robotsPart(panel, 'grid').classList.toggle('seonix-robotsfix__grid--single', !hasProposal);
+    robotsPart(panel, 'current-col').classList.toggle('seonix-bg-bad', d.state !== 'clear');
+    robotsPart(panel, 'proposed-col').hidden = !hasProposal;
+    robotsLines(robotsPart(panel, 'current'), d.current || '', hasProposal ? d.proposed : null);
+    if (hasProposal) robotsLines(robotsPart(panel, 'proposed'), d.proposed, d.current || '');
+
+    robotsPart(panel, 'unchecked').hidden = !!d.live_checked;
+    robotsPart(panel, 'confirm').hidden = !fixable;
+    robotsPart(panel, 'check').checked = false;
+    robotsPart(panel, 'apply').disabled = true;
+    robotsPart(panel, 'undo').hidden = !d.can_undo;
+    robotsPart(panel, 'discouraged').hidden = !d.discouraged;
+    panel.setAttribute('data-token', d.token || '');
+  }
+
+  function robotsRequest(panel, action, done) {
+    robotsPart(panel, 'result').hidden = true;
+    var body = new URLSearchParams();
+    body.append('action', action);
+    body.append('nonce', seonixConnector.robotsNonce);
+    body.append('issue_code', panel.getAttribute('data-code') || '');
+    if (action === 'seonix_robots_apply') body.append('token', panel.getAttribute('data-token') || '');
+
+    // The outcome stays in the panel: a page notice would land behind the modal.
+    var say = function (message, isError) {
+      var result = robotsPart(panel, 'result');
+      result.textContent = message;
+      result.hidden = false;
+      result.classList.toggle('seonix-robotsfix__result--bad', isError);
+    };
+    var fail = function (message) {
+      if (action === 'seonix_robots_inspect') {
+        robotsPart(panel, 'headline').textContent = message;
+      } else {
+        say(message, true);
+      }
+      if (done) done();
+    };
+    fetch(seonixConnector.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); })
+      .then(function (res) {
+        var j = res.json;
+        if (!j || !j.success) {
+          var message = j && j.data && j.data.message ? j.data.message : i18n('fixFailed', 'Could not apply the fix.');
+          // 409: what was reviewed is out of date. Show the current state, or every
+          // retry would send the same old token.
+          if (res.status === 409 && action !== 'seonix_robots_inspect') {
+            robotsRequest(panel, 'seonix_robots_inspect', function () {
+              say(message, true);
+              if (done) done();
+            });
+            return;
+          }
+          fail(message);
+          return;
+        }
+        robotsRender(panel, j.data);
+        if (j.data.message) {
+          say(j.data.message, j.data.verified === false);
+          if (j.data.verified !== false) robotsPart(panel, 'detail').hidden = true;
+        }
+        if (done) done();
+      })
+      .catch(function () { fail(i18n('networkError', 'Network error.')); });
+  }
+
+  document.addEventListener('change', function (e) {
+    var check = (e.target && e.target.closest) ? e.target.closest('[data-rf="check"]') : null;
+    if (!check) return;
+    robotsPart(check.closest('.seonix-robotsfix'), 'apply').disabled = !check.checked;
+  });
+
+  document.addEventListener('click', function (e) {
+    var btn = (e.target && e.target.closest) ? e.target.closest('[data-rf="apply"], [data-rf="undo"]') : null;
+    if (!btn || btn.disabled) return;
+    var panel = btn.closest('.seonix-robotsfix');
+    var isApply = btn.getAttribute('data-rf') === 'apply';
+    btn.disabled = true;
+    robotsRequest(panel, isApply ? 'seonix_robots_apply' : 'seonix_robots_undo', function () {
+      // A successful apply re-renders and leaves the button behind the checkbox.
+      if (!isApply) btn.disabled = false;
+      else btn.disabled = !robotsPart(panel, 'check').checked;
+    });
   });
 
   // ── By page view: URL search ──

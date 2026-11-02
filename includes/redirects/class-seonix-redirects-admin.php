@@ -714,6 +714,7 @@ class Seonix_Redirects_Admin {
 						<p class="empty-s"><?php esc_html_e( 'Rules appear here when Seonix fixes a broken link, when you rename or trash a published post, or when you add one above.', 'seonix' ); ?></p>
 					<?php endif; ?>
 				</div>
+			</div>
 				<?php return; ?>
 			<?php endif; ?>
 
@@ -777,10 +778,12 @@ class Seonix_Redirects_Admin {
 			<div><input type="checkbox" name="ids[]" value="<?php echo esc_attr( (string) $id ); ?>" aria-label="<?php esc_attr_e( 'Select redirect', 'seonix' ); ?>" /></div>
 
 			<div class="rdr-path">
-				<div class="rdr-from" title="<?php echo esc_attr( (string) $row['from_path'] ); ?>">
+				<?php // A regex is shown as written: decoding could change how the pattern reads. ?>
+				<?php $from_label = $is_regex ? (string) $row['from_path'] : Seonix_Tasks::readable_url( (string) $row['from_path'] ); ?>
+				<div class="rdr-from" title="<?php echo esc_attr( $from_label ); ?>">
 					<?php // Label each side. An arrow alone leaves the reader to infer direction from two URLs that both start with the same domain and may each be truncated — the one thing a redirect list must never leave ambiguous. ?>
 					<span class="rdr-side"><?php esc_html_e( 'From', 'seonix' ); ?></span>
-					<span class="rdr-url"><?php echo esc_html( (string) $row['from_path'] ); ?></span>
+					<span class="rdr-url"><?php echo esc_html( $from_label ); ?></span>
 					<?php if ( $is_regex ) : ?>
 						<span class="badge med" style="margin-left:6px;"><?php esc_html_e( 'Regex', 'seonix' ); ?></span>
 					<?php endif; ?>
@@ -790,7 +793,8 @@ class Seonix_Redirects_Admin {
 					<?php if ( $gone ) : ?>
 						<code class="gone-note"><?php esc_html_e( 'Gone — no target', 'seonix' ); ?></code>
 					<?php else : ?>
-						<code title="<?php echo esc_attr( (string) $row['to_url'] ); ?>"><?php echo esc_html( (string) $row['to_url'] ); ?></code>
+						<?php $to_label = Seonix_Tasks::readable_url( (string) $row['to_url'] ); ?>
+						<code title="<?php echo esc_attr( $to_label ); ?>"><?php echo esc_html( $to_label ); ?></code>
 					<?php endif; ?>
 				</div>
 				<div class="rdr-meta"><?php echo esc_html( $this->created_label( (string) ( $row['created_at'] ?? '' ) ) ); ?></div>
@@ -869,7 +873,9 @@ class Seonix_Redirects_Admin {
 				if ( '' === $needle ) {
 					return true;
 				}
-				$haystack = mb_strtolower( (string) $row['from_path'] . ' ' . (string) ( $row['to_url'] ?? '' ) );
+				$from     = (string) $row['from_path'];
+				$to       = (string) ( $row['to_url'] ?? '' );
+				$haystack = mb_strtolower( $from . ' ' . $to . ' ' . Seonix_Tasks::readable_url( $from ) . ' ' . Seonix_Tasks::readable_url( $to ) );
 				return false !== mb_strpos( $haystack, $needle );
 			}
 		) );

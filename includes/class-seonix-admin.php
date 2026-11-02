@@ -182,6 +182,7 @@ class Seonix_Admin {
 			'connectNonce'  => wp_create_nonce( 'seonix_connect' ),
 			'accountNonce'  => wp_create_nonce( 'seonix_account' ),
 			'fixNonce'      => wp_create_nonce( 'seonix_seo_fix' ),
+			'robotsNonce'   => wp_create_nonce( 'seonix_robots_fix' ),
 			'i18n'          => array(
 				'refreshing'     => __( 'Refreshing…', 'seonix' ),
 				'tasksRefreshed' => __( 'Tasks refreshed.', 'seonix' ),
@@ -510,7 +511,7 @@ class Seonix_Admin {
 			)
 		);
 		if ( is_wp_error( $response ) ) {
-			wp_send_json_error( array( 'message' => $response->get_error_message() ), 502 );
+			wp_send_json_error( array( 'message' => __( 'Seonix did not answer in time. Part of the fix may already be applied, so refresh the tasks before trying again.', 'seonix' ) ), 502 );
 		}
 
 		$status  = (int) wp_remote_retrieve_response_code( $response );
@@ -618,6 +619,79 @@ class Seonix_Admin {
 	}
 
 	/**
+	 * AJAX: what the site's robots.txt says now and what the fix would change.
+	 * Read-only.
+	 */
+	public function ajax_robots_inspect(): void {
+		$this->check_robots_request();
+		$fix = new Seonix_Robots_Txt_Fix();
+		wp_send_json_success( $this->robots_payload( $fix->inspect() ) );
+	}
+
+	/**
+	 * AJAX: apply the change the administrator reviewed. The token ties the click
+	 * to that exact state, so a file edited in the meantime is never overwritten.
+	 */
+	public function ajax_robots_apply(): void {
+		$this->check_robots_request();
+		$token  = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
+		$fix    = new Seonix_Robots_Txt_Fix();
+		$result = $fix->apply( $token );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), (int) ( $result->get_error_data()['status'] ?? 500 ) );
+		}
+
+		if ( true === $result['verified'] ) {
+			$message = __( 'Done. Crawlers can reach your site now. This task will clear on the next scan.', 'seonix' );
+		} elseif ( false === $result['verified'] ) {
+			$message = __( 'The change was saved, but your live robots.txt still blocks the site. A CDN or host cache may be serving the old file: purge it and check again.', 'seonix' );
+		} else {
+			$message = __( 'The change was saved. This server could not re-check its own robots.txt, so open it in a browser to confirm.', 'seonix' );
+		}
+		wp_send_json_success(
+			array_merge(
+				$this->robots_payload( $result['inspection'] ),
+				array(
+					'verified' => $result['verified'],
+					'message'  => $message,
+				)
+			)
+		);
+	}
+
+	/** AJAX: put back what the fix replaced. */
+	public function ajax_robots_undo(): void {
+		$this->check_robots_request();
+		$fix    = new Seonix_Robots_Txt_Fix();
+		$result = $fix->undo();
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), (int) ( $result->get_error_data()['status'] ?? 500 ) );
+		}
+		wp_send_json_success(
+			array_merge(
+				$this->robots_payload( $result['inspection'] ),
+				array( 'message' => __( 'Undone. robots.txt is back to how it was.', 'seonix' ) )
+			)
+		);
+	}
+
+	private function check_robots_request(): void {
+		check_ajax_referer( 'seonix_robots_fix', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'seonix' ) ), 403 );
+		}
+	}
+
+	/**
+	 * @param array $inspection Seonix_Robots_Txt_Fix::inspect() result.
+	 * @return array Inspection plus its plain-language copy.
+	 */
+	private function robots_payload( array $inspection ): array {
+		$code = isset( $_POST['issue_code'] ) ? sanitize_text_field( wp_unslash( $_POST['issue_code'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in check_robots_request().
+		return array_merge( $inspection, Seonix_Robots_Txt_Fix::describe( $inspection, $code ) );
+	}
+
+	/**
 	 * Whether an issue code has a server-side auto-fix. Mirror of the backend
 	 * seofix.issueCodeToMethod map (internal/seofix/issue_to_method.go) — keep in
 	 * sync: the backend rejects non-fixable codes with 400, so the Fix button must
@@ -639,6 +713,7 @@ class Seonix_Admin {
 			'meta_desc_too_short',
 			'duplicate_meta_desc',
 			'images_missing_alt',
+			'published_url_not_redirected',
 		);
 		if ( 'pagination_not_indexable' === $code ) {
 			// Fixable only while the site-wide setting the fix switches off is on;
@@ -646,7 +721,45 @@ class Seonix_Admin {
 			// /seo-fix/capabilities handshake gives the dashboard.
 			return Seonix_Fix_Clear_Pagination_Noindex::is_applicable();
 		}
+		// Module switches: once one is on, the button has nothing left to do.
+		if ( 'link_text_missing' === $code ) {
+			return ! get_option( Seonix_Agent_Accessibility::OPTION, false );
+		}
+		if ( 'form_control_no_accessible_name' === $code ) {
+			// The module names form fields only inside Contact Form 7; without it
+			// the switch would change nothing on these pages.
+			return defined( 'WPCF7_VERSION' ) && ! get_option( Seonix_Agent_Accessibility::OPTION, false );
+		}
+		if ( 'webmcp_not_implemented' === $code ) {
+			return ! get_option( Seonix_WebMCP::OPTION, false );
+		}
+		// Left to the dashboard on purpose, where a run has a preview, a rollback and
+		// no timeout on this request:
+		// - stub_page and taxonomy_archive_duplicate_title hide pages from search;
+		// - internal_link_to_redirect fans out per source page, and the link usually
+		//   sits in a menu or a page builder, which a content rewrite cannot reach.
 		return in_array( $code, $fixable, true );
+	}
+
+	/**
+	 * What "Fix it for me" actually does, for the fixes whose effect the generic
+	 * line does not explain.
+	 *
+	 * @param string $code Scanner issue code.
+	 * @return string
+	 */
+	private function fix_note( string $code ): string {
+		switch ( $code ) {
+			case 'published_url_not_redirected':
+				return __( 'Adds a 301 redirect from the old article address to its new one. You will see it under Redirects.', 'seonix' );
+			case 'link_text_missing':
+				return __( 'Adds a descriptive label to links with no text inside your page content, for screen readers and AI agents. Your pages look the same. Links in the theme header, footer or menus are not changed.', 'seonix' );
+			case 'form_control_no_accessible_name':
+				return __( 'Adds a descriptive label to Contact Form 7 fields that have no name, for screen readers and AI agents. Your forms look the same. Other forms are not changed.', 'seonix' );
+			case 'webmcp_not_implemented':
+				return __( 'Marks Contact Form 7 forms and the search block so AI agents can understand and use them. Your pages look the same. Other forms are not changed.', 'seonix' );
+		}
+		return '';
 	}
 
 	// ─── Render: standalone feature cards ────────────────────────
@@ -1381,8 +1494,15 @@ class Seonix_Admin {
 						<button type="button" class="seonix-btn seonix-btn--brand seonix-fix-btn" data-code="<?php echo esc_attr( $code ); ?>">
 							<?php esc_html_e( 'Fix it for me', 'seonix' ); ?>
 						</button>
+						<?php $fix_note = $this->fix_note( $code ); ?>
+						<?php if ( '' !== $fix_note ) : ?>
+							<p class="seonix-fixcta__note"><?php echo esc_html( $fix_note ); ?></p>
+						<?php endif; ?>
 						<p class="seonix-fixcta__note"><?php esc_html_e( 'Seonix applies this fix to your site automatically. Available on a paid plan.', 'seonix' ); ?></p>
 					</div>
+				<?php endif; ?>
+				<?php if ( Seonix_Robots_Txt_Fix::handles( $code ) && 'solved' !== $status ) : ?>
+					<?php $this->render_robots_fix_panel( $code ); ?>
 				<?php endif; ?>
 				<?php if ( '' !== $why_it_matters ) : ?>
 					<div class="seonix-task-detail__sec">
@@ -1395,7 +1515,8 @@ class Seonix_Admin {
 						<p class="seonix-task-detail__desc"><?php echo esc_html( $description ); ?></p>
 					</div>
 				<?php endif; ?>
-				<?php if ( '' !== $bad_code && '' !== $good_code ) : ?>
+				<?php // The robots panel shows this site's real file, so a generic example would only compete with it. ?>
+				<?php if ( '' !== $bad_code && '' !== $good_code && ! Seonix_Robots_Txt_Fix::handles( $code ) ) : ?>
 					<div class="seonix-task-detail__sec">
 						<div class="seonix-msec-label"><?php esc_html_e( 'Bad vs good', 'seonix' ); ?></div>
 						<div class="seonix-bg-grid">
@@ -1471,7 +1592,7 @@ class Seonix_Admin {
 									?>
 									<li>
 										<span class="seonix-pagedot seonix-pagedot--<?php echo esc_attr( $pg_status ); ?>" aria-hidden="true"></span>
-										<a href="<?php echo esc_url( $pg_url ); ?>" target="_blank" rel="noopener" title="<?php echo esc_attr( $pg_url ); ?>"><?php echo esc_html( $rel ); ?></a>
+										<a href="<?php echo esc_url( $pg_url ); ?>" target="_blank" rel="noopener" title="<?php echo esc_attr( Seonix_Tasks::readable_url( $pg_url ) ); ?>"><?php echo esc_html( $rel ); ?></a>
 									</li>
 								<?php endforeach; ?>
 								<?php if ( $overflow > 0 ) : ?>
@@ -1488,7 +1609,7 @@ class Seonix_Admin {
 							</ul>
 						<?php else : ?>
 							<p class="seonix-task-detail__meta">
-								<a href="<?php echo esc_url( $affected_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $affected_url ); ?></a>
+								<a href="<?php echo esc_url( $affected_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( Seonix_Tasks::readable_url( $affected_url ) ); ?></a>
 								<?php if ( $affected_count > 1 ) : ?>
 									<span class="seonix-task-detail__count">
 										<?php
@@ -1510,10 +1631,53 @@ class Seonix_Admin {
 	}
 
 	/**
-	 * Reduce a full URL to its display-friendly relative path (path + query).
-	 * Mirrors the web app's PagesView.toRelative(): "/about?x=1". Falls back to
-	 * the full URL when it can't be parsed. Returns a raw string — the caller
-	 * escapes it on emit.
+	 * The robots.txt review panel in the task modal. admin.js fills it from
+	 * /seonix_robots_inspect when the modal opens, so a page full of tasks never
+	 * pays for the request. Static copy is here; the rest comes from the server.
+	 *
+	 * @param string $code Task code.
+	 */
+	private function render_robots_fix_panel( string $code ): void {
+		?>
+		<div class="seonix-task-detail__sec seonix-robotsfix" data-code="<?php echo esc_attr( $code ); ?>">
+			<div class="seonix-msec-label"><?php esc_html_e( 'Your robots.txt right now', 'seonix' ); ?></div>
+			<p class="seonix-robotsfix__result" data-rf="result" role="status" hidden></p>
+			<p class="seonix-robotsfix__headline" data-rf="headline" role="status"><?php esc_html_e( 'Checking your robots.txt…', 'seonix' ); ?></p>
+			<p class="seonix-robotsfix__detail" data-rf="detail" hidden></p>
+			<ul class="seonix-robotsfix__changes" data-rf="changes" hidden></ul>
+			<div class="seonix-bg-grid" data-rf="grid" hidden>
+				<div class="seonix-bg-col" data-rf="current-col">
+					<div class="seonix-bg-tag"><?php esc_html_e( 'Now', 'seonix' ); ?></div>
+					<pre class="seonix-bg-code"><code data-rf="current"></code></pre>
+				</div>
+				<div class="seonix-bg-col seonix-bg-good" data-rf="proposed-col">
+					<div class="seonix-bg-tag"><?php esc_html_e( 'After the fix', 'seonix' ); ?></div>
+					<pre class="seonix-bg-code"><code data-rf="proposed"></code></pre>
+				</div>
+			</div>
+			<p class="seonix-robotsfix__note" data-rf="unchecked" hidden><?php esc_html_e( 'This server could not fetch its own public robots.txt, so this is what WordPress and the file on disk say.', 'seonix' ); ?></p>
+			<div class="seonix-robotsfix__confirm" data-rf="confirm" hidden>
+				<label class="seonix-robotsfix__check">
+					<input type="checkbox" data-rf="check" />
+					<?php esc_html_e( 'This is the live site and it should appear in search results.', 'seonix' ); ?>
+				</label>
+				<button type="button" class="seonix-btn seonix-btn--brand" data-rf="apply" disabled><?php esc_html_e( 'Apply this change', 'seonix' ); ?></button>
+				<p class="seonix-fixcta__note"><?php esc_html_e( 'You can undo it here afterwards.', 'seonix' ); ?></p>
+			</div>
+			<button type="button" class="seonix-btn seonix-btn--secondary seonix-btn--sm" data-rf="undo" hidden><?php esc_html_e( 'Undo the Seonix fix', 'seonix' ); ?></button>
+			<div class="seonix-task-warn seonix-robotsfix__discouraged" data-rf="discouraged" hidden>
+				<?php esc_html_e( 'Separate from robots.txt: "Discourage search engines" is ticked, so WordPress prints a noindex on every page. Your site will stay out of search until it is unticked.', 'seonix' ); ?>
+				<a href="<?php echo esc_url( admin_url( 'options-reading.php' ) ); ?>"><?php esc_html_e( 'Open Settings → Reading', 'seonix' ); ?></a>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Reduce a full URL to its display-friendly relative path (path + query),
+	 * percent-encoding undone so a Cyrillic slug reads as text. Mirrors the web
+	 * app's PagesView.toRelative(): "/about?x=1". Falls back to the full URL when
+	 * it can't be parsed. Returns a raw string — the caller escapes it on emit.
 	 *
 	 * @param string $url Full page URL.
 	 * @return string Relative path, or the original URL on a parse failure.
@@ -1521,13 +1685,13 @@ class Seonix_Admin {
 	private function relative_path( string $url ): string {
 		$parts = wp_parse_url( $url );
 		if ( ! is_array( $parts ) || empty( $parts['path'] ) ) {
-			return '' !== $url ? $url : '/';
+			return '' !== $url ? Seonix_Tasks::readable_url( $url ) : '/';
 		}
 		$rel = $parts['path'];
 		if ( ! empty( $parts['query'] ) ) {
 			$rel .= '?' . $parts['query'];
 		}
-		return $rel;
+		return Seonix_Tasks::readable_url( $rel );
 	}
 
 	/**
@@ -1572,8 +1736,10 @@ class Seonix_Admin {
 		);
 
 		$panel_id = 'seonix-page-detail-' . (int) $index;
-		// Lowercased URL for the client-side search filter.
-		$data_url = function_exists( 'mb_strtolower' ) ? mb_strtolower( $url ) : strtolower( $url );
+		// Lowercased, readable URL for the client-side search filter, so typing a
+		// Cyrillic word finds a page whose address is stored percent-encoded.
+		$readable = Seonix_Tasks::readable_url( $url );
+		$data_url = function_exists( 'mb_strtolower' ) ? mb_strtolower( $readable ) : strtolower( $readable );
 		?>
 		<div
 			class="seonix-page-item"
