@@ -634,7 +634,7 @@ class Seonix_Admin {
 	 */
 	public function ajax_robots_apply(): void {
 		$this->check_robots_request();
-		$token  = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
+		$token  = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in check_robots_request().
 		$fix    = new Seonix_Robots_Txt_Fix();
 		$result = $fix->apply( $token );
 		if ( is_wp_error( $result ) ) {
